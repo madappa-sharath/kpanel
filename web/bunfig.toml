@@ -1,0 +1,3 @@
+# Registers bun-plugin-tailwind for Bun.serve() static routes (dev server)
+[serve.static]
+plugins = ["bun-plugin-tailwind"]
