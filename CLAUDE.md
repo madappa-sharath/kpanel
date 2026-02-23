@@ -2,106 +2,236 @@
 
 ## Project Overview
 
-kpanel is a lightweight, local web-based Kafka GUI. It works with **any Kafka cluster** — including local development, Confluent, self-managed, and AWS MSK. MSK gets first-class bonus features (cluster auto-discovery via AWS SDK, CloudWatch metrics) but core functionality (topics, consumer groups, message peek, lag) works with any Kafka host configured manually.
+kpanel is a lightweight Kafka GUI — a local alternative to Conduktor ($50-60K/yr). It works with **any Kafka cluster** — self-hosted, Confluent Cloud, Aiven, Redpanda, AWS MSK, or any Kafka-compatible broker. Just point it at brokers.
 
-Users install kpanel on their local machine and launch a webapp on localhost. Auth to Kafka is managed via the user's existing credentials (AWS IAM for MSK, or no auth / SASL for other clusters). No separate auth layer, not centrally hosted.
+AWS MSK is a first-class integration: auto-discovery of clusters via the AWS SDK, IAM authentication, and CloudWatch metrics dashboards. These features activate automatically when AWS credentials are available. The core API is provider-agnostic.
 
-**Philosophy:** Simple, focused, no over-engineering. Primary emphasis on helping users view topics, consumers, and cluster health at a glance.
+Users run kpanel on their local machine. Auth to Kafka uses existing credentials (AWS IAM, SASL, or no auth). No SaaS, no subscription, no data leaving the machine.
+
+**Philosophy:** Simple, focused, single-binary distribution. No over-engineering.
 
 ## Tech Stack
 
-| Layer | Technology |
+### Server (Go)
+| Component | Technology |
 |---|---|
-| Runtime | Bun |
-| Server | Hono (lightweight, Bun-native) |
-| Kafka client | confluent-kafka-javascript + `aws-msk-iam-sasl-signer-js` (for MSK IAM) |
-| AWS SDK | `@aws-sdk/client-kafka` (MSK discovery), `@aws-sdk/client-cloudwatch` (metrics) |
-| Frontend | React + Vite + shadcn/ui + Tailwind CSS |
+| Runtime | Go 1.22+ |
+| Kafka client | `github.com/twmb/franz-go` + `kadm` admin client |
+| SASL auth | franz-go built-in: PLAIN, SCRAM, AWS IAM (`pkg/sasl/aws`) |
+| MSK discovery | `aws-sdk-go-v2/service/kafka` |
+| CloudWatch | `aws-sdk-go-v2/service/cloudwatch` |
+| HTTP router | `go-chi/chi` (stdlib-compatible, lightweight) |
+| Frontend embed | `go:embed` (single binary in production) |
+
+### Frontend (Bun + React)
+| Component | Technology |
+|---|---|
+| Runtime/tooling | Bun (package manager, dev server, bundler) |
+| Framework | React 18 + TypeScript |
+| UI | shadcn/ui + Tailwind CSS v4 |
 | Charts | recharts (shadcn-compatible) |
+| Dev server | `Bun.serve()` with HMR — proxies `/api` → Go server |
+| Bundler | `Bun.build()` JS API + `bun-plugin-tailwind` |
+
+No Vite, no webpack, no PostCSS config. Bun handles everything natively.
 
 ## Architecture
 
-Monorepo layout:
+```
+┌─────────────────────────┐         ┌──────────────────────────────────────┐
+│  React + shadcn/ui      │◄──API──►│  Go HTTP server (single binary)      │
+│  Bun native bundler     │         │                                      │
+│  HMR via Bun.serve()    │         │  ├─ franz-go + kadm (Kafka admin)    │
+│  localhost:3000 (dev)   │         │  ├─ pkg/sasl/aws (MSK IAM auth)      │
+│                         │         │  ├─ aws-sdk-go-v2 (MSK discovery+CW) │
+│                         │         │  └─ net/http + chi router             │
+└─────────────────────────┘         └──────────────────────────────────────┘
+```
+
+In production, the Go binary embeds the built React assets via `go:embed` and serves everything — single binary, zero runtime dependencies.
+
+### Layout
 
 ```
-apps/
-  server/   — Bun + Hono REST API
-  web/      — React + Vite frontend
-packages/
-  shared/   — Shared TypeScript types
+kpanel/
+├── Makefile
+├── server/                      — Go API server
+│   ├── go.mod
+│   ├── cmd/kpanel/
+│   │   ├── main.go              — entry point, go:embed public/
+│   │   └── public/              — built frontend assets (copied by make build)
+│   └── internal/
+│       ├── api/                 — chi router + handlers
+│       ├── connections/         — connection store (JSON file)
+│       ├── kafka/               — franz-go client factory
+│       └── msk/                 — MSK discovery via aws-sdk-go-v2
+└── web/                         — React frontend
+    ├── dev.ts                   — Bun.serve() dev server (HMR + /api proxy)
+    ├── build.ts                 — Bun.build() production build script
+    ├── bunfig.toml              — registers bun-plugin-tailwind for Bun.serve()
+    ├── index.html
+    ├── package.json
+    ├── tsconfig.json
+    └── src/
+        ├── App.tsx
+        ├── main.tsx
+        └── index.css            — @import "tailwindcss"
 ```
-
-- Server uses confluent-kafka-javascript admin API directly — **NO CLI wrapping, no Java, no JVM**
-- Cluster config is stored locally (e.g. in a config file or in-memory during the session)
-- MSK clusters can be auto-discovered via AWS SDK; all other clusters are manually configured
-- MSK IAM auth via `aws-msk-iam-sasl-signer-js` generating OAUTHBEARER tokens
-- Non-MSK clusters: plain, SASL/PLAIN, SASL/SCRAM, or no auth — whatever confluent-kafka-javascript supports
-
-## Cluster Connection Model
-
-Two ways to add a cluster:
-
-1. **Manual** — user provides broker addresses + optional auth config. Works with any Kafka (local, Confluent, self-managed, MSK with non-IAM auth).
-2. **MSK auto-discover** — user provides AWS region/profile, kpanel calls `@aws-sdk/client-kafka` to list MSK clusters and fetch bootstrap brokers automatically. Then connects with IAM auth.
-
-MSK-specific features (only available when a cluster is identified as MSK):
-- CloudWatch metrics (throughput, lag, broker resources)
-- Cluster metadata from the MSK API (version, broker count, etc.)
 
 ## Key Design Decisions
 
-### Why confluent-kafka-javascript (not kcat)?
-`kcat` cannot do MSK IAM auth without rebuilding `librdkafka` from a custom fork. confluent-kafka-javascript has first-class MSK IAM support via AWS's official `aws-msk-iam-sasl-signer-js` library. It also provides structured data via the admin API rather than text parsing.
+### Provider-agnostic core, MSK-enhanced
+- Core API uses **connection IDs** (user-defined slugs), not AWS ARNs
+- A "connection" is a named set of brokers + auth config
+- Connections can be manually configured (any Kafka) or auto-discovered (MSK)
+- MSK features (discovery, CloudWatch, IAM auth) activate only when AWS credentials are present
+- The UI shows an "MSK" badge on auto-discovered connections and surfaces an extra Metrics tab
 
-### Why a library (not CLI)?
-No text parsing, no JVM, no shelling out. Structured data directly from the confluent-kafka-javascript admin API.
+### Why franz-go (not KafkaJS)?
+- KafkaJS hangs on Bun's net/tls sockets (open bug: oven-sh/bun#6571) and is unmaintained since Feb 2023
+- Confluent's kafka-javascript throws NODE_MODULE_VERSION mismatch on Bun (native addons)
+- franz-go has built-in `AWS_MSK_IAM` SASL mechanism — no separate signer library needed
+- franz-go's `kadm` package provides a complete admin API with structured types
+- franz-go is actively maintained and production-proven at scale
 
-### Why Hono (not Express/Fastify)?
-Lightweight, Bun-native, minimal boilerplate.
+### Why Go for the server?
+- franz-go is the best Kafka client in any language outside Java
+- `go build` produces a single static binary with embedded frontend (`go:embed`)
+- Excellent AWS SDK support
+- Cross-compilation to Linux/macOS is trivial
 
-### Why Bun (not Node)?
-Fast startup, native TypeScript support, built-in tooling (test runner, bundler, package manager).
+### Why Bun's native bundler (not Vite)?
+- As of Bun 1.3, `Bun.serve()` has a full-stack dev server with native HMR and React Fast Refresh
+- `bun-plugin-tailwind` provides first-class Tailwind v4 integration
+- Zero config files — no `vite.config.ts`, no `postcss.config.js`, no `tailwind.config.ts`
+- `bun build` CLI doesn't support plugins yet, so production builds use `Bun.build()` JS API in `build.ts`
+- `bunfig.toml` wires `bun-plugin-tailwind` into `Bun.serve()` for the dev server
 
-## IAM Auth Pattern (MSK only)
+### Why Tailwind v4 (not v3)?
+- CSS-first: single `@import "tailwindcss"` replaces three `@tailwind` directives
+- No `tailwind.config.ts` or `postcss.config.js` needed for basic use
+- `bun-plugin-tailwind` integrates natively — no PostCSS pipeline required
+- Automatic content detection via Oxide (Rust-based scanner)
+
+## Frontend Dev Server (`web/dev.ts`)
 
 ```typescript
-import { Kafka } from '@confluentinc/kafka-javascript';
-import { generateAuthToken } from 'aws-msk-iam-sasl-signer-js';
+import homepage from "./index.html";
 
-function createMSKClient(brokers: string[], region: string) {
-  return new Kafka({
-    clientId: 'kpanel',
-    brokers,
-    ssl: true,
-    sasl: {
-      mechanism: 'oauthbearer',
-      oauthBearerProvider: async () => {
-        const token = await generateAuthToken({ region });
-        return { value: token.token };
-      }
+Bun.serve({
+  port: 3000,
+  routes: { "/": homepage },           // Bun bundles + serves with HMR
+  development: { hmr: true, console: true },
+  async fetch(req) {
+    const url = new URL(req.url);
+    if (url.pathname.startsWith("/api")) {
+      return fetch("http://localhost:8080" + url.pathname + url.search, {
+        method: req.method, headers: req.headers,
+        body: req.method !== "GET" ? req.body : undefined,
+      });
     }
-  });
+    return new Response(Bun.file("./index.html")); // SPA fallback
+  },
+});
+```
+
+## Connection Model
+
+```go
+type Connection struct {
+    ID      string       // user-defined or auto-generated slug
+    Name    string       // display name
+    Brokers []string     // bootstrap broker addresses
+    Auth    AuthConfig   // SASL config
+    Source  string       // "manual" | "msk-discovery"
+    MSK     *MSKMetadata // nil for non-MSK connections
+}
+
+type MSKMetadata struct {
+    ClusterArn string
+    Region     string
+    // enables CloudWatch metrics, IAM auth refresh
+}
+
+type AuthConfig struct {
+    Type        string // "none" | "sasl-plain" | "sasl-scram-256" | "sasl-scram-512" | "sasl-ssl" | "aws-iam"
+    Username    string
+    Password    string
+    TLSEnabled  bool
+    TLSCaFile   string
+    TLSCertFile string
+    TLSKeyFile  string
+    AWSRegion   string // for aws-iam
 }
 ```
 
 ## API Endpoints
 
+### Connections (provider-agnostic)
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/clusters` | List all configured clusters (manual + MSK auto-discovered) |
-| POST | `/api/clusters` | Add a manually configured cluster |
-| DELETE | `/api/clusters/:id` | Remove a cluster |
-| GET | `/api/clusters/msk/discover` | Auto-discover MSK clusters via AWS SDK |
-| GET | `/api/clusters/:id/topics` | List topics via confluent-kafka-javascript admin |
-| GET | `/api/clusters/:id/topics/:name` | Topic detail (partitions, replicas, ISR, configs) |
-| GET | `/api/clusters/:id/groups` | List consumer groups |
-| GET | `/api/clusters/:id/groups/:groupId` | Group detail with per-partition lag |
-| POST | `/api/clusters/:id/topics/:name/peek` | Peek last N messages |
-| GET | `/api/clusters/:id/metrics` | CloudWatch metrics (MSK only) |
+| GET | `/api/connections` | List all configured connections |
+| POST | `/api/connections` | Add a manual connection |
+| DELETE | `/api/connections/:id` | Remove a connection |
+| GET | `/api/connections/:id/status` | Connectivity check |
 
-Note: `:id` is an ARN for MSK clusters, or a user-defined identifier for manual clusters.
+### Kafka operations (any connection)
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/connections/:id/topics` | List topics |
+| GET | `/api/connections/:id/topics/:name` | Topic detail (partitions, replicas, ISR, configs) |
+| GET | `/api/connections/:id/groups` | List consumer groups |
+| GET | `/api/connections/:id/groups/:name` | Group detail with per-partition lag |
+| POST | `/api/connections/:id/topics/:name/peek` | Peek last N messages |
+| GET | `/api/connections/:id/brokers` | List brokers with metadata |
 
-## CloudWatch Metrics (MSK only)
+### MSK-specific (AWS credentials required)
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/msk/clusters` | Auto-discover MSK clusters |
+| POST | `/api/msk/clusters/:arn/import` | Import MSK cluster as a connection |
+| GET | `/api/connections/:id/metrics` | CloudWatch metrics (MSK connections only) |
+
+## IAM Auth Pattern (franz-go)
+
+```go
+import (
+    "github.com/twmb/franz-go/pkg/kgo"
+    "github.com/twmb/franz-go/pkg/kadm"
+    kaws "github.com/twmb/franz-go/pkg/sasl/aws"
+    "github.com/aws/aws-sdk-go-v2/config"
+)
+
+func newMSKAdminClient(ctx context.Context, brokers []string, region string) (*kadm.Client, error) {
+    awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+    if err != nil {
+        return nil, err
+    }
+    creds := awsCfg.Credentials
+
+    client, err := kgo.NewClient(
+        kgo.SeedBrokers(brokers...),
+        kgo.SASL(kaws.ManagedStreamingIAM(func(ctx context.Context) (kaws.Auth, error) {
+            v, err := creds.Retrieve(ctx)
+            if err != nil {
+                return kaws.Auth{}, err
+            }
+            return kaws.Auth{
+                AccessKey:    v.AccessKeyID,
+                SecretKey:    v.SecretAccessKey,
+                SessionToken: v.SessionToken,
+            }, nil
+        })),
+        kgo.DialTLS(),
+    )
+    if err != nil {
+        return nil, err
+    }
+    return kadm.NewClient(client), nil
+}
+```
+
+## CloudWatch Metrics (MSK connections only)
 
 Namespace: `AWS/Kafka`
 
@@ -116,28 +246,41 @@ Namespace: `AWS/Kafka`
 
 - **DataTable** — topics, consumer groups, partitions
 - **Card** — metric summaries
-- **Tabs** — Topics / Groups / Brokers / Metrics
+- **Tabs** — Topics / Groups / Brokers / Metrics (Metrics only for MSK connections)
 - **Command (⌘K)** — quick topic/group search
 - **Sheet** — slide-out for topic detail, message peek
-- **Badge** — ISR status, lag severity
+- **Badge** — ISR status, lag severity, "MSK" badge on discovered connections
 - **Charts (recharts)** — CloudWatch time series
-
-## Conventions
-
-- TypeScript everywhere, strict mode
-- Bun workspaces for monorepo
-- Server code in `apps/server/src/`
-- Frontend code in `apps/web/src/`
-- Shared types in `packages/shared/`
 
 ## Commands
 
 ```bash
-bun install          # install all dependencies
-bun run dev          # start both server and frontend in dev mode
-bun run dev:server   # server only
-bun run dev:web      # frontend only
-bun run build        # production build
-bun run lint         # lint all packages
-bun run typecheck    # type check all packages
+make setup        # first-time: go mod tidy + bun install
+make dev          # Go server (:8080) + Bun dev server (:3000) in parallel
+make dev-server   # Go server only
+make dev-web      # Bun dev server only
+make build        # production build → ./dist/kpanel
+make build-linux  # cross-compile for Linux amd64
+make build-darwin # cross-compile for macOS arm64
+make clean        # remove build artifacts
 ```
+
+## Configuration
+
+Connections stored in `~/.kpanel/connections.json` by default.
+
+Environment variables:
+- `KPANEL_PORT` — HTTP port (default: `8080`)
+- `KPANEL_CONFIG_DIR` — config directory (default: `~/.kpanel`)
+- `AWS_REGION` — default region for MSK discovery
+- `AWS_PROFILE` — AWS profile for MSK/CloudWatch access
+- Standard AWS env vars (`AWS_ACCESS_KEY_ID`, etc.) work as expected
+
+## Conventions
+
+- Go code: standard project layout, `internal/` for non-exported packages
+- Go errors: wrap with `fmt.Errorf("context: %w", err)`
+- API responses: JSON, errors use `{"error": "message"}` format
+- Connection IDs: URL-safe slugs (lowercase alphanumeric + hyphens)
+- Frontend: TypeScript strict mode, shadcn/ui conventions
+- No over-engineering: build features incrementally
