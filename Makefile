@@ -1,4 +1,4 @@
-.PHONY: dev dev-server dev-web setup build build-web build-server build-linux build-darwin clean
+.PHONY: dev dev-server dev-web setup build build-web build-server build-linux build-darwin clean kafka-up kafka-down kafka-logs kafka-seed dev-full
 
 setup:
 	cd server && go mod tidy
@@ -39,3 +39,25 @@ build-darwin:
 
 clean:
 	rm -rf dist server/cmd/kpanel/public web/dist web/node_modules
+
+kafka-up:
+	docker compose up -d
+	@echo "Kafka ready at localhost:9092"
+
+kafka-down:
+	docker compose down
+
+kafka-logs:
+	docker compose logs -f kafka
+
+kafka-seed:
+	docker exec kpanel-kafka /opt/kafka/bin/kafka-topics.sh \
+		--bootstrap-server localhost:9092 \
+		--create --if-not-exists --topic orders --partitions 3 --replication-factor 1
+	docker exec kpanel-kafka /opt/kafka/bin/kafka-topics.sh \
+		--bootstrap-server localhost:9092 \
+		--create --if-not-exists --topic events --partitions 1 --replication-factor 1
+	@echo "Test topics created: orders (3 partitions), events (1 partition)"
+
+dev-full: kafka-up
+	$(MAKE) dev
