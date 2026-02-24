@@ -12,7 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/kpanel/kpanel/internal/api"
-	"github.com/kpanel/kpanel/internal/connections"
+	"github.com/kpanel/kpanel/internal/config"
 )
 
 // publicFiles embeds the built React frontend.
@@ -42,9 +42,9 @@ func main() {
 		log.Fatalf("failed to create config dir: %v", err)
 	}
 
-	store, err := connections.NewStore(configDir)
+	store, err := config.NewStore(configDir)
 	if err != nil {
-		log.Fatalf("failed to initialize connection store: %v", err)
+		log.Fatalf("failed to initialize config store: %v", err)
 	}
 
 	r := chi.NewRouter()

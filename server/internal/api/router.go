@@ -5,11 +5,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/kpanel/kpanel/internal/connections"
+	"github.com/kpanel/kpanel/internal/config"
 )
 
 // Mount registers all API routes on the provided router.
-func Mount(r chi.Router, store *connections.Store) {
+func Mount(r chi.Router, store *config.Store) {
 	h := NewHandlers(store)
 
 	r.Use(corsMiddleware)
@@ -22,6 +22,7 @@ func Mount(r chi.Router, store *connections.Store) {
 		r.Post("/", h.AddConnection)
 		r.Delete("/{id}", h.DeleteConnection)
 		r.Get("/{id}/status", h.ConnectionStatus)
+		r.Get("/{id}/session", h.ConnectionSession)
 		r.Get("/{id}/topics", h.ListTopics)
 		r.Get("/{id}/topics/{name}", h.GetTopic)
 		r.Post("/{id}/topics/{name}/peek", h.PeekMessages)
