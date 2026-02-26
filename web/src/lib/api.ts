@@ -1,0 +1,63 @@
+import type { Cluster, SessionStatus, AddClusterRequest } from '../types/cluster'
+import type { Topic, TopicDetail, Message, PeekRequest } from '../types/topic'
+import type { ConsumerGroup, GroupDetail } from '../types/consumer'
+
+const BASE = '/api'
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    ...init,
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error((body as { error?: string }).error ?? res.statusText)
+  }
+  return res.json() as Promise<T>
+}
+
+export const api = {
+  health: {
+    get: () => request<{ status: string }>('/health'),
+  },
+
+  connections: {
+    list: () => request<Cluster[]>('/connections'),
+    add: (body: AddClusterRequest) =>
+      request<Cluster>('/connections', { method: 'POST', body: JSON.stringify(body) }),
+    delete: (id: string) =>
+      request<void>(`/connections/${id}`, { method: 'DELETE' }),
+    session: (id: string) =>
+      request<SessionStatus>(`/connections/${id}/session`),
+  },
+
+  topics: {
+    list: (clusterId: string) =>
+      request<Topic[]>(`/connections/${clusterId}/topics`),
+    get: (clusterId: string, name: string) =>
+      request<TopicDetail>(`/connections/${clusterId}/topics/${encodeURIComponent(name)}`),
+    peek: (clusterId: string, name: string, opts: PeekRequest) =>
+      request<Message[]>(`/connections/${clusterId}/topics/${encodeURIComponent(name)}/peek`, {
+        method: 'POST',
+        body: JSON.stringify(opts),
+      }),
+  },
+
+  groups: {
+    list: (clusterId: string) =>
+      request<ConsumerGroup[]>(`/connections/${clusterId}/groups`),
+    get: (clusterId: string, groupId: string) =>
+      request<GroupDetail>(`/connections/${clusterId}/groups/${encodeURIComponent(groupId)}`),
+  },
+
+  brokers: {
+    list: (clusterId: string) =>
+      request<unknown[]>(`/connections/${clusterId}/brokers`),
+  },
+
+  msk: {
+    discover: () => request<unknown[]>('/msk/clusters'),
+    import: (arn: string) =>
+      request<Cluster>(`/msk/clusters/${encodeURIComponent(arn)}/import`, { method: 'POST' }),
+  },
+} as const

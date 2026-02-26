@@ -1,1 +1,307 @@
 @import "tailwindcss";
+
+/* ─── Design tokens ─────────────────────────────────────────────────────── */
+:root {
+  --k-font: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+
+  /* Backgrounds — enough separation that sidebar/header/content are visually distinct */
+  --k-bg:        #111111;   /* main content area */
+  --k-surface:   #191919;   /* sidebar + header (noticeably lighter than bg) */
+  --k-surface-2: #222222;   /* hover states, inputs */
+  --k-surface-3: #2A2A2A;   /* elevated cards, form fields */
+
+  /* Borders — visible without being heavy */
+  --k-border:   #2A2A2A;
+  --k-border-2: #333333;
+  --k-border-3: #404040;
+
+  /* Text — high contrast primary, readable secondary */
+  --k-text:     #F0ECE6;   /* warm white, not glaring */
+  --k-muted:    #9C9790;   /* secondary — clearly readable */
+  --k-faint:    #505050;   /* placeholder / disabled only */
+
+  /* Accent — amber (nod to Kafka's orange logo + phosphor monitors) */
+  --k-amber:        #E8850A;
+  --k-amber-soft:   #C97209;
+  --k-amber-dim:    rgba(232, 133, 10, 0.08);
+  --k-amber-border: rgba(232, 133, 10, 0.18);
+
+  /* Semantic */
+  --k-green:     #3DB87A;
+  --k-green-dim: rgba(61, 184, 122, 0.08);
+  --k-red:       #D95252;
+  --k-red-dim:   rgba(217, 82, 82, 0.08);
+  --k-blue:      #4B9FD4;
+
+  /* Sidebar */
+  --sidebar-w:           200px;
+  --sidebar-w-collapsed: 52px;
+  --header-h:            44px;
+}
+
+/* ─── Base reset ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--k-bg);
+  color: var(--k-text);
+  font-family: var(--k-font);
+  font-size: 16px;        /* monospace reads ~15% smaller — compensate */
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Scrollbars ──────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--k-border-3); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--k-muted); }
+
+/* ─── Selection ──────────────────────────────────────────────────────────── */
+::selection { background: var(--k-amber-dim); color: var(--k-amber); }
+
+/* ─── Form inputs ─────────────────────────────────────────────────────────── */
+.k-input {
+  width: 100%;
+  background: var(--k-surface-2);
+  border: 1px solid var(--k-border-2);
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-family: var(--k-font);
+  font-size: 14px;
+  color: var(--k-text);
+  outline: none;
+  transition: border-color 150ms ease;
+}
+.k-input::placeholder { color: var(--k-faint); }
+.k-input:focus { border-color: var(--k-amber); }
+.k-input:disabled { opacity: 0.4; cursor: not-allowed; }
+
+
+/* ─── Buttons ─────────────────────────────────────────────────────────────── */
+.k-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-radius: 4px;
+  font-family: var(--k-font);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 120ms ease;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.k-btn-primary {
+  background: var(--k-amber);
+  color: #000;
+  border-color: var(--k-amber);
+}
+.k-btn-primary:hover { background: var(--k-amber-soft); border-color: var(--k-amber-soft); }
+.k-btn-ghost {
+  background: transparent;
+  color: var(--k-muted);
+  border-color: var(--k-border-2);
+}
+.k-btn-ghost:hover { color: var(--k-text); border-color: var(--k-border-3); background: var(--k-surface-2); }
+.k-btn-danger {
+  background: var(--k-red-dim);
+  color: var(--k-red);
+  border-color: rgba(217, 82, 82, 0.2);
+}
+.k-btn-danger:hover { background: rgba(217, 82, 82, 0.15); }
+.k-btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+
+/* ─── Status dot ─────────────────────────────────────────────────────────── */
+.k-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.k-dot-green { background: var(--k-green); box-shadow: 0 0 6px var(--k-green); }
+.k-dot-amber { background: var(--k-amber); box-shadow: 0 0 6px var(--k-amber); }
+.k-dot-red   { background: var(--k-red); }
+.k-dot-muted { background: var(--k-border-3); }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+.k-dot-pulse { animation: pulse-dot 2s ease-in-out infinite; }
+
+/* ─── Data table ─────────────────────────────────────────────────────────── */
+.k-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.k-table thead tr {
+  border-bottom: 1px solid var(--k-border);
+}
+.k-table thead th {
+  padding: 9px 16px;
+  text-align: left;
+  color: var(--k-muted);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.k-table tbody tr {
+  border-bottom: 1px solid var(--k-border);
+  transition: background 100ms ease;
+}
+.k-table tbody tr:last-child { border-bottom: none; }
+.k-table tbody tr:hover { background: var(--k-surface-2); }
+.k-table tbody tr.clickable { cursor: pointer; }
+.k-table tbody td {
+  padding: 11px 16px;
+  color: var(--k-text);
+}
+
+/* ─── Sidebar nav ─────────────────────────────────────────────────────────── */
+.k-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  color: var(--k-muted);
+  font-size: 14px;
+  font-family: var(--k-font);
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 120ms, background 120ms;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.k-nav-item:hover {
+  color: var(--k-text);
+  background: var(--k-surface-2);
+}
+.k-nav-item.active {
+  color: var(--k-amber);
+  background: var(--k-amber-dim);
+  border-color: var(--k-amber-border);
+}
+
+/* ─── Page wrapper & states ─────────────────────────────────────────────────── */
+.k-page    { padding: 24px 28px; }
+.k-loading { padding: 24px 28px; color: var(--k-muted); font-size: 15px; }
+.k-error   { padding: 24px 28px; color: var(--k-red);   font-size: 15px; }
+.k-page-title {
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--k-text);
+  margin: 0 0 5px;
+  letter-spacing: -0.02em;
+}
+.k-page-sub {
+  font-size: 13px;
+  color: var(--k-muted);
+  margin: 0;
+}
+
+/* ─── Dot-grid texture (used on welcome + dashboard) ─────────────────────── */
+.k-dot-grid {
+  background-image: radial-gradient(circle, var(--k-border) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* ─── Tabs ──────────────────────────────────────────────────────────────── */
+.k-tab {
+  padding: 9px 16px;
+  font-size: 13px;
+  color: var(--k-muted);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: var(--k-font);
+  transition: color 120ms, border-color 120ms;
+  white-space: nowrap;
+}
+.k-tab:hover { color: var(--k-text); }
+.k-tab.active {
+  color: var(--k-amber);
+  border-bottom-color: var(--k-amber);
+}
+
+/* ─── Badge ──────────────────────────────────────────────────────────────── */
+.k-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  border: 1px solid;
+}
+.k-badge-green { color: var(--k-green); background: var(--k-green-dim); border-color: rgba(61,184,122,0.2); }
+.k-badge-amber { color: var(--k-amber); background: var(--k-amber-dim); border-color: var(--k-amber-border); }
+.k-badge-red   { color: var(--k-red);   background: var(--k-red-dim);   border-color: rgba(217,82,82,0.2); }
+.k-badge-muted { color: var(--k-muted); background: var(--k-surface-2); border-color: var(--k-border-2); }
+
+/* ─── Code / monospace highlights ───────────────────────────────────────── */
+.k-mono {
+  font-family: var(--k-font);
+  font-size: 11px;
+  color: var(--k-blue);
+}
+
+/* ─── Icon-only buttons ──────────────────────────────────────────────────── */
+.k-icon-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: 3px;
+  color: var(--k-muted);
+  transition: color 120ms;
+}
+.k-icon-btn:hover { color: var(--k-text); }
+.k-icon-btn.k-icon-btn-danger:hover { color: var(--k-red); }
+
+/* ─── Inline link-style buttons ──────────────────────────────────────────── */
+.k-btn-link {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--k-muted);
+  font-family: var(--k-font);
+  font-size: 12px;
+  transition: color 120ms;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.k-btn-link:hover { color: var(--k-amber); }
+.k-btn-link.k-btn-link-danger:hover { color: var(--k-red); }
+
+/* ─── Hoverable rows ─────────────────────────────────────────────────────── */
+.k-hover-row { transition: background 100ms; }
+.k-hover-row:hover { background: var(--k-surface-2); }
+
+/* Message browser rows (full-width buttons) */
+.k-msg-row {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--k-text);
+  transition: background 100ms;
+}
+.k-msg-row:hover { background: var(--k-surface-2); }
