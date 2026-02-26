@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	awssession "github.com/kpanel/kpanel/internal/aws"
@@ -13,6 +15,23 @@ import (
 	"github.com/kpanel/kpanel/internal/credentials"
 	"github.com/kpanel/kpanel/internal/msk"
 )
+
+var (
+	slugNonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
+	slugTrimDash = regexp.MustCompile(`^-+|-+$`)
+)
+
+// slugify converts a display name into a URL-safe, stable identifier.
+// "Production MSK" → "production-msk", "dev cluster 2" → "dev-cluster-2"
+func slugify(s string) string {
+	s = strings.ToLower(s)
+	s = slugNonAlnum.ReplaceAllString(s, "-")
+	s = slugTrimDash.ReplaceAllString(s, "")
+	if s == "" {
+		s = "cluster"
+	}
+	return s
+}
 
 // Handlers holds shared dependencies for HTTP handlers.
 type Handlers struct {
@@ -73,9 +92,12 @@ func (h *Handlers) AddConnection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.ID == "" || len(req.Brokers) == 0 {
-		writeError(w, http.StatusBadRequest, "id and brokers are required")
+	if req.Name == "" || len(req.Brokers) == 0 {
+		writeError(w, http.StatusBadRequest, "name and brokers are required")
 		return
+	}
+	if req.ID == "" {
+		req.ID = slugify(req.Name)
 	}
 
 	platform := req.Platform
@@ -215,37 +237,37 @@ func (h *Handlers) ConnectionSession(w http.ResponseWriter, r *http.Request) {
 // ListTopics godoc
 // GET /api/connections/:id/topics
 func (h *Handlers) ListTopics(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "not implemented"})
+	writeJSON(w, http.StatusOK, []any{})
 }
 
 // GetTopic godoc
 // GET /api/connections/:id/topics/:name
 func (h *Handlers) GetTopic(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "not implemented"})
+	writeError(w, http.StatusNotImplemented, "not implemented")
 }
 
 // ListGroups godoc
 // GET /api/connections/:id/groups
 func (h *Handlers) ListGroups(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "not implemented"})
+	writeJSON(w, http.StatusOK, []any{})
 }
 
 // GetGroup godoc
 // GET /api/connections/:id/groups/:name
 func (h *Handlers) GetGroup(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "not implemented"})
+	writeError(w, http.StatusNotImplemented, "not implemented")
 }
 
 // PeekMessages godoc
 // POST /api/connections/:id/topics/:name/peek
 func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "not implemented"})
+	writeJSON(w, http.StatusOK, []any{})
 }
 
 // ListBrokers godoc
 // GET /api/connections/:id/brokers
 func (h *Handlers) ListBrokers(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "not implemented"})
+	writeJSON(w, http.StatusOK, []any{})
 }
 
 // GetMetrics godoc
