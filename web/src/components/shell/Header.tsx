@@ -1,5 +1,5 @@
 import { useParams, Link } from '@tanstack/react-router'
-import { useClusters, useClusterSession } from '../../hooks/useCluster'
+import { useClusters, useConnectionStatus } from '../../hooks/useCluster'
 import { useAppStore } from '../../stores/appStore'
 import { ClusterSwitcher } from './ClusterSwitcher'
 
@@ -8,7 +8,7 @@ export function Header() {
   const activeClusterId = useAppStore((s) => s.activeClusterId)
   const clusterId       = params.clusterId ?? activeClusterId
   const { data: clusters } = useClusters()
-  const { data: session }  = useClusterSession(clusterId ?? '')
+  const { data: status, isLoading } = useConnectionStatus(clusterId ?? '')
 
   const cluster = clusters?.find((c) => c.id === clusterId)
 
@@ -85,37 +85,37 @@ export function Header() {
             border:      '1px solid',
             fontSize:    12,
             fontFamily:  'var(--k-font)',
-            borderColor: session === undefined
+            borderColor: (isLoading || status === undefined)
               ? 'var(--k-amber-border)'
-              : session.valid
+              : status.connected
               ? 'rgba(61,184,122,0.25)'
               : 'rgba(217,82,82,0.25)',
-            background: session === undefined
+            background: (isLoading || status === undefined)
               ? 'var(--k-amber-dim)'
-              : session.valid
+              : status.connected
               ? 'var(--k-green-dim)'
               : 'var(--k-red-dim)',
-            color: session === undefined
+            color: (isLoading || status === undefined)
               ? 'var(--k-amber)'
-              : session.valid
+              : status.connected
               ? 'var(--k-green)'
               : 'var(--k-red)',
           }}
         >
           <span
             className={`k-dot ${
-              session === undefined
+              (isLoading || status === undefined)
                 ? 'k-dot-amber k-dot-pulse'
-                : session.valid
+                : status.connected
                 ? 'k-dot-green k-dot-pulse'
                 : 'k-dot-red'
             }`}
           />
-          {session === undefined
+          {(isLoading || status === undefined)
             ? 'checking'
-            : session.valid
+            : status.connected
             ? 'connected'
-            : 'auth error'}
+            : 'disconnected'}
         </div>
       )}
     </header>

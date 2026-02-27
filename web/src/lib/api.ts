@@ -1,6 +1,7 @@
 import type { Cluster, SessionStatus, AddClusterRequest } from '../types/cluster'
 import type { Topic, TopicDetail, Message, PeekRequest } from '../types/topic'
 import type { ConsumerGroup, GroupDetail } from '../types/consumer'
+import type { Broker, ClusterStatus, ClusterOverview } from '../types/broker'
 
 const BASE = '/api'
 
@@ -29,6 +30,10 @@ export const api = {
       request<void>(`/connections/${id}`, { method: 'DELETE' }),
     session: (id: string) =>
       request<SessionStatus>(`/connections/${id}/session`),
+    status: (id: string) =>
+      request<ClusterStatus>(`/connections/${id}/status`),
+    overview: (id: string) =>
+      request<ClusterOverview>(`/connections/${id}/overview`),
   },
 
   topics: {
@@ -52,7 +57,7 @@ export const api = {
 
   brokers: {
     list: (clusterId: string) =>
-      request<unknown[]>(`/connections/${clusterId}/brokers`),
+      request<Broker[]>(`/connections/${clusterId}/brokers`),
   },
 
   msk: {

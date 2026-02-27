@@ -4,6 +4,8 @@ export const queryKeys = {
   connections: {
     all: () => ['connections'] as const,
     session: (id: string) => ['connections', id, 'session'] as const,
+    status: (id: string) => ['connections', id, 'status'] as const,
+    overview: (id: string) => ['connections', id, 'overview'] as const,
   },
 
   topics: {

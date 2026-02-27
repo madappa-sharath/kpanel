@@ -5,21 +5,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/zalando/go-keyring"
 	"github.com/kpanel/kpanel/internal/api"
 	"github.com/kpanel/kpanel/internal/config"
 	"github.com/kpanel/kpanel/internal/credentials"
 )
-
-func TestMain(m *testing.M) {
-	keyring.MockInit()
-	os.Exit(m.Run())
-}
 
 // testServer creates a fresh chi router with a real config.Store backed by a temp dir.
 func testServer(t *testing.T) (http.Handler, *config.Store) {
@@ -206,6 +199,7 @@ func TestAddConnection_AWSIAMNoCredRef(t *testing.T) {
 	h, _ := testServer(t)
 	body := map[string]any{
 		"id":      "aws-cluster",
+		"name":    "AWS Cluster",
 		"brokers": []string{"b:9092"},
 		"auth": map[string]any{
 			"mechanism": "aws_iam",
@@ -234,6 +228,7 @@ func TestAddConnection_DefaultPlatformGeneric(t *testing.T) {
 	h, _ := testServer(t)
 	body := map[string]any{
 		"id":      "plain",
+		"name":    "Plain Cluster",
 		"brokers": []string{"b:9092"},
 	}
 	w := do(t, h, http.MethodPost, "/api/connections/", body)
@@ -378,6 +373,17 @@ func TestErrorResponse_Shape(t *testing.T) {
 	decodeJSON(t, w, &resp)
 	if _, ok := resp["error"]; !ok {
 		t.Error("error responses must have an 'error' field")
+	}
+}
+
+// --- ClusterOverview ---
+
+func TestClusterOverview_NotFound(t *testing.T) {
+	h, _ := testServer(t)
+	w := do(t, h, http.MethodGet, "/api/connections/ghost/overview", nil)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusNotFound)
 	}
 }
 

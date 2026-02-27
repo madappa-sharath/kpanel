@@ -1,18 +1,23 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/twmb/franz-go/pkg/kadm"
 	awssession "github.com/kpanel/kpanel/internal/aws"
 	"github.com/kpanel/kpanel/internal/config"
 	"github.com/kpanel/kpanel/internal/credentials"
+	"github.com/kpanel/kpanel/internal/kafka"
 	"github.com/kpanel/kpanel/internal/msk"
 )
 
@@ -129,7 +134,7 @@ func (h *Handlers) AddConnection(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if req.Auth.Mechanism != "" {
+	if req.Auth.Mechanism != "" && req.Auth.Mechanism != "none" {
 		ref := ""
 		if req.Auth.Mechanism != "aws_iam" && (req.Auth.Username != "" || req.Auth.Password != "") {
 			ref = req.ID
@@ -197,16 +202,44 @@ func (h *Handlers) DeleteConnection(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+type statusResponse struct {
+	Connected    bool   `json:"connected"`
+	BrokerCount  int    `json:"brokerCount,omitempty"`
+	ControllerID int32  `json:"controllerId,omitempty"`
+	Error        string `json:"error,omitempty"`
+}
+
 // ConnectionStatus godoc
 // GET /api/connections/:id/status
 func (h *Handlers) ConnectionStatus(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	_, ok := h.store.Get(id)
+	cluster, ok := h.store.Get(id)
 	if !ok {
 		writeError(w, http.StatusNotFound, "connection not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "not implemented"})
+
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+
+	admClient, err := kafka.NewClient(ctx, cluster)
+	if err != nil {
+		writeJSON(w, http.StatusOK, statusResponse{Connected: false, Error: err.Error()})
+		return
+	}
+	defer admClient.Close()
+
+	meta, err := admClient.BrokerMetadata(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusOK, statusResponse{Connected: false, Error: err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, statusResponse{
+		Connected:    true,
+		BrokerCount:  len(meta.Brokers),
+		ControllerID: meta.Controller,
+	})
 }
 
 // ConnectionSession godoc
@@ -264,10 +297,279 @@ func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, []any{})
 }
 
+type brokerResponse struct {
+	NodeID           int32  `json:"nodeId"`
+	Host             string `json:"host"`
+	Port             int32  `json:"port"`
+	Rack             string `json:"rack,omitempty"`
+	IsController     bool   `json:"isController"`
+	LeaderPartitions int    `json:"leaderPartitions"`
+	Replicas         int    `json:"replicas"`
+	LogSizeBytes     int64  `json:"logSizeBytes"`
+}
+
 // ListBrokers godoc
 // GET /api/connections/:id/brokers
 func (h *Handlers) ListBrokers(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, []any{})
+	id := chi.URLParam(r, "id")
+	cluster, ok := h.store.Get(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "connection not found")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	admClient, err := kafka.NewClient(ctx, cluster)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer admClient.Close()
+
+	meta, err := admClient.BrokerMetadata(ctx)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Fetch topic metadata and log dirs in parallel for enriched broker stats.
+	type topicRes struct {
+		details kadm.TopicDetails
+		err     error
+	}
+	type logRes struct {
+		dirs kadm.DescribedAllLogDirs
+		err  error
+	}
+	topicCh := make(chan topicRes, 1)
+	logCh := make(chan logRes, 1)
+
+	go func() {
+		d, e := admClient.ListTopics(ctx)
+		topicCh <- topicRes{d, e}
+	}()
+	go func() {
+		d, e := admClient.DescribeAllLogDirs(ctx, nil)
+		logCh <- logRes{d, e}
+	}()
+
+	tRes := <-topicCh
+	lRes := <-logCh
+
+	leaderCount := make(map[int32]int)
+	replicaCount := make(map[int32]int)
+	if tRes.err == nil {
+		tRes.details.EachPartition(func(p kadm.PartitionDetail) {
+			if p.Leader >= 0 {
+				leaderCount[p.Leader]++
+			}
+			for _, r := range p.Replicas {
+				replicaCount[r]++
+			}
+		})
+	}
+
+	logSize := make(map[int32]int64)
+	if lRes.err == nil {
+		for nodeID, dirs := range lRes.dirs {
+			logSize[nodeID] = dirs.Size()
+		}
+	}
+
+	brokers := make([]brokerResponse, 0, len(meta.Brokers))
+	for _, b := range meta.Brokers {
+		rack := ""
+		if b.Rack != nil {
+			rack = *b.Rack
+		}
+		brokers = append(brokers, brokerResponse{
+			NodeID:           b.NodeID,
+			Host:             b.Host,
+			Port:             b.Port,
+			Rack:             rack,
+			IsController:     b.NodeID == meta.Controller,
+			LeaderPartitions: leaderCount[b.NodeID],
+			Replicas:         replicaCount[b.NodeID],
+			LogSizeBytes:     logSize[b.NodeID],
+		})
+	}
+	sort.Slice(brokers, func(i, j int) bool {
+		return brokers[i].NodeID < brokers[j].NodeID
+	})
+	writeJSON(w, http.StatusOK, brokers)
+}
+
+type overviewBrokerSummary struct {
+	NodeID       int32  `json:"nodeId"`
+	Host         string `json:"host"`
+	Port         int32  `json:"port"`
+	Rack         string `json:"rack,omitempty"`
+	IsController bool   `json:"isController"`
+}
+
+type clusterOverviewResponse struct {
+	ClusterID          string                  `json:"clusterId"`
+	KafkaVersion       string                  `json:"kafkaVersion"`
+	ControllerID       int32                   `json:"controllerId"`
+	BrokerCount        int                     `json:"brokerCount"`
+	Brokers            []overviewBrokerSummary `json:"brokers"`
+	TotalPartitions    int                     `json:"totalPartitions"`
+	UnderReplicated    int                     `json:"underReplicated"`
+	OfflinePartitions  int                     `json:"offlinePartitions"`
+	TopicCount         int                     `json:"topicCount"`
+	ConsumerGroupCount int                     `json:"consumerGroupCount"`
+	Configs            map[string]string       `json:"configs"`
+}
+
+// ClusterOverview godoc
+// GET /api/connections/:id/overview
+func (h *Handlers) ClusterOverview(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	cluster, ok := h.store.Get(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "connection not found")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	admClient, err := kafka.NewClient(ctx, cluster)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer admClient.Close()
+
+	type metaRes struct {
+		meta kadm.Metadata
+		err  error
+	}
+	type topicRes struct {
+		details kadm.TopicDetails
+		err     error
+	}
+	type groupRes struct {
+		groups kadm.ListedGroups
+		err    error
+	}
+	type versionRes struct {
+		versions kadm.BrokersApiVersions
+		err      error
+	}
+	type configRes struct {
+		configs kadm.ResourceConfigs
+		err     error
+	}
+
+	metaCh := make(chan metaRes, 1)
+	topicCh := make(chan topicRes, 1)
+	groupCh := make(chan groupRes, 1)
+	versionCh := make(chan versionRes, 1)
+	configCh := make(chan configRes, 1)
+
+	go func() { m, e := admClient.BrokerMetadata(ctx); metaCh <- metaRes{m, e} }()
+	go func() { d, e := admClient.ListTopics(ctx); topicCh <- topicRes{d, e} }()
+	go func() { g, e := admClient.ListGroups(ctx); groupCh <- groupRes{g, e} }()
+	go func() { v, e := admClient.ApiVersions(ctx); versionCh <- versionRes{v, e} }()
+	go func() { c, e := admClient.DescribeBrokerConfigs(ctx); configCh <- configRes{c, e} }()
+
+	mRes := <-metaCh
+	if mRes.err != nil {
+		writeError(w, http.StatusInternalServerError, mRes.err.Error())
+		return
+	}
+	tRes := <-topicCh
+	gRes := <-groupCh
+	vRes := <-versionCh
+	cRes := <-configCh
+
+	// Broker summaries
+	brokers := make([]overviewBrokerSummary, 0, len(mRes.meta.Brokers))
+	for _, b := range mRes.meta.Brokers {
+		rack := ""
+		if b.Rack != nil {
+			rack = *b.Rack
+		}
+		brokers = append(brokers, overviewBrokerSummary{
+			NodeID:       b.NodeID,
+			Host:         b.Host,
+			Port:         b.Port,
+			Rack:         rack,
+			IsController: b.NodeID == mRes.meta.Controller,
+		})
+	}
+	sort.Slice(brokers, func(i, j int) bool { return brokers[i].NodeID < brokers[j].NodeID })
+
+	// Partition health
+	totalPartitions, underReplicated, offlinePartitions := 0, 0, 0
+	topicCount := 0
+	if tRes.err == nil {
+		topicCount = len(tRes.details)
+		tRes.details.EachPartition(func(p kadm.PartitionDetail) {
+			totalPartitions++
+			if p.Leader < 0 {
+				offlinePartitions++
+			}
+			if len(p.ISR) < len(p.Replicas) {
+				underReplicated++
+			}
+		})
+	}
+
+	consumerGroupCount := 0
+	if gRes.err == nil {
+		consumerGroupCount = len(gRes.groups)
+	}
+
+	kafkaVersion := "unknown"
+	if vRes.err == nil {
+		// Prefer the controller broker for a deterministic pick
+		if bv, ok := vRes.versions[mRes.meta.Controller]; ok {
+			kafkaVersion = bv.VersionGuess()
+		} else {
+			for _, bv := range vRes.versions {
+				kafkaVersion = bv.VersionGuess()
+				break
+			}
+		}
+	}
+
+	wantedKeys := map[string]bool{
+		"log.retention.hours":        true,
+		"log.retention.bytes":        true,
+		"default.replication.factor": true,
+		"min.insync.replicas":        true,
+		"auto.create.topics.enable":  true,
+	}
+	configs := make(map[string]string)
+	if cRes.err == nil {
+		// All brokers share the same cluster-level config; just use the first response
+		for _, rc := range cRes.configs {
+			for _, cfg := range rc.Configs {
+				if wantedKeys[cfg.Key] && cfg.Value != nil {
+					configs[cfg.Key] = *cfg.Value
+				}
+			}
+			break
+		}
+	}
+
+	writeJSON(w, http.StatusOK, clusterOverviewResponse{
+		ClusterID:          mRes.meta.Cluster,
+		KafkaVersion:       kafkaVersion,
+		ControllerID:       mRes.meta.Controller,
+		BrokerCount:        len(brokers),
+		Brokers:            brokers,
+		TotalPartitions:    totalPartitions,
+		UnderReplicated:    underReplicated,
+		OfflinePartitions:  offlinePartitions,
+		TopicCount:         topicCount,
+		ConsumerGroupCount: consumerGroupCount,
+		Configs:            configs,
+	})
 }
 
 // GetMetrics godoc

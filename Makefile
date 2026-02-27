@@ -1,4 +1,16 @@
-.PHONY: dev dev-server dev-web setup build build-web build-server build-linux build-darwin clean kafka-up kafka-down kafka-logs kafka-seed dev-full
+.PHONY: dev dev-server dev-web setup build build-web build-server build-linux build-darwin clean kafka-up kafka-down kafka-logs kafka-seed dev-full test test-integration
+
+test:
+	cd server && go test ./...
+
+# Runs integration tests against a real Kafka.
+# Local:  make kafka-up && make test-integration   (uses compose broker)
+# CI:     make test-integration                    (spins up testcontainers)
+test-integration:
+	cd server && go test -tags integration -timeout 120s ./internal/api/...
+
+test-integration-local:
+	cd server && TEST_KAFKA_BROKER=localhost:9092 go test -tags integration -timeout 30s ./internal/api/...
 
 setup:
 	cd server && go mod tidy

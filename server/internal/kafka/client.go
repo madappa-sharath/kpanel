@@ -90,6 +90,9 @@ func NewClient(ctx context.Context, cluster *config.Cluster) (*kadm.Client, erro
 				kgo.DialTLS(),
 			)
 
+		case "none", "":
+			// no auth — skip
+
 		default:
 			return nil, fmt.Errorf("unknown auth mechanism: %s", cluster.Auth.Mechanism)
 		}

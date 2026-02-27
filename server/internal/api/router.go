@@ -28,6 +28,7 @@ func Mount(r chi.Router, store *config.Store) {
 		r.Post("/{id}/topics/{name}/peek", h.PeekMessages)
 		r.Get("/{id}/groups", h.ListGroups)
 		r.Get("/{id}/groups/{name}", h.GetGroup)
+		r.Get("/{id}/overview", h.ClusterOverview)
 		r.Get("/{id}/brokers", h.ListBrokers)
 		r.Get("/{id}/metrics", h.GetMetrics)
 	})
