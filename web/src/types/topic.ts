@@ -3,6 +3,8 @@ export interface Topic {
   partitions: number
   replication_factor: number
   internal: boolean
+  isr_health: 'healthy' | 'degraded'
+  under_replicated_partitions: number
 }
 
 export interface TopicPartition {
@@ -14,10 +16,15 @@ export interface TopicPartition {
   high_watermark: number
 }
 
+export interface ConfigEntry {
+  value: string
+  source: 'default' | 'dynamic' | 'static' | 'unknown'
+}
+
 export interface TopicDetail {
   name: string
   partitions: TopicPartition[]
-  config: Record<string, string>
+  config: Record<string, ConfigEntry>
 }
 
 export interface Message {
@@ -33,5 +40,4 @@ export interface Message {
 export interface PeekRequest {
   limit: number
   partition?: number // omit for all partitions
-  offset?: 'earliest' | 'latest' | number
 }

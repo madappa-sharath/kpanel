@@ -14,15 +14,14 @@ import (
 	"github.com/kpanel/kpanel/internal/credentials"
 )
 
-// NewClient creates a franz-go kadm admin client configured for the given cluster.
-// The caller is responsible for calling Close() when done.
-func NewClient(ctx context.Context, cluster *config.Cluster) (*kadm.Client, error) {
+// buildOpts assembles kgo.Opt for seed brokers, TLS, and SASL auth from the
+// cluster config. ctx is only used for AWS credential loading.
+func buildOpts(ctx context.Context, cluster *config.Cluster) ([]kgo.Opt, error) {
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(cluster.Brokers...),
 		kgo.ClientID("kpanel"),
 	}
 
-	// TLS (non-IAM)
 	if cluster.TLS != nil && cluster.TLS.Enabled {
 		opts = append(opts, kgo.DialTLS())
 	}
@@ -98,9 +97,35 @@ func NewClient(ctx context.Context, cluster *config.Cluster) (*kadm.Client, erro
 		}
 	}
 
+	return opts, nil
+}
+
+// NewClient creates a franz-go kadm admin client configured for the given cluster.
+// The caller is responsible for calling Close() when done.
+func NewClient(ctx context.Context, cluster *config.Cluster) (*kadm.Client, error) {
+	opts, err := buildOpts(ctx, cluster)
+	if err != nil {
+		return nil, err
+	}
 	cl, err := kgo.NewClient(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("create kafka client: %w", err)
 	}
 	return kadm.NewClient(cl), nil
+}
+
+// NewRawClient creates a franz-go kgo.Client with the same auth config as
+// NewClient, plus any additional options (e.g. kgo.ConsumePartitions for
+// message fetching). The caller is responsible for calling Close() when done.
+func NewRawClient(ctx context.Context, cluster *config.Cluster, extraOpts ...kgo.Opt) (*kgo.Client, error) {
+	opts, err := buildOpts(ctx, cluster)
+	if err != nil {
+		return nil, err
+	}
+	opts = append(opts, extraOpts...)
+	cl, err := kgo.NewClient(opts...)
+	if err != nil {
+		return nil, fmt.Errorf("create kafka consumer client: %w", err)
+	}
+	return cl, nil
 }

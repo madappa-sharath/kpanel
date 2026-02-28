@@ -436,18 +436,20 @@ function ConfigTable({ overview }: { overview: ClusterOverview }) {
                     <ConfigStatusBadge status={status} title={rule.why || undefined} />
                   </div>
 
-                  {/* Col 4: recommendation — only shown when actionable */}
-                  {(status === 'warning' || status === 'info') && (
-                    <span
-                      style={{
-                        fontSize: 12,
-                        fontFamily: 'var(--k-font)',
-                        color: status === 'warning' ? 'var(--k-amber)' : 'var(--k-muted)',
-                      }}
-                    >
-                      {rule.recommendation(entry.value, brokerCount)}
-                    </span>
-                  )}
+                  {/* Col 4: always rendered so all rows have 4 grid cells */}
+                  <div>
+                    {(status === 'warning' || status === 'info') && (
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontFamily: 'var(--k-font)',
+                          color: status === 'warning' ? 'var(--k-amber)' : 'var(--k-muted)',
+                        }}
+                      >
+                        {rule.recommendation(entry.value, brokerCount)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )
             })}

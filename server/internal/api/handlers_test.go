@@ -409,6 +409,146 @@ func TestClusterOverview_ConfigsShape(t *testing.T) {
 	}
 }
 
+// --- AddConnection: auto-slug from name ---
+
+func TestAddConnection_AutoSlugFromName(t *testing.T) {
+	h, _ := testServer(t)
+	body := map[string]any{
+		"name":    "Production MSK",
+		"brokers": []string{"b:9092"},
+	}
+	w := do(t, h, http.MethodPost, "/api/connections/", body)
+	if w.Code != http.StatusCreated {
+		t.Errorf("status: got %d, want %d (body: %s)", w.Code, http.StatusCreated, w.Body.String())
+	}
+	var resp config.Cluster
+	decodeJSON(t, w, &resp)
+	if resp.ID != "production-msk" {
+		t.Errorf("auto-slug ID: got %q, want production-msk", resp.ID)
+	}
+}
+
+func TestAddConnection_SlugTrimsEdgeDashes(t *testing.T) {
+	h, _ := testServer(t)
+	body := map[string]any{"name": "  Cluster 2!!", "brokers": []string{"b"}}
+	w := do(t, h, http.MethodPost, "/api/connections/", body)
+	if w.Code != http.StatusCreated {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusCreated)
+	}
+	var resp config.Cluster
+	decodeJSON(t, w, &resp)
+	if len(resp.ID) == 0 || resp.ID[0] == '-' || resp.ID[len(resp.ID)-1] == '-' {
+		t.Errorf("slug %q has leading/trailing dashes", resp.ID)
+	}
+}
+
+// --- ListTopics (unit) ---
+
+func TestListTopics_ConnectionNotFound(t *testing.T) {
+	h, _ := testServer(t)
+	w := do(t, h, http.MethodGet, "/api/connections/ghost/topics", nil)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusNotFound)
+	}
+	var resp map[string]string
+	decodeJSON(t, w, &resp)
+	if _, ok := resp["error"]; !ok {
+		t.Error("error responses must have an 'error' field")
+	}
+}
+
+func TestListTopics_UnreachableBroker_ReturnsValidJSONError(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{ID: "lt-unreachable", Platform: "generic", Brokers: []string{"b"}})
+	w := do(t, h, http.MethodGet, "/api/connections/lt-unreachable/topics", nil)
+	if w.Code == http.StatusOK {
+		t.Error("expected non-200 status with unreachable broker")
+		return
+	}
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(w.Body).Decode(&raw); err != nil {
+		t.Fatalf("response must be valid JSON: %v (body: %s)", err, w.Body.String())
+	}
+}
+
+// --- GetTopic (unit) ---
+
+func TestGetTopic_ConnectionNotFound(t *testing.T) {
+	h, _ := testServer(t)
+	w := do(t, h, http.MethodGet, "/api/connections/ghost/topics/my-topic", nil)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusNotFound)
+	}
+	var resp map[string]string
+	decodeJSON(t, w, &resp)
+	if _, ok := resp["error"]; !ok {
+		t.Error("error responses must have an 'error' field")
+	}
+}
+
+func TestGetTopic_UnreachableBroker_ReturnsValidJSONError(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{ID: "gt-unreachable", Platform: "generic", Brokers: []string{"b"}})
+	w := do(t, h, http.MethodGet, "/api/connections/gt-unreachable/topics/any-topic", nil)
+	if w.Code == http.StatusOK {
+		t.Error("expected non-200 status with unreachable broker")
+		return
+	}
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(w.Body).Decode(&raw); err != nil {
+		t.Fatalf("response must be valid JSON: %v (body: %s)", err, w.Body.String())
+	}
+}
+
+// --- PeekMessages (unit) ---
+
+func TestPeekMessages_ConnectionNotFound(t *testing.T) {
+	h, _ := testServer(t)
+	w := do(t, h, http.MethodPost, "/api/connections/ghost/topics/my-topic/peek",
+		map[string]any{"limit": 10})
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusNotFound)
+	}
+	var resp map[string]string
+	decodeJSON(t, w, &resp)
+	if _, ok := resp["error"]; !ok {
+		t.Error("error responses must have an 'error' field")
+	}
+}
+
+func TestPeekMessages_InvalidBody(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{ID: "pm-badbody", Platform: "generic", Brokers: []string{"b"}})
+	req := httptest.NewRequest(http.MethodPost, "/api/connections/pm-badbody/topics/foo/peek",
+		strings.NewReader(`{bad json`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var resp map[string]string
+	decodeJSON(t, w, &resp)
+	if _, ok := resp["error"]; !ok {
+		t.Error("error responses must have an 'error' field")
+	}
+}
+
+func TestPeekMessages_UnreachableBroker_ReturnsValidJSONError(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{ID: "pm-unreachable", Platform: "generic", Brokers: []string{"b"}})
+	w := do(t, h, http.MethodPost, "/api/connections/pm-unreachable/topics/foo/peek",
+		map[string]any{"limit": 5})
+	if w.Code == http.StatusOK {
+		t.Error("expected non-200 status with unreachable broker")
+		return
+	}
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(w.Body).Decode(&raw); err != nil {
+		t.Fatalf("response must be valid JSON: %v (body: %s)", err, w.Body.String())
+	}
+}
+
 // --- Idempotent add (upsert) ---
 
 func TestAddConnection_Upsert(t *testing.T) {

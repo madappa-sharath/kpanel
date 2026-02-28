@@ -32,6 +32,16 @@ export function relativeTime(iso: string): string {
   return `${Math.floor(ms / 86_400_000)}d ago`
 }
 
+export function formatRetention(ms: string | undefined): string {
+  if (!ms) return '—'
+  const val = Number(ms)
+  if (val === -1) return 'unlimited'
+  if (val < 60_000) return `${Math.round(val / 1_000)}s`
+  if (val < 3_600_000) return `${Math.round(val / 60_000)}m`
+  if (val < 86_400_000) return `${Math.round(val / 3_600_000)}h`
+  return `${Math.round(val / 86_400_000)}d`
+}
+
 export function slugify(s: string): string {
   return s
     .toLowerCase()

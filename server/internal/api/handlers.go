@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kmsg"
 	awssession "github.com/kpanel/kpanel/internal/aws"
 	"github.com/kpanel/kpanel/internal/config"
@@ -268,16 +269,208 @@ func (h *Handlers) ConnectionSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, status)
 }
 
+type topicSummary struct {
+	Name                      string `json:"name"`
+	Partitions                int    `json:"partitions"`
+	ReplicationFactor         int    `json:"replication_factor"`
+	Internal                  bool   `json:"internal"`
+	ISRHealth                 string `json:"isr_health"` // "healthy" | "degraded"
+	UnderReplicatedPartitions int    `json:"under_replicated_partitions"`
+}
+
 // ListTopics godoc
 // GET /api/connections/:id/topics
 func (h *Handlers) ListTopics(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, []any{})
+	id := chi.URLParam(r, "id")
+	cluster, ok := h.store.Get(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "connection not found")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	admClient, err := kafka.NewClient(ctx, cluster)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer admClient.Close()
+
+	details, err := admClient.ListTopics(ctx)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	topics := make([]topicSummary, 0, len(details))
+	for _, td := range details {
+		if td.Err != nil {
+			continue
+		}
+		underReplicated := 0
+		replicationFactor := 0
+		for _, p := range td.Partitions {
+			if p.Err != nil {
+				continue
+			}
+			if replicationFactor == 0 {
+				replicationFactor = len(p.Replicas)
+			}
+			if len(p.ISR) < len(p.Replicas) {
+				underReplicated++
+			}
+		}
+		isrHealth := "healthy"
+		if underReplicated > 0 {
+			isrHealth = "degraded"
+		}
+		topics = append(topics, topicSummary{
+			Name:                      td.Topic,
+			Partitions:                len(td.Partitions),
+			ReplicationFactor:         replicationFactor,
+			Internal:                  td.IsInternal,
+			ISRHealth:                 isrHealth,
+			UnderReplicatedPartitions: underReplicated,
+		})
+	}
+	sort.Slice(topics, func(i, j int) bool { return topics[i].Name < topics[j].Name })
+	writeJSON(w, http.StatusOK, topics)
+}
+
+type partitionDetail struct {
+	Partition      int32   `json:"partition"`
+	Leader         int32   `json:"leader"`
+	Replicas       []int32 `json:"replicas"`
+	ISR            []int32 `json:"isr"`
+	LogStartOffset int64   `json:"log_start_offset"`
+	HighWatermark  int64   `json:"high_watermark"`
+}
+
+type topicDetailResponse struct {
+	Name       string                `json:"name"`
+	Partitions []partitionDetail     `json:"partitions"`
+	Config     map[string]configEntry `json:"config"`
 }
 
 // GetTopic godoc
 // GET /api/connections/:id/topics/:name
 func (h *Handlers) GetTopic(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "not implemented")
+	id := chi.URLParam(r, "id")
+	name := chi.URLParam(r, "name")
+
+	cluster, ok := h.store.Get(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "connection not found")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	admClient, err := kafka.NewClient(ctx, cluster)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer admClient.Close()
+
+	type detailRes struct {
+		details kadm.TopicDetails
+		err     error
+	}
+	type offsetRes struct {
+		offsets kadm.ListedOffsets
+		err     error
+	}
+	type cfgRes struct {
+		configs kadm.ResourceConfigs
+		err     error
+	}
+
+	detailCh := make(chan detailRes, 1)
+	startCh := make(chan offsetRes, 1)
+	endCh := make(chan offsetRes, 1)
+	cfgCh := make(chan cfgRes, 1)
+
+	go func() { d, e := admClient.ListTopics(ctx, name); detailCh <- detailRes{d, e} }()
+	go func() { o, e := admClient.ListStartOffsets(ctx, name); startCh <- offsetRes{o, e} }()
+	go func() { o, e := admClient.ListEndOffsets(ctx, name); endCh <- offsetRes{o, e} }()
+	go func() { c, e := admClient.DescribeTopicConfigs(ctx, name); cfgCh <- cfgRes{c, e} }()
+
+	dRes := <-detailCh
+	sRes := <-startCh
+	eRes := <-endCh
+	cRes := <-cfgCh
+
+	if dRes.err != nil {
+		writeError(w, http.StatusInternalServerError, dRes.err.Error())
+		return
+	}
+	td, exists := dRes.details[name]
+	if !exists || td.Err != nil {
+		writeError(w, http.StatusNotFound, "topic not found")
+		return
+	}
+
+	partitions := make([]partitionDetail, 0, len(td.Partitions))
+	for partID, p := range td.Partitions {
+		if p.Err != nil {
+			continue
+		}
+		logStart := int64(-1)
+		hwm := int64(-1)
+		if sRes.err == nil {
+			if tOffsets, ok := sRes.offsets[name]; ok {
+				if off, ok := tOffsets[partID]; ok && off.Err == nil {
+					logStart = off.Offset
+				}
+			}
+		}
+		if eRes.err == nil {
+			if tOffsets, ok := eRes.offsets[name]; ok {
+				if off, ok := tOffsets[partID]; ok && off.Err == nil {
+					hwm = off.Offset
+				}
+			}
+		}
+		replicas := make([]int32, len(p.Replicas))
+		copy(replicas, p.Replicas)
+		isr := make([]int32, len(p.ISR))
+		copy(isr, p.ISR)
+		partitions = append(partitions, partitionDetail{
+			Partition:      partID,
+			Leader:         p.Leader,
+			Replicas:       replicas,
+			ISR:            isr,
+			LogStartOffset: logStart,
+			HighWatermark:  hwm,
+		})
+	}
+	sort.Slice(partitions, func(i, j int) bool { return partitions[i].Partition < partitions[j].Partition })
+
+	configMap := map[string]configEntry{}
+	if cRes.err == nil {
+		for _, rc := range cRes.configs {
+			for _, cfg := range rc.Configs {
+				if cfg.Value == nil {
+					continue
+				}
+				configMap[cfg.Key] = configEntry{
+					Value:  *cfg.Value,
+					Source: configSourceLabel(cfg.Source),
+				}
+			}
+			break
+		}
+	}
+
+	writeJSON(w, http.StatusOK, topicDetailResponse{
+		Name:       name,
+		Partitions: partitions,
+		Config:     configMap,
+	})
 }
 
 // ListGroups godoc
@@ -292,10 +485,181 @@ func (h *Handlers) GetGroup(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusNotImplemented, "not implemented")
 }
 
+type messageResponse struct {
+	Partition int32             `json:"partition"`
+	Offset    int64             `json:"offset"`
+	Timestamp string            `json:"timestamp"`
+	Key       *string           `json:"key"`
+	Value     string            `json:"value"`
+	Headers   map[string]string `json:"headers"`
+	Size      int               `json:"size"`
+}
+
 // PeekMessages godoc
 // POST /api/connections/:id/topics/:name/peek
 func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, []any{})
+	id := chi.URLParam(r, "id")
+	name := chi.URLParam(r, "name")
+
+	cluster, ok := h.store.Get(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "connection not found")
+		return
+	}
+
+	var req struct {
+		Limit     int    `json:"limit"`
+		Partition *int32 `json:"partition"` // nil = all partitions
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Limit <= 0 || req.Limit > 500 {
+		req.Limit = 20
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	admClient, err := kafka.NewClient(ctx, cluster)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer admClient.Close()
+
+	type offsetRes struct {
+		offsets kadm.ListedOffsets
+		err     error
+	}
+	startCh := make(chan offsetRes, 1)
+	endCh := make(chan offsetRes, 1)
+	go func() { o, e := admClient.ListStartOffsets(ctx, name); startCh <- offsetRes{o, e} }()
+	go func() { o, e := admClient.ListEndOffsets(ctx, name); endCh <- offsetRes{o, e} }()
+	sRes := <-startCh
+	eRes := <-endCh
+
+	if sRes.err != nil {
+		writeError(w, http.StatusInternalServerError, "list start offsets: "+sRes.err.Error())
+		return
+	}
+	if eRes.err != nil {
+		writeError(w, http.StatusInternalServerError, "list end offsets: "+eRes.err.Error())
+		return
+	}
+
+	topicEndOffsets := eRes.offsets[name]
+	if len(topicEndOffsets) == 0 {
+		writeJSON(w, http.StatusOK, []messageResponse{})
+		return
+	}
+	topicStartOffsets := sRes.offsets[name]
+
+	// Per-partition: where to start consuming and how many messages to expect.
+	type consumeRange struct {
+		startAt   int64
+		wantCount int64
+	}
+	consumeRanges := map[int32]consumeRange{}
+	partitionOffsets := map[int32]kgo.Offset{}
+
+	for partID, endOff := range topicEndOffsets {
+		if req.Partition != nil && partID != *req.Partition {
+			continue
+		}
+		if endOff.Err != nil || endOff.Offset <= 0 {
+			continue
+		}
+		logStart := int64(0)
+		if startOff, ok := topicStartOffsets[partID]; ok && startOff.Err == nil {
+			logStart = startOff.Offset
+		}
+		startAt := endOff.Offset - int64(req.Limit)
+		if startAt < logStart {
+			startAt = logStart
+		}
+		wantCount := endOff.Offset - startAt
+		if wantCount <= 0 {
+			continue
+		}
+		consumeRanges[partID] = consumeRange{startAt: startAt, wantCount: wantCount}
+		partitionOffsets[partID] = kgo.NewOffset().At(startAt)
+	}
+
+	if len(consumeRanges) == 0 {
+		writeJSON(w, http.StatusOK, []messageResponse{})
+		return
+	}
+
+	consumeMap := map[string]map[int32]kgo.Offset{name: partitionOffsets}
+	consumerClient, err := kafka.NewRawClient(ctx, cluster, kgo.ConsumePartitions(consumeMap))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer consumerClient.Close()
+
+	var msgs []messageResponse
+	collectedPerPartition := map[int32]int64{}
+	totalWanted := int64(0)
+	for _, cr := range consumeRanges {
+		totalWanted += cr.wantCount
+	}
+	var totalCollected int64
+
+	fetchCtx, fetchCancel := context.WithCancel(ctx)
+	defer fetchCancel()
+
+	for totalCollected < totalWanted {
+		fetches := consumerClient.PollFetches(fetchCtx)
+		if fetchCtx.Err() != nil {
+			break
+		}
+		fetches.EachRecord(func(rec *kgo.Record) {
+			if rec.Topic != name {
+				return
+			}
+			cr, ok := consumeRanges[rec.Partition]
+			if !ok {
+				return
+			}
+			if rec.Offset < cr.startAt || rec.Offset >= cr.startAt+cr.wantCount {
+				return
+			}
+			var key *string
+			if len(rec.Key) > 0 {
+				s := string(rec.Key)
+				key = &s
+			}
+			headers := map[string]string{}
+			for _, h := range rec.Headers {
+				headers[h.Key] = string(h.Value)
+			}
+			msgs = append(msgs, messageResponse{
+				Partition: rec.Partition,
+				Offset:    rec.Offset,
+				Timestamp: rec.Timestamp.UTC().Format(time.RFC3339),
+				Key:       key,
+				Value:     string(rec.Value),
+				Headers:   headers,
+				Size:      len(rec.Key) + len(rec.Value),
+			})
+			collectedPerPartition[rec.Partition]++
+			totalCollected++
+			if totalCollected >= totalWanted {
+				fetchCancel()
+			}
+		})
+	}
+
+	sort.Slice(msgs, func(i, j int) bool {
+		if msgs[i].Partition != msgs[j].Partition {
+			return msgs[i].Partition < msgs[j].Partition
+		}
+		return msgs[i].Offset < msgs[j].Offset
+	})
+	writeJSON(w, http.StatusOK, msgs)
 }
 
 type brokerResponse struct {
@@ -409,7 +773,8 @@ type configEntry struct {
 
 func configSourceLabel(s kmsg.ConfigSource) string {
 	switch s {
-	case kmsg.ConfigSourceDynamicBrokerConfig,
+	case kmsg.ConfigSourceDynamicTopicConfig,
+		kmsg.ConfigSourceDynamicBrokerConfig,
 		kmsg.ConfigSourceDynamicDefaultBrokerConfig:
 		return "dynamic"
 	case kmsg.ConfigSourceStaticBrokerConfig:
@@ -503,10 +868,14 @@ func (h *Handlers) ClusterOverview(w http.ResponseWriter, r *http.Request) {
 
 	// Query the controller broker specifically so we get effective (non-null) config values.
 	// Cluster-default DescribeBrokerConfigs("") returns null for unoverridden keys.
-	go func() {
-		c, e := admClient.DescribeBrokerConfigs(ctx, mRes.meta.Controller)
-		configCh <- configRes{c, e}
-	}()
+	if mRes.meta.Controller >= 0 {
+		go func() {
+			c, e := admClient.DescribeBrokerConfigs(ctx, mRes.meta.Controller)
+			configCh <- configRes{c, e}
+		}()
+	} else {
+		configCh <- configRes{} // no controller elected; skip config fetch
+	}
 
 	tRes := <-topicCh
 	gRes := <-groupCh
@@ -589,6 +958,11 @@ func (h *Handlers) ClusterOverview(w http.ResponseWriter, r *http.Request) {
 		for _, rc := range cRes.configs {
 			for _, cfg := range rc.Configs {
 				if !wantedKeys[cfg.Key] || cfg.Value == nil {
+					continue
+				}
+				// log.retention.ms == -1 means "defer to log.retention.hours"; skip it
+				// since log.retention.hours already conveys the effective retention time.
+				if cfg.Key == "log.retention.ms" && *cfg.Value == "-1" {
 					continue
 				}
 				configs[cfg.Key] = configEntry{
