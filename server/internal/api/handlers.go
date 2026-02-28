@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kmsg"
 	awssession "github.com/kpanel/kpanel/internal/aws"
 	"github.com/kpanel/kpanel/internal/config"
 	"github.com/kpanel/kpanel/internal/credentials"
@@ -401,6 +402,25 @@ func (h *Handlers) ListBrokers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, brokers)
 }
 
+type configEntry struct {
+	Value  string `json:"value"`
+	Source string `json:"source"` // "default" | "dynamic" | "static" | "unknown"
+}
+
+func configSourceLabel(s kmsg.ConfigSource) string {
+	switch s {
+	case kmsg.ConfigSourceDynamicBrokerConfig,
+		kmsg.ConfigSourceDynamicDefaultBrokerConfig:
+		return "dynamic"
+	case kmsg.ConfigSourceStaticBrokerConfig:
+		return "static"
+	case kmsg.ConfigSourceDefaultConfig:
+		return "default"
+	default:
+		return "unknown"
+	}
+}
+
 type overviewBrokerSummary struct {
 	NodeID       int32  `json:"nodeId"`
 	Host         string `json:"host"`
@@ -420,7 +440,7 @@ type clusterOverviewResponse struct {
 	OfflinePartitions  int                     `json:"offlinePartitions"`
 	TopicCount         int                     `json:"topicCount"`
 	ConsumerGroupCount int                     `json:"consumerGroupCount"`
-	Configs            map[string]string       `json:"configs"`
+	Configs            map[string]configEntry  `json:"configs"`
 }
 
 // ClusterOverview godoc
@@ -474,13 +494,20 @@ func (h *Handlers) ClusterOverview(w http.ResponseWriter, r *http.Request) {
 	go func() { d, e := admClient.ListTopics(ctx); topicCh <- topicRes{d, e} }()
 	go func() { g, e := admClient.ListGroups(ctx); groupCh <- groupRes{g, e} }()
 	go func() { v, e := admClient.ApiVersions(ctx); versionCh <- versionRes{v, e} }()
-	go func() { c, e := admClient.DescribeBrokerConfigs(ctx); configCh <- configRes{c, e} }()
 
 	mRes := <-metaCh
 	if mRes.err != nil {
 		writeError(w, http.StatusInternalServerError, mRes.err.Error())
 		return
 	}
+
+	// Query the controller broker specifically so we get effective (non-null) config values.
+	// Cluster-default DescribeBrokerConfigs("") returns null for unoverridden keys.
+	go func() {
+		c, e := admClient.DescribeBrokerConfigs(ctx, mRes.meta.Controller)
+		configCh <- configRes{c, e}
+	}()
+
 	tRes := <-topicCh
 	gRes := <-groupCh
 	vRes := <-versionCh
@@ -538,19 +565,35 @@ func (h *Handlers) ClusterOverview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	wantedKeys := map[string]bool{
-		"log.retention.hours":        true,
-		"log.retention.bytes":        true,
-		"default.replication.factor": true,
-		"min.insync.replicas":        true,
-		"auto.create.topics.enable":  true,
+		// Reliability
+		"default.replication.factor":               true,
+		"min.insync.replicas":                      true,
+		"unclean.leader.election.enable":           true,
+		"offsets.topic.replication.factor":         true,
+		"transaction.state.log.replication.factor": true,
+		"transaction.state.log.min.isr":            true,
+		// Retention
+		"log.retention.hours": true,
+		"log.retention.bytes": true,
+		"log.retention.ms":    true,
+		// Governance
+		"auto.create.topics.enable": true,
+		"delete.topic.enable":       true,
+		// Performance
+		"num.partitions":    true,
+		"message.max.bytes": true,
 	}
-	configs := make(map[string]string)
+	configs := make(map[string]configEntry)
 	if cRes.err == nil {
 		// All brokers share the same cluster-level config; just use the first response
 		for _, rc := range cRes.configs {
 			for _, cfg := range rc.Configs {
-				if wantedKeys[cfg.Key] && cfg.Value != nil {
-					configs[cfg.Key] = *cfg.Value
+				if !wantedKeys[cfg.Key] || cfg.Value == nil {
+					continue
+				}
+				configs[cfg.Key] = configEntry{
+					Value:  *cfg.Value,
+					Source: configSourceLabel(cfg.Source),
 				}
 			}
 			break

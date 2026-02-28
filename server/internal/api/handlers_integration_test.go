@@ -12,19 +12,25 @@ import (
 	kpkafka "github.com/kpanel/kpanel/internal/kafka"
 )
 
+// configEntryResp mirrors configEntry for decoding in integration tests.
+type configEntryResp struct {
+	Value  string `json:"value"`
+	Source string `json:"source"`
+}
+
 // overviewResp mirrors clusterOverviewResponse for decoding in tests.
 type overviewResp struct {
-	ClusterID          string            `json:"clusterId"`
-	KafkaVersion       string            `json:"kafkaVersion"`
-	ControllerID       int32             `json:"controllerId"`
-	BrokerCount        int               `json:"brokerCount"`
-	Brokers            []brokerSummaryResp `json:"brokers"`
-	TotalPartitions    int               `json:"totalPartitions"`
-	UnderReplicated    int               `json:"underReplicated"`
-	OfflinePartitions  int               `json:"offlinePartitions"`
-	TopicCount         int               `json:"topicCount"`
-	ConsumerGroupCount int               `json:"consumerGroupCount"`
-	Configs            map[string]string `json:"configs"`
+	ClusterID          string                     `json:"clusterId"`
+	KafkaVersion       string                     `json:"kafkaVersion"`
+	ControllerID       int32                      `json:"controllerId"`
+	BrokerCount        int                        `json:"brokerCount"`
+	Brokers            []brokerSummaryResp        `json:"brokers"`
+	TotalPartitions    int                        `json:"totalPartitions"`
+	UnderReplicated    int                        `json:"underReplicated"`
+	OfflinePartitions  int                        `json:"offlinePartitions"`
+	TopicCount         int                        `json:"topicCount"`
+	ConsumerGroupCount int                        `json:"consumerGroupCount"`
+	Configs            map[string]configEntryResp `json:"configs"`
 }
 
 type brokerSummaryResp struct {
@@ -192,8 +198,17 @@ func TestClusterOverview_Integration_Configs(t *testing.T) {
 		"min.insync.replicas",
 	}
 	for _, key := range wantKeys {
-		if v, ok := resp.Configs[key]; !ok || v == "" {
-			t.Errorf("configs[%q]: missing or empty (got %q)", key, v)
+		entry, ok := resp.Configs[key]
+		if !ok {
+			t.Errorf("configs[%q]: missing", key)
+			continue
+		}
+		if entry.Value == "" {
+			t.Errorf("configs[%q].value: empty", key)
+		}
+		validSources := map[string]bool{"default": true, "dynamic": true, "static": true, "unknown": true}
+		if !validSources[entry.Source] {
+			t.Errorf("configs[%q].source: invalid value %q", key, entry.Source)
 		}
 	}
 }

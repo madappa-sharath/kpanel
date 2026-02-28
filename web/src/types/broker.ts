@@ -24,6 +24,11 @@ export interface BrokerSummary {
   isController: boolean
 }
 
+export interface ConfigEntry {
+  value: string
+  source: 'default' | 'dynamic' | 'static' | 'unknown'
+}
+
 export interface ClusterOverview {
   clusterId: string
   kafkaVersion: string
@@ -35,5 +40,5 @@ export interface ClusterOverview {
   offlinePartitions: number
   topicCount: number
   consumerGroupCount: number
-  configs: Record<string, string>
+  configs: Record<string, ConfigEntry>
 }
