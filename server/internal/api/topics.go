@@ -374,10 +374,13 @@ func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sort.Slice(msgs, func(i, j int) bool {
+		if msgs[i].Timestamp != msgs[j].Timestamp {
+			return msgs[i].Timestamp > msgs[j].Timestamp // newest first
+		}
 		if msgs[i].Partition != msgs[j].Partition {
 			return msgs[i].Partition < msgs[j].Partition
 		}
-		return msgs[i].Offset < msgs[j].Offset
+		return msgs[i].Offset > msgs[j].Offset
 	})
 	writeJSON(w, http.StatusOK, msgs)
 }
