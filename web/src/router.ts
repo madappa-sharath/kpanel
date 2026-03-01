@@ -128,6 +128,9 @@ const topicMessagesRoute = createRoute({
   getParentRoute: () => topicRoute,
   path: '/messages',
   component: TopicMessagesPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    partition: search.partition != null ? Number(search.partition) : undefined,
+  }),
 })
 
 // ─── Consumer group routes ────────────────────────────────────────────────────

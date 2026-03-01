@@ -1,7 +1,7 @@
 // Screen-4b: Topic Partitions
-// Per-partition table: leader, replicas, ISR, offsets, message count, status
+// Per-partition table: leader, replicas, ISR, offsets, message count, skew, status
 
-import { useParams } from '@tanstack/react-router'
+import { useParams, useNavigate } from '@tanstack/react-router'
 import { useTopic } from '../../../../../hooks/useTopics'
 import { DataTable, type Column } from '../../../../../components/shared/DataTable'
 import type { TopicPartition } from '../../../../../types/topic'
@@ -13,7 +13,18 @@ export function TopicPartitionsPage() {
     clusterId: string
     topicName: string
   }
+  const navigate = useNavigate()
   const { data: topic, isLoading, error } = useTopic(clusterId, topicName)
+
+  if (isLoading) return <div className="k-loading">Loading…</div>
+  if (error) return <div className="k-error">{(error as Error).message}</div>
+  if (!topic) return null
+
+  const totalMessages = topic.partitions.reduce(
+    (sum, p) => sum + Math.max(0, p.high_watermark - p.log_start_offset),
+    0,
+  )
+  const avgMessages = topic.partitions.length > 0 ? totalMessages / topic.partitions.length : 0
 
   const columns: Column<TopicPartition>[] = [
     { key: 'partition', header: 'P#', render: (p) => String(p.partition) },
@@ -59,6 +70,17 @@ export function TopicPartitionsPage() {
       },
     },
     {
+      key: 'skew' as keyof TopicPartition,
+      header: 'Skew',
+      render: (p) => {
+        if (p.log_start_offset < 0 || p.high_watermark < 0 || avgMessages === 0) return '—'
+        const count = p.high_watermark - p.log_start_offset
+        if (count > avgMessages * 2) return <StatusBadge variant="warn" label="Hot" />
+        if (count < avgMessages * 0.5) return <StatusBadge variant="warn" label="Cold" />
+        return '—'
+      },
+    },
+    {
       key: 'status' as keyof TopicPartition,
       header: 'Status',
       render: (p) => {
@@ -69,9 +91,13 @@ export function TopicPartitionsPage() {
     },
   ]
 
-  if (isLoading) return <div className="k-loading">Loading…</div>
-  if (error) return <div className="k-error">{(error as Error).message}</div>
-  if (!topic) return null
+  function handleRowClick(p: TopicPartition) {
+    navigate({
+      to: '/clusters/$clusterId/topics/$topicName/messages',
+      params: { clusterId, topicName },
+      search: { partition: p.partition },
+    })
+  }
 
   return (
     <div className="k-page">
@@ -79,6 +105,7 @@ export function TopicPartitionsPage() {
         columns={columns}
         data={topic.partitions}
         rowKey={(p) => String(p.partition)}
+        onRowClick={handleRowClick}
       />
     </div>
   )

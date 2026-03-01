@@ -239,8 +239,10 @@ func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 
 	var req struct {
-		Limit     int    `json:"limit"`
-		Partition *int32 `json:"partition"` // nil = all partitions
+		Limit          int    `json:"limit"`
+		Partition      *int32 `json:"partition"`       // nil = all partitions
+		StartOffset    *int64 `json:"start_offset"`    // seek to specific offset
+		StartTimestamp string `json:"start_timestamp"` // RFC3339: seek to first offset at/after this time
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -259,6 +261,21 @@ func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer admClient.Close()
+
+	// For timestamp-based seek, resolve start offsets before fetching end offsets.
+	var timestampOffsets kadm.ListedOffsets
+	if req.StartTimestamp != "" {
+		ts, tsErr := time.Parse(time.RFC3339, req.StartTimestamp)
+		if tsErr != nil {
+			writeError(w, http.StatusBadRequest, "invalid start_timestamp: "+tsErr.Error())
+			return
+		}
+		timestampOffsets, err = admClient.ListOffsetsAfterMilli(ctx, ts.UnixMilli(), name)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "list offsets by timestamp: "+err.Error())
+			return
+		}
+	}
 
 	startOffsets, endOffsets, startErr, endErr := fetchOffsets(ctx, admClient, name)
 
@@ -297,13 +314,38 @@ func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
 		if startOff, ok := topicStartOffsets[partID]; ok && startOff.Err == nil {
 			logStart = startOff.Offset
 		}
-		startAt := endOff.Offset - int64(req.Limit)
-		if startAt < logStart {
+
+		var startAt int64
+		switch {
+		case req.StartOffset != nil:
+			// Seek to explicit offset
+			startAt = *req.StartOffset
+			if startAt < logStart {
+				startAt = logStart
+			}
+		case timestampOffsets != nil:
+			// Seek to first offset at/after timestamp
 			startAt = logStart
+			if tOff, ok2 := timestampOffsets[name]; ok2 {
+				if pOff, ok2 := tOff[partID]; ok2 && pOff.Err == nil {
+					startAt = pOff.Offset
+				}
+			}
+		default:
+			// Default: tail — last N messages
+			startAt = endOff.Offset - int64(req.Limit)
+			if startAt < logStart {
+				startAt = logStart
+			}
 		}
+
 		wantCount := endOff.Offset - startAt
 		if wantCount <= 0 {
 			continue
+		}
+		// Cap per-partition want to limit
+		if wantCount > int64(req.Limit) {
+			wantCount = int64(req.Limit)
 		}
 		consumeRanges[partID] = consumeRange{startAt: startAt, wantCount: wantCount}
 		partitionOffsets[partID] = kgo.NewOffset().At(startAt)
@@ -383,4 +425,61 @@ func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
 		return msgs[i].Offset > msgs[j].Offset
 	})
 	writeJSON(w, http.StatusOK, msgs)
+}
+
+// UpdateTopicConfig godoc
+// PUT /api/connections/:id/topics/:name/config
+// Body: {"configs": {"retention.ms": "604800000"}}
+func (h *Handlers) UpdateTopicConfig(w http.ResponseWriter, r *http.Request) {
+	cluster, ok := h.getClusterOrError(w, r)
+	if !ok {
+		return
+	}
+	name := chi.URLParam(r, "name")
+
+	var req struct {
+		Configs map[string]string `json:"configs"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if len(req.Configs) == 0 {
+		writeError(w, http.StatusBadRequest, "no configs provided")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	admClient, err := kafka.NewClient(ctx, cluster)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer admClient.Close()
+
+	configs := make([]kadm.AlterConfig, 0, len(req.Configs))
+	for k, v := range req.Configs {
+		val := v // capture
+		configs = append(configs, kadm.AlterConfig{
+			Op:    kadm.SetConfig,
+			Name:  k,
+			Value: &val,
+		})
+	}
+
+	responses, err := admClient.AlterTopicConfigs(ctx, configs, name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "alter configs: "+err.Error())
+		return
+	}
+	for _, resp := range responses {
+		if resp.Err != nil {
+			writeError(w, http.StatusBadRequest, resp.Err.Error())
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

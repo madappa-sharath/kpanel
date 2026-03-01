@@ -117,6 +117,88 @@ func TestPeekMessages_UnreachableBroker_ReturnsValidJSONError(t *testing.T) {
 	}
 }
 
+// TestPeekMessages_InvalidTimestamp verifies that a malformed start_timestamp
+// value returns 400 before any Kafka I/O takes place. The kafka client creation
+// is lazy so an unreachable broker is fine here.
+func TestPeekMessages_InvalidTimestamp(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{ID: "pm-badts", Platform: "generic", Brokers: []string{"b"}})
+	w := do(t, h, http.MethodPost, "/api/connections/pm-badts/topics/foo/peek",
+		map[string]any{"limit": 10, "start_timestamp": "not-a-valid-timestamp"})
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var resp map[string]string
+	decodeJSON(t, w, &resp)
+	if _, ok := resp["error"]; !ok {
+		t.Error("error responses must have an 'error' field")
+	}
+}
+
+// --- UpdateTopicConfig ---
+
+func TestUpdateTopicConfig_ConnectionNotFound(t *testing.T) {
+	h, _ := testServer(t)
+	w := do(t, h, http.MethodPut, "/api/connections/ghost/topics/my-topic/config",
+		map[string]any{"configs": map[string]string{"retention.ms": "1000"}})
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusNotFound)
+	}
+	var resp map[string]string
+	decodeJSON(t, w, &resp)
+	if _, ok := resp["error"]; !ok {
+		t.Error("error responses must have an 'error' field")
+	}
+}
+
+func TestUpdateTopicConfig_InvalidBody(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{ID: "utc-badbody", Platform: "generic", Brokers: []string{"b"}})
+	req := httptest.NewRequest(http.MethodPut, "/api/connections/utc-badbody/topics/foo/config",
+		strings.NewReader(`{bad json`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var resp map[string]string
+	decodeJSON(t, w, &resp)
+	if _, ok := resp["error"]; !ok {
+		t.Error("error responses must have an 'error' field")
+	}
+}
+
+func TestUpdateTopicConfig_EmptyConfigs(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{ID: "utc-empty", Platform: "generic", Brokers: []string{"b"}})
+	w := do(t, h, http.MethodPut, "/api/connections/utc-empty/topics/foo/config",
+		map[string]any{"configs": map[string]string{}})
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var resp map[string]string
+	decodeJSON(t, w, &resp)
+	if _, ok := resp["error"]; !ok {
+		t.Error("error responses must have an 'error' field")
+	}
+}
+
+func TestUpdateTopicConfig_UnreachableBroker_ReturnsValidJSONError(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{ID: "utc-unreachable", Platform: "generic", Brokers: []string{"b"}})
+	w := do(t, h, http.MethodPut, "/api/connections/utc-unreachable/topics/foo/config",
+		map[string]any{"configs": map[string]string{"retention.ms": "1000"}})
+	if w.Code == http.StatusOK {
+		t.Error("expected non-200 status with unreachable broker")
+		return
+	}
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(w.Body).Decode(&raw); err != nil {
+		t.Fatalf("response must be valid JSON: %v (body: %s)", err, w.Body.String())
+	}
+}
+
 // --- ClusterOverview ---
 
 func TestClusterOverview_NotFound(t *testing.T) {

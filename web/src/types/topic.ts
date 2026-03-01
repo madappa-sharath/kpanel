@@ -39,5 +39,7 @@ export interface Message {
 
 export interface PeekRequest {
   limit: number
-  partition?: number // omit for all partitions
+  partition?: number       // omit for all partitions
+  start_offset?: number    // seek to specific offset
+  start_timestamp?: string // ISO 8601 / RFC3339: seek to first offset at/after this time
 }

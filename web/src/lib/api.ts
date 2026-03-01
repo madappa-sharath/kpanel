@@ -46,6 +46,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(opts),
       }),
+    updateConfig: (clusterId: string, name: string, configs: Record<string, string>) =>
+      request<{ ok: boolean }>(`/connections/${clusterId}/topics/${encodeURIComponent(name)}/config`, {
+        method: 'PUT',
+        body: JSON.stringify({ configs }),
+      }),
   },
 
   groups: {

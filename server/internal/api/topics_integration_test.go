@@ -448,6 +448,70 @@ func TestPeekMessages_Integration_SinglePartitionFilter(t *testing.T) {
 	}
 }
 
+// TestPeekMessages_Integration_SeekByOffset produces 10 messages to a single-
+// partition topic then seeks from offset 5; verifies that exactly 5 messages
+// are returned and none have an offset earlier than the seek point.
+func TestPeekMessages_Integration_SeekByOffset(t *testing.T) {
+	h, store := testServer(t)
+	addCluster(t, store, "pm-offset-seek")
+	const topicName = "test-pm-offset-seek"
+	createTopic(t, topicName, 1)
+
+	batch := make([]struct{ key, value string }, 10)
+	for i := range batch {
+		batch[i] = struct{ key, value string }{fmt.Sprintf("k%d", i), fmt.Sprintf("v%d", i)}
+	}
+	seedMessages(t, topicName, batch)
+
+	const seekOffset = 5
+	w := do(t, h, http.MethodPost,
+		"/api/connections/pm-offset-seek/topics/"+topicName+"/peek",
+		map[string]any{"limit": 10, "start_offset": seekOffset})
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body)
+	}
+	var msgs []messageResp
+	decodeJSON(t, w, &msgs)
+	if len(msgs) != 5 {
+		t.Errorf("expected 5 messages (offsets 5–9), got %d", len(msgs))
+	}
+	for _, m := range msgs {
+		if m.Offset < seekOffset {
+			t.Errorf("seek from offset %d: got message at offset %d (before seek point)", seekOffset, m.Offset)
+		}
+	}
+}
+
+// TestPeekMessages_Integration_SeekByTimestamp seeks from the Unix epoch,
+// which predates any Kafka message, so all produced messages must be returned.
+func TestPeekMessages_Integration_SeekByTimestamp(t *testing.T) {
+	h, store := testServer(t)
+	addCluster(t, store, "pm-ts-seek")
+	const topicName = "test-pm-ts-seek"
+	createTopic(t, topicName, 1)
+
+	seedMessages(t, topicName, []struct{ key, value string }{
+		{"k1", "v1"}, {"k2", "v2"}, {"k3", "v3"},
+	})
+
+	// Epoch timestamp: all messages in any Kafka topic post-date this, so the
+	// broker returns offset 0 as the first offset at/after the timestamp.
+	w := do(t, h, http.MethodPost,
+		"/api/connections/pm-ts-seek/topics/"+topicName+"/peek",
+		map[string]any{"limit": 10, "start_timestamp": "1970-01-01T00:00:00Z"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body)
+	}
+	var msgs []messageResp
+	decodeJSON(t, w, &msgs)
+	if len(msgs) == 0 {
+		t.Error("expected messages when seeking from epoch, got none")
+	}
+	if len(msgs) > 3 {
+		t.Errorf("expected at most 3 messages (only 3 produced), got %d", len(msgs))
+	}
+}
+
 // TestPeekMessages_Integration_DefaultLimitApplied verifies that limit=0 (or
 // omitted) is clamped to 20 by the handler.
 func TestPeekMessages_Integration_DefaultLimitApplied(t *testing.T) {
@@ -472,5 +536,48 @@ func TestPeekMessages_Integration_DefaultLimitApplied(t *testing.T) {
 	decodeJSON(t, w, &msgs)
 	if len(msgs) != 20 {
 		t.Errorf("default-limit: expected 20 messages, got %d", len(msgs))
+	}
+}
+
+// ── UpdateTopicConfig ─────────────────────────────────────────────────────────
+
+// TestUpdateTopicConfig_Integration_SetAndVerify updates retention.ms via the
+// PUT endpoint and confirms the change is reflected in the topic config.
+func TestUpdateTopicConfig_Integration_SetAndVerify(t *testing.T) {
+	h, store := testServer(t)
+	addCluster(t, store, "utc-set")
+	const topicName = "test-utc-set"
+	createTopic(t, topicName, 1)
+
+	const newRetention = "123456789"
+	w := do(t, h, http.MethodPut,
+		"/api/connections/utc-set/topics/"+topicName+"/config",
+		map[string]any{"configs": map[string]string{"retention.ms": newRetention}})
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT config status %d: %s", w.Code, w.Body)
+	}
+	var result map[string]bool
+	decodeJSON(t, w, &result)
+	if !result["ok"] {
+		t.Error(`expected {"ok": true} response`)
+	}
+
+	// Confirm the change persisted by fetching the full topic detail.
+	w2 := do(t, h, http.MethodGet, "/api/connections/utc-set/topics/"+topicName, nil)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("GET topic status %d: %s", w2.Code, w2.Body)
+	}
+	var resp topicDetailResp
+	decodeJSON(t, w2, &resp)
+
+	entry, ok := resp.Config["retention.ms"]
+	if !ok {
+		t.Fatal("config[retention.ms]: missing after update")
+	}
+	if entry.Value != newRetention {
+		t.Errorf("config[retention.ms].value: got %q, want %q", entry.Value, newRetention)
+	}
+	if entry.Source != "dynamic" {
+		t.Errorf("config[retention.ms].source: got %q, want dynamic (user-set configs are dynamic)", entry.Source)
 	}
 }
