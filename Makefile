@@ -1,4 +1,4 @@
-.PHONY: dev dev-server dev-web setup build build-web build-server build-linux build-darwin clean kafka-up kafka-down kafka-logs kafka-seed kafka-produce dev-full test test-integration
+.PHONY: dev dev-server dev-web setup build build-web build-server build-linux build-darwin clean kafka-up kafka-down kafka-logs kafka-seed kafka-seed-reset kafka-produce kafka-consume kafka-consume-all dev-full test test-integration
 
 test:
 	cd server && go test ./...
@@ -14,6 +14,7 @@ test-integration-local:
 
 setup:
 	cd server && go mod tidy
+	cd server/cmd/kafkaseed && go mod tidy
 	cd web && bun install
 
 dev:
@@ -63,30 +64,19 @@ kafka-logs:
 	docker compose logs -f kafka
 
 kafka-seed:
-	docker exec kpanel-kafka /opt/kafka/bin/kafka-topics.sh \
-		--bootstrap-server localhost:9092 \
-		--create --if-not-exists --topic orders --partitions 3 --replication-factor 1
-	docker exec kpanel-kafka /opt/kafka/bin/kafka-topics.sh \
-		--bootstrap-server localhost:9092 \
-		--create --if-not-exists --topic events --partitions 1 --replication-factor 1
-	@echo "Test topics created: orders (3 partitions), events (1 partition)"
+	cd server/cmd/kafkaseed && go run .
+
+kafka-seed-reset:
+	cd server/cmd/kafkaseed && go run . --reset
 
 kafka-produce:
-	@for i in 1 2 3 4 5; do \
-		UUID=$$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen | tr '[:upper:]' '[:lower:]'); \
-		echo "$$UUID:{\"orderId\":$$i,\"item\":\"product-$$i\",\"qty\":$$((RANDOM % 10 + 1)),\"status\":\"pending\"}" | \
-		docker exec -i kpanel-kafka /opt/kafka/bin/kafka-console-producer.sh \
-			--bootstrap-server localhost:9092 --topic orders \
-			--property parse.key=true --property key.separator=:; \
-	done
-	@for i in 1 2 3 4 5; do \
-		UUID=$$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen | tr '[:upper:]' '[:lower:]'); \
-		echo "$$UUID:{\"eventId\":$$i,\"type\":\"click\",\"userId\":\"user-$$((RANDOM % 100))\",\"ts\":$$(date +%s)}" | \
-		docker exec -i kpanel-kafka /opt/kafka/bin/kafka-console-producer.sh \
-			--bootstrap-server localhost:9092 --topic events \
-			--property parse.key=true --property key.separator=:; \
-	done
-	@echo "Produced 5 messages to orders, 5 messages to events"
+	cd server/cmd/kafkaseed && go run . --produce
+
+kafka-consume:
+	cd server/cmd/kafkaseed && go run . --consume
+
+kafka-consume-all:
+	cd server/cmd/kafkaseed && go run . --drain
 
 dev-full: kafka-up
 	$(MAKE) dev

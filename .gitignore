@@ -12,6 +12,7 @@ web/dist/
 
 # Build output
 dist/
+server/kafkaseed
 
 # Config (don't commit local connections)
 .kpanel/
