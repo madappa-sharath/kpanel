@@ -11,15 +11,62 @@ import (
 	"github.com/kpanel/kpanel/internal/kafka"
 )
 
+// consumerGroupSummary is the list-view payload for a consumer group.
 type consumerGroupSummary struct {
-	ID       string   `json:"id"`
-	State    string   `json:"state"`
-	Members  int      `json:"members"`
-	Topics   []string `json:"topics"`
-	TotalLag int64    `json:"total_lag"`
+	ID            string   `json:"id"`
+	State         string   `json:"state"`
+	Members       int      `json:"members"`
+	Topics        []string `json:"topics"`
+	TotalLag      int64    `json:"total_lag"`
+	CoordinatorID int32    `json:"coordinator_id"`
+	ProtocolType  string   `json:"protocol_type"`
 }
 
-// ListGroups godoc
+type groupOffsetRow struct {
+	Topic           string `json:"topic"`
+	Partition       int32  `json:"partition"`
+	CommittedOffset int64  `json:"committed_offset"`
+	LogEndOffset    int64  `json:"log_end_offset"`
+	Lag             int64  `json:"lag"`
+	MemberID        string `json:"member_id,omitempty"`
+}
+
+type partitionAssignment struct {
+	Topic      string  `json:"topic"`
+	Partitions []int32 `json:"partitions"`
+}
+
+type groupMemberResp struct {
+	ID          string                `json:"id"`
+	ClientID    string                `json:"client_id"`
+	Host        string                `json:"host"`
+	Assignments []partitionAssignment `json:"assignments"`
+	MemberLag   int64                 `json:"member_lag"`
+}
+
+type groupDetailResp struct {
+	ID            string            `json:"id"`
+	State         string            `json:"state"`
+	Protocol      string            `json:"protocol"`
+	ProtocolType  string            `json:"protocol_type"`
+	CoordinatorID int32             `json:"coordinator_id"`
+	Members       []groupMemberResp `json:"members"`
+	Offsets       []groupOffsetRow  `json:"offsets"`
+}
+
+// lagFromOff computes lag given a committed offset and a log-end offset.
+// If committed is negative (no offset recorded), the full LEO is the lag.
+func lagFromOff(committed, leo int64) int64 {
+	if committed < 0 {
+		return leo
+	}
+	if lag := leo - committed; lag > 0 {
+		return lag
+	}
+	return 0
+}
+
+// ListGroups returns all consumer groups with state, member count, subscribed topics, and total lag.
 // GET /api/connections/:id/groups
 func (h *Handlers) ListGroups(w http.ResponseWriter, r *http.Request) {
 	cluster, ok := h.getClusterOrError(w, r)
@@ -50,7 +97,7 @@ func (h *Handlers) ListGroups(w http.ResponseWriter, r *http.Request) {
 
 	fetchedOffsets := admClient.FetchManyOffsets(ctx, groups.Names()...)
 
-	// Collect unique topics across all groups
+	// Collect unique topics across all groups.
 	topicSet := map[string]struct{}{}
 	for _, groupResp := range fetchedOffsets {
 		for topic := range groupResp.Fetched {
@@ -95,33 +142,27 @@ func (h *Handlers) ListGroups(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 				}
-				var lag int64
-				if off.At < 0 {
-					lag = endOff // no committed offset → full lag
-				} else {
-					lag = endOff - off.At
-					if lag < 0 {
-						lag = 0
-					}
-				}
-				totalLag += lag
+				totalLag += lagFromOff(off.At, endOff)
 			}
 		}
 
 		sort.Strings(topics)
 		result = append(result, consumerGroupSummary{
-			ID:       g.Group,
-			State:    g.State,
-			Members:  len(g.Members),
-			Topics:   topics,
-			TotalLag: totalLag,
+			ID:            g.Group,
+			State:         g.State,
+			Members:       len(g.Members),
+			Topics:        topics,
+			TotalLag:      totalLag,
+			CoordinatorID: g.Coordinator.NodeID,
+			ProtocolType:  g.ProtocolType,
 		})
 	}
 
 	writeJSON(w, http.StatusOK, result)
 }
 
-// GetGroup godoc
+// GetGroup returns full detail for a single consumer group: members with per-member lag,
+// per-partition offsets with assigned member info, coordinator, and protocol.
 // GET /api/connections/:id/groups/:name
 func (h *Handlers) GetGroup(w http.ResponseWriter, r *http.Request) {
 	cluster, ok := h.getClusterOrError(w, r)
@@ -181,50 +222,25 @@ func (h *Handlers) GetGroup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	type partitionAssignment struct {
-		Topic      string  `json:"topic"`
-		Partitions []int32 `json:"partitions"`
+	// Build partition → memberID lookup from member assignments.
+	type partKey struct {
+		topic     string
+		partition int32
 	}
-	type groupMemberResp struct {
-		ID          string                `json:"id"`
-		ClientID    string                `json:"client_id"`
-		Host        string                `json:"host"`
-		Assignments []partitionAssignment `json:"assignments"`
-	}
-	type groupOffsetRow struct {
-		Topic           string `json:"topic"`
-		Partition       int32  `json:"partition"`
-		CommittedOffset int64  `json:"committed_offset"`
-		LogEndOffset    int64  `json:"log_end_offset"`
-		Lag             int64  `json:"lag"`
-	}
-	type groupDetailResp struct {
-		ID      string            `json:"id"`
-		State   string            `json:"state"`
-		Members []groupMemberResp `json:"members"`
-		Offsets []groupOffsetRow  `json:"offsets"`
-	}
-
-	members := make([]groupMemberResp, 0, len(g.Members))
+	partToMember := map[partKey]string{}
 	for _, m := range g.Members {
-		assignments := []partitionAssignment{}
 		if asgn, ok2 := m.Assigned.AsConsumer(); ok2 {
 			for _, t := range asgn.Topics {
-				assignments = append(assignments, partitionAssignment{
-					Topic:      t.Topic,
-					Partitions: t.Partitions,
-				})
+				for _, p := range t.Partitions {
+					partToMember[partKey{t.Topic, p}] = m.MemberID
+				}
 			}
 		}
-		members = append(members, groupMemberResp{
-			ID:          m.MemberID,
-			ClientID:    m.ClientID,
-			Host:        m.ClientHost,
-			Assignments: assignments,
-		})
 	}
 
-	offsets := []groupOffsetRow{}
+	// Build offset rows and accumulate per-member lag.
+	memberLagByID := map[string]int64{}
+	offsets := make([]groupOffsetRow, 0)
 	for topic, partitions := range groupResp.Fetched {
 		for partID, off := range partitions {
 			if off.Err != nil {
@@ -240,14 +256,11 @@ func (h *Handlers) GetGroup(w http.ResponseWriter, r *http.Request) {
 			}
 			lag := int64(0)
 			if endOff >= 0 {
-				if off.At < 0 {
-					lag = endOff
-				} else {
-					lag = endOff - off.At
-					if lag < 0 {
-						lag = 0
-					}
-				}
+				lag = lagFromOff(off.At, endOff)
+			}
+			memberID := partToMember[partKey{topic, partID}]
+			if memberID != "" {
+				memberLagByID[memberID] += lag
 			}
 			offsets = append(offsets, groupOffsetRow{
 				Topic:           topic,
@@ -255,6 +268,7 @@ func (h *Handlers) GetGroup(w http.ResponseWriter, r *http.Request) {
 				CommittedOffset: off.At,
 				LogEndOffset:    endOff,
 				Lag:             lag,
+				MemberID:        memberID,
 			})
 		}
 	}
@@ -265,10 +279,41 @@ func (h *Handlers) GetGroup(w http.ResponseWriter, r *http.Request) {
 		return offsets[i].Partition < offsets[j].Partition
 	})
 
+	// Build member list with per-member lag.
+	members := make([]groupMemberResp, 0, len(g.Members))
+	for _, m := range g.Members {
+		assignments := []partitionAssignment{}
+		if asgn, ok2 := m.Assigned.AsConsumer(); ok2 {
+			for _, t := range asgn.Topics {
+				sorted := make([]int32, len(t.Partitions))
+				copy(sorted, t.Partitions)
+				sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+				assignments = append(assignments, partitionAssignment{
+					Topic:      t.Topic,
+					Partitions: sorted,
+				})
+			}
+			sort.Slice(assignments, func(i, j int) bool {
+				return assignments[i].Topic < assignments[j].Topic
+			})
+		}
+		members = append(members, groupMemberResp{
+			ID:          m.MemberID,
+			ClientID:    m.ClientID,
+			Host:        m.ClientHost,
+			Assignments: assignments,
+			MemberLag:   memberLagByID[m.MemberID],
+		})
+	}
+	sort.Slice(members, func(i, j int) bool { return members[i].ClientID < members[j].ClientID })
+
 	writeJSON(w, http.StatusOK, groupDetailResp{
-		ID:      g.Group,
-		State:   g.State,
-		Members: members,
-		Offsets: offsets,
+		ID:            g.Group,
+		State:         g.State,
+		Protocol:      g.Protocol,
+		ProtocolType:  g.ProtocolType,
+		CoordinatorID: g.Coordinator.NodeID,
+		Members:       members,
+		Offsets:       offsets,
 	})
 }

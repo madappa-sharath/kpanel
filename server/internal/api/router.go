@@ -29,6 +29,8 @@ func Mount(r chi.Router, store *config.Store) {
 		r.Put("/{id}/topics/{name}/config", h.UpdateTopicConfig)
 		r.Get("/{id}/groups", h.ListGroups)
 		r.Get("/{id}/groups/{name}", h.GetGroup)
+		r.Get("/{id}/groups/{name}/lag-history", h.GetLagHistory)
+		r.Post("/{id}/groups/{name}/reset-offsets", h.ResetOffsets)
 		r.Get("/{id}/overview", h.ClusterOverview)
 		r.Get("/{id}/brokers", h.ListBrokers)
 		r.Get("/{id}/metrics", h.GetMetrics)

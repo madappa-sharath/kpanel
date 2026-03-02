@@ -4,6 +4,9 @@ import { Link, Outlet, useParams } from '@tanstack/react-router'
 import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { ResetOffsetsModal } from '../../../../../components/consumer-groups/ResetOffsetsModal'
+import { useConsumerGroup } from '../../../../../hooks/useConsumerGroups'
+import { StatusBadge, groupStateVariant } from '../../../../../components/shared/StatusBadge'
+import { formatNumber } from '../../../../../lib/utils'
 
 const TABS = [
   { label: 'Members', to: '/clusters/$clusterId/consumer-groups/$groupId/members' as const },
@@ -17,12 +20,15 @@ export function GroupLayout() {
     groupId: string
   }
   const [showReset, setShowReset] = useState(false)
+  const { data: group } = useConsumerGroup(clusterId, groupId)
+
+  const totalLag = group?.offsets.reduce((sum, o) => sum + o.lag, 0) ?? 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Breadcrumb + actions */}
       <div style={{ padding: '20px 24px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--k-muted)' }}>
             <Link
               to="/clusters/$clusterId/consumer-groups"
@@ -42,6 +48,32 @@ export function GroupLayout() {
             Reset offsets ▾
           </button>
         </div>
+
+        {/* Stats row */}
+        {group && (
+          <div style={{ display: 'flex', gap: 24, marginBottom: 14, fontSize: 13 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <StatusBadge variant={groupStateVariant(group.state)} label={group.state} />
+            </div>
+            <span style={{ color: 'var(--k-muted)' }}>
+              Lag:{' '}
+              <span style={{ color: totalLag > 10_000 ? 'var(--k-red)' : totalLag > 1_000 ? 'var(--k-amber)' : 'var(--k-text)', fontWeight: 600 }}>
+                {formatNumber(totalLag)}
+              </span>
+            </span>
+            <span style={{ color: 'var(--k-muted)' }}>
+              Members: <span style={{ color: 'var(--k-text)' }}>{group.members.length}</span>
+            </span>
+            <span style={{ color: 'var(--k-muted)' }}>
+              Coordinator: <span style={{ color: 'var(--k-text)' }}>broker-{group.coordinator_id}</span>
+            </span>
+            {group.protocol && (
+              <span style={{ color: 'var(--k-muted)' }}>
+                Protocol: <span style={{ color: 'var(--k-text)' }}>{group.protocol}</span>
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Tab bar */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--k-border)' }}>
