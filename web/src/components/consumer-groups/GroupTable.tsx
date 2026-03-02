@@ -19,7 +19,13 @@ const columns: Column<ConsumerGroup>[] = [
     render: (g) => <StatusBadge variant={groupStateVariant(g.state)} label={g.state} />,
   },
   { key: 'members', header: 'Members', render: (g) => String(g.members) },
-  { key: 'topics', header: 'Topics', render: (g) => String(g.topics.length) },
+  {
+    key: 'topics',
+    header: 'Topics',
+    render: (g) => (
+      <span title={g.topics.join(', ')}>{g.topics.length}</span>
+    ),
+  },
   {
     key: 'total_lag',
     header: 'Total Lag',
@@ -28,6 +34,11 @@ const columns: Column<ConsumerGroup>[] = [
         {formatNumber(g.total_lag)}
       </span>
     ),
+  },
+  {
+    key: 'coordinator_id',
+    header: 'Coordinator',
+    render: (g) => <span style={{ color: 'var(--k-muted)' }}>broker-{g.coordinator_id}</span>,
   },
 ]
 

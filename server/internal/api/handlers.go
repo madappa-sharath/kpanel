@@ -30,12 +30,13 @@ func slugify(s string) string {
 
 // Handlers holds shared dependencies for HTTP handlers.
 type Handlers struct {
-	store *config.Store
+	store    *config.Store
+	lagStore *LagStore
 }
 
 // NewHandlers creates a Handlers instance.
 func NewHandlers(store *config.Store) *Handlers {
-	return &Handlers{store: store}
+	return &Handlers{store: store, lagStore: NewLagStore()}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

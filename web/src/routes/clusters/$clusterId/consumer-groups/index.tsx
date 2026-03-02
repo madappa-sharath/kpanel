@@ -8,18 +8,34 @@ import { useConsumerGroups } from '../../../../hooks/useConsumerGroups'
 import { EmptyState } from '../../../../components/shared/EmptyState'
 import { Users } from 'lucide-react'
 
+const ALL_STATES = ['Stable', 'Empty', 'PreparingRebalance', 'CompletingRebalance', 'Dead']
+
 export function GroupsPage() {
   const { clusterId } = useParams({ strict: false }) as { clusterId: string }
   const { data: groups, isLoading, error } = useConsumerGroups(clusterId)
   const [search, setSearch] = useState('')
+  const [stateFilter, setStateFilter] = useState('')
 
-  const filtered = (groups ?? []).filter((g) =>
-    g.id.toLowerCase().includes(search.toLowerCase()),
-  )
+  const filtered = (groups ?? []).filter((g) => {
+    const matchSearch = g.id.toLowerCase().includes(search.toLowerCase())
+    const matchState = !stateFilter || g.state === stateFilter
+    return matchSearch && matchState
+  })
 
   return (
     <div className="k-page">
       <PageHeader title="Consumer Groups" description={`${groups?.length ?? '…'} groups`}>
+        <select
+          value={stateFilter}
+          onChange={(e) => setStateFilter(e.target.value)}
+          className="k-input"
+          style={{ width: 160 }}
+        >
+          <option value="">All states</option>
+          {ALL_STATES.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
         <input
           type="search"
           placeholder="Search groups…"
@@ -36,7 +52,7 @@ export function GroupsPage() {
         <EmptyState
           icon={<Users size={32} />}
           title="No consumer groups found"
-          description={search ? 'Try a different search term' : 'No consumer groups in this cluster'}
+          description={search || stateFilter ? 'Try a different filter' : 'No consumer groups in this cluster'}
         />
       )}
       {!isLoading && filtered.length > 0 && (
