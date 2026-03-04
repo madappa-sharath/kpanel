@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,6 +26,7 @@ var (
 	step    = flag.Int64("step", 5, "messages to advance per partition (consume mode)")
 	drain   = flag.Bool("drain", false, "advance all groups to end offset, zeroing lag; implies --consume")
 	produce = flag.Bool("produce", false, "produce more messages to existing topics without re-seeding")
+	members = flag.Bool("members", false, "start real consumers for each group (shows members in UI); runs until Ctrl+C")
 )
 
 type topicDef struct {
@@ -40,20 +44,32 @@ var topics = []topicDef{
 }
 
 type groupDef struct {
-	name   string
-	topics []string
-	lag    int64
+	name    string
+	topics  []string
+	lag     int64
+	members int
 }
 
 var groups = []groupDef{
-	{name: "orders-processor", topics: []string{"orders"}, lag: 1},
-	{name: "analytics-pipeline", topics: []string{"orders", "events", "inventory"}, lag: 15},
-	{name: "notification-service", topics: []string{"notifications", "orders"}, lag: 3},
-	{name: "reporting-etl", topics: []string{"orders", "events", "inventory", "notifications", "dead-letter"}, lag: 30},
+	{name: "orders-processor", topics: []string{"orders"}, lag: 1, members: 2},
+	{name: "analytics-pipeline", topics: []string{"orders", "events", "inventory"}, lag: 15, members: 3},
+	{name: "notification-service", topics: []string{"notifications", "orders"}, lag: 3, members: 1},
+	{name: "reporting-etl", topics: []string{"orders", "events", "inventory", "notifications", "dead-letter"}, lag: 30, members: 2},
 }
 
 func main() {
 	flag.Parse()
+
+	if *members {
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
+		cleanup, wg := startGroupMembers(ctx)
+		defer cleanup()
+		<-ctx.Done()
+		log.Println("shutting down...")
+		wg.Wait()
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -91,6 +107,58 @@ func main() {
 	commitGroupOffsets(ctx, adm)
 
 	log.Println("done")
+}
+
+func startGroupMembers(ctx context.Context) (func(), *sync.WaitGroup) {
+	var clients []*kgo.Client
+	var wg sync.WaitGroup
+
+	for _, g := range groups {
+		n := g.members
+		if n == 0 {
+			n = 1
+		}
+		for i := 0; i < n; i++ {
+			clientID := fmt.Sprintf("%s-worker-%d", g.name, i)
+			cl, err := kgo.NewClient(
+				kgo.SeedBrokers(*broker),
+				kgo.ClientID(clientID),
+				kgo.ConsumerGroup(g.name),
+				kgo.ConsumeTopics(g.topics...),
+			)
+			if err != nil {
+				log.Printf("failed to create consumer %s: %v", clientID, err)
+				continue
+			}
+			clients = append(clients, cl)
+			wg.Add(1)
+			go func(cl *kgo.Client, id string) {
+				defer wg.Done()
+				for {
+					fetches := cl.PollRecords(ctx, 1)
+					if fetches.IsClientClosed() || ctx.Err() != nil {
+						return
+					}
+					fetches.EachError(func(t string, p int32, err error) {
+						log.Printf("fetch error [%s] topic=%s partition=%d: %v", id, t, p, err)
+					})
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(15 * time.Second):
+					}
+				}
+			}(cl, clientID)
+		}
+		log.Printf("started %d consumers for group %s", n, g.name)
+	}
+
+	cleanup := func() {
+		for _, cl := range clients {
+			cl.Close()
+		}
+	}
+	return cleanup, &wg
 }
 
 func deleteTopics(ctx context.Context, adm *kadm.Client) {

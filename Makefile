@@ -1,4 +1,4 @@
-.PHONY: dev dev-server dev-web setup build build-web build-server build-linux build-darwin clean kafka-up kafka-down kafka-logs kafka-seed kafka-seed-reset kafka-produce kafka-consume kafka-consume-all dev-full test test-integration
+.PHONY: dev dev-server dev-web setup build build-web build-server build-linux build-darwin clean kafka-up kafka-down kafka-logs kafka-seed kafka-seed-reset kafka-produce kafka-consume kafka-consume-all kafka-members dev-full test test-integration
 
 test:
 	cd server && go test ./...
@@ -77,6 +77,9 @@ kafka-consume:
 
 kafka-consume-all:
 	cd server/cmd/kafkaseed && go run . --drain
+
+kafka-members:
+	cd server/cmd/kafkaseed && go run . --members
 
 dev-full: kafka-up
 	$(MAKE) dev
