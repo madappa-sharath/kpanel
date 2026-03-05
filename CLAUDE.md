@@ -242,15 +242,63 @@ Namespace: `AWS/Kafka`
 | Consumer lag | `EstimatedMaxTimeLag`, `SumOffsetLag` |
 | Broker resources | `CpuUser`, `KafkaDataLogsDiskUsed`, `MemoryUsed` |
 
-## shadcn/ui Components Plan
+## UI System
 
-- **DataTable** — topics, consumer groups, partitions
-- **Card** — metric summaries
-- **Tabs** — Topics / Groups / Brokers / Metrics (Metrics only for MSK connections)
-- **Command (⌘K)** — quick topic/group search
-- **Sheet** — slide-out for topic detail, message peek
-- **Badge** — ISR status, lag severity, "MSK" badge on discovered connections
-- **Charts (recharts)** — CloudWatch time series
+The frontend uses **stock shadcn/ui** with the zinc color palette and full light/dark theme support. There is no custom CSS design system — no `--k-*` variables, no hand-rolled utility classes.
+
+### Theme
+- Light/dark toggle persisted in zustand (`appStore.theme: 'light' | 'dark' | 'system'`)
+- `main.tsx` applies/removes `.dark` on `<html>` and listens to `prefers-color-scheme` for system mode
+- Tailwind v4 dark mode: `@custom-variant dark (&:is(.dark *))` in `index.css`
+
+### Color conventions
+```tsx
+// Layout / surfaces
+className="bg-background text-foreground"   // page
+className="bg-card"                         // panels, cards
+className="border-border"                   // all borders
+
+// Typography
+className="text-foreground"                 // primary text
+className="text-muted-foreground"           // secondary / labels
+className="font-mono text-xs"              // code, IDs, keys only
+
+// Semantic colors (used directly, not via StatusBadge for one-off cases)
+className="text-destructive"               // errors
+className="text-amber-600 dark:text-amber-400"   // warnings
+className="text-green-600 dark:text-green-400"   // ok / connected
+```
+
+### Installed shadcn/ui components (`web/src/components/ui/`)
+`button` `badge` `table` `tabs` `card` `input` `separator` `skeleton` `alert` `dialog` `dropdown-menu` `select`
+
+Add new ones with: `bunx shadcn@latest add <component>`
+
+### Shared components (`web/src/components/shared/`)
+| Component | Purpose |
+|---|---|
+| `DataTable` | Generic table wrapper using shadcn Table primitives |
+| `StatusBadge` | `ok` / `warn` / `error` / `neutral` / `msk` variants using Badge |
+| `PageHeader` | Page title + description |
+| `EmptyState` | Icon + title + description placeholder |
+| `ConfirmModal` | Destructive action confirmation using shadcn Dialog |
+| `ErrorBoundary` | React class error boundary with Tailwind fallback UI |
+
+### Tab navigation pattern
+Layout routes use shadcn `Tabs` + `TabsTrigger asChild` + TanStack Router `Link`. Active tab is derived from `useRouterState({ select: s => s.location.pathname })` — **not** `useRouter()` (which is not reactive to navigation).
+
+```tsx
+const pathname = useRouterState({ select: (s) => s.location.pathname })
+const activeTab = pathname.endsWith('/partitions') ? 'partitions' : 'overview'
+
+<Tabs value={activeTab}>
+  <TabsList>
+    <TabsTrigger value="overview" asChild>
+      <Link to="..." params={...}>Overview</Link>
+    </TabsTrigger>
+  </TabsList>
+</Tabs>
+```
 
 ## Commands
 
