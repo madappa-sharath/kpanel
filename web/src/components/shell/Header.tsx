@@ -1,57 +1,61 @@
 import { useParams, Link } from '@tanstack/react-router'
+import { Moon, Sun, Monitor } from 'lucide-react'
 import { useClusters, useConnectionStatus } from '../../hooks/useCluster'
 import { useAppStore } from '../../stores/appStore'
 import { ClusterSwitcher } from './ClusterSwitcher'
+import { Button } from '../ui/button'
+import { Badge } from '../ui/badge'
+import { cn } from '../../lib/utils'
+
+type Theme = 'light' | 'dark' | 'system'
+
+const THEME_CYCLE: Theme[] = ['light', 'dark', 'system']
+
+function ThemeIcon({ theme }: { theme: Theme }) {
+  if (theme === 'dark') return <Moon size={14} />
+  if (theme === 'light') return <Sun size={14} />
+  return <Monitor size={14} />
+}
 
 export function Header() {
   const params          = useParams({ strict: false }) as { clusterId?: string; topicName?: string; groupId?: string }
   const activeClusterId = useAppStore((s) => s.activeClusterId)
+  const theme           = useAppStore((s) => s.theme)
+  const setTheme        = useAppStore((s) => s.setTheme)
   const clusterId       = params.clusterId ?? activeClusterId
   const { data: clusters } = useClusters()
   const { data: status, isLoading } = useConnectionStatus(clusterId ?? '')
 
   const cluster = clusters?.find((c) => c.id === clusterId)
 
+  function cycleTheme() {
+    const idx = THEME_CYCLE.indexOf(theme)
+    setTheme(THEME_CYCLE[(idx + 1) % THEME_CYCLE.length])
+  }
+
   return (
     <header
-      style={{
-        height:      'var(--header-h)',
-        display:     'flex',
-        alignItems:  'center',
-        padding:     '0 16px',
-        borderBottom: '1px solid var(--k-border)',
-        background:  'var(--k-surface)',
-        gap:         16,
-        flexShrink:  0,
-      }}
+      className="bg-card border-b border-border flex items-center px-4 gap-4 flex-shrink-0"
+      style={{ height: 'var(--header-h)' }}
     >
       {/* Cluster switcher */}
       <ClusterSwitcher />
 
-      {/* Breadcrumb path */}
+      {/* Breadcrumb */}
       {cluster && (
-        <div
-          style={{
-            display:    'flex',
-            alignItems: 'center',
-            gap:        6,
-            color:      'var(--k-muted)',
-            fontSize:   11,
-            fontFamily: 'var(--k-font)',
-          }}
-        >
-          <span style={{ color: 'var(--k-border-3)' }}>/</span>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+          <span className="text-border">/</span>
           {params.topicName && (
             <>
               <Link
                 to="/clusters/$clusterId/topics"
                 params={{ clusterId: clusterId! }}
-                style={{ color: 'var(--k-muted)', textDecoration: 'none' }}
+                className="text-muted-foreground no-underline hover:text-foreground transition-colors"
               >
                 topics
               </Link>
-              <span style={{ color: 'var(--k-border-3)' }}>/</span>
-              <span style={{ color: 'var(--k-text)' }}>{params.topicName}</span>
+              <span className="text-border">/</span>
+              <span className="text-foreground">{params.topicName}</span>
             </>
           )}
           {params.groupId && (
@@ -59,65 +63,61 @@ export function Header() {
               <Link
                 to="/clusters/$clusterId/consumer-groups"
                 params={{ clusterId: clusterId! }}
-                style={{ color: 'var(--k-muted)', textDecoration: 'none' }}
+                className="text-muted-foreground no-underline hover:text-foreground transition-colors"
               >
                 groups
               </Link>
-              <span style={{ color: 'var(--k-border-3)' }}>/</span>
-              <span style={{ color: 'var(--k-text)' }}>{params.groupId}</span>
+              <span className="text-border">/</span>
+              <span className="text-foreground">{params.groupId}</span>
             </>
           )}
         </div>
       )}
 
       {/* Spacer */}
-      <div style={{ flex: 1 }} />
+      <div className="flex-1" />
 
       {/* Connection status */}
       {clusterId && (
-        <div
-          style={{
-            display:     'flex',
-            alignItems:  'center',
-            gap:         7,
-            padding:     '4px 12px',
-            borderRadius: 20,
-            border:      '1px solid',
-            fontSize:    12,
-            fontFamily:  'var(--k-font)',
-            borderColor: (isLoading || status === undefined)
-              ? 'var(--k-amber-border)'
+        <Badge
+          variant="outline"
+          className={cn(
+            'gap-1.5 text-xs',
+            (isLoading || status === undefined)
+              ? 'text-amber-600 border-amber-600/30 bg-amber-50 dark:bg-amber-950 dark:text-amber-400'
               : status.connected
-              ? 'rgba(61,184,122,0.25)'
-              : 'rgba(217,82,82,0.25)',
-            background: (isLoading || status === undefined)
-              ? 'var(--k-amber-dim)'
-              : status.connected
-              ? 'var(--k-green-dim)'
-              : 'var(--k-red-dim)',
-            color: (isLoading || status === undefined)
-              ? 'var(--k-amber)'
-              : status.connected
-              ? 'var(--k-green)'
-              : 'var(--k-red)',
-          }}
+              ? 'text-green-600 border-green-600/30 bg-green-50 dark:bg-green-950 dark:text-green-400'
+              : 'text-destructive border-destructive/30 bg-destructive/10',
+          )}
         >
           <span
-            className={`k-dot ${
+            className={cn(
+              'size-1.5 rounded-full',
               (isLoading || status === undefined)
-                ? 'k-dot-amber k-dot-pulse'
+                ? 'bg-amber-500 animate-pulse'
                 : status.connected
-                ? 'k-dot-green k-dot-pulse'
-                : 'k-dot-red'
-            }`}
+                ? 'bg-green-500 animate-pulse'
+                : 'bg-destructive',
+            )}
           />
           {(isLoading || status === undefined)
             ? 'checking'
             : status.connected
             ? 'connected'
             : 'disconnected'}
-        </div>
+        </Badge>
       )}
+
+      {/* Theme toggle */}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={cycleTheme}
+        title={`Theme: ${theme}`}
+        className="h-7 w-7"
+      >
+        <ThemeIcon theme={theme} />
+      </Button>
     </header>
   )
 }

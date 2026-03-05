@@ -11,13 +11,13 @@ export function BrokerDetailPage() {
   }
 
   return (
-    <div className="k-page">
+    <div className="p-6">
       <PageHeader
         title={`Broker ${brokerId}`}
         description="Per-broker partitions, ISR, and resource metrics"
       />
-      <div style={{ border: '1px dashed var(--k-border-2)', borderRadius: 6, padding: '48px 24px', textAlign: 'center' }}>
-        <p style={{ color: 'var(--k-muted)', fontSize: 15 }}>Broker detail — coming soon</p>
+      <div className="rounded-md border border-dashed p-12 text-center">
+        <p className="text-sm text-muted-foreground">Broker detail — coming soon</p>
       </div>
     </div>
   )

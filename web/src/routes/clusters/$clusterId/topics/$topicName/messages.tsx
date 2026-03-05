@@ -1,5 +1,4 @@
 // Screen-5: Message Browser
-// Fetch messages from a topic with partition selector, seek by offset/timestamp, live tail
 
 import { useState } from 'react'
 import { useParams, useSearch } from '@tanstack/react-router'
@@ -13,7 +12,6 @@ export function TopicMessagesPage() {
     clusterId: string
     topicName: string
   }
-  // partition may be pre-selected from partitions tab click
   const { partition: initialPartition } = useSearch({ strict: false }) as { partition?: number }
 
   const { data: topic } = useTopic(clusterId, topicName)
@@ -37,9 +35,9 @@ export function TopicMessagesPage() {
   }
 
   return (
-    <div className="k-page">
+    <div className="p-6">
       {fetchError && (
-        <p style={{ color: 'var(--k-red)', fontSize: 13, marginBottom: 12 }}>{fetchError}</p>
+        <p className="text-destructive text-sm mb-3">{fetchError}</p>
       )}
       <MessageBrowser
         messages={messages}

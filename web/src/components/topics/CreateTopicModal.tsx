@@ -1,6 +1,9 @@
 // TODO: Screen-3b — implement as part of Topic List screen.
 // Modal for creating a new topic.
 
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+
 interface CreateTopicModalProps {
   clusterId: string
   open: boolean
@@ -8,17 +11,17 @@ interface CreateTopicModalProps {
 }
 
 export function CreateTopicModal({ open, onClose }: CreateTopicModalProps) {
-  if (!open) return null
-
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }}>
-      <div style={{ width: '100%', maxWidth: 440, borderRadius: 8, border: '1px solid var(--k-border)', background: 'var(--k-surface)', padding: 24 }}>
-        <h2 style={{ margin: '0 0 8px', fontSize: 14, color: 'var(--k-text)' }}>Create Topic</h2>
-        <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--k-muted)' }}>TODO: implement create topic form</p>
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button onClick={onClose} className="k-btn">Close</button>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create Topic</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">TODO: implement create topic form</p>
+        <div className="flex justify-end">
+          <Button variant="outline" onClick={onClose}>Close</Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

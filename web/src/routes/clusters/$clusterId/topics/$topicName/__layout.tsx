@@ -1,13 +1,14 @@
 // Topic layout — tab bar shared by Overview, Partitions, Configuration, Messages
 
-import { Link, Outlet, useParams } from '@tanstack/react-router'
+import { Link, Outlet, useParams, useRouterState } from '@tanstack/react-router'
 import { ChevronRight } from 'lucide-react'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 const TABS = [
-  { label: 'Overview', to: '/clusters/$clusterId/topics/$topicName' as const, exact: true },
-  { label: 'Partitions', to: '/clusters/$clusterId/topics/$topicName/partitions' as const, exact: false },
-  { label: 'Configuration', to: '/clusters/$clusterId/topics/$topicName/config' as const, exact: false },
-  { label: 'Messages', to: '/clusters/$clusterId/topics/$topicName/messages' as const, exact: false },
+  { label: 'Overview',      value: 'overview',      to: '/clusters/$clusterId/topics/$topicName' as const,               exact: true  },
+  { label: 'Partitions',    value: 'partitions',    to: '/clusters/$clusterId/topics/$topicName/partitions' as const,    exact: false },
+  { label: 'Configuration', value: 'config',        to: '/clusters/$clusterId/topics/$topicName/config' as const,        exact: false },
+  { label: 'Messages',      value: 'messages',      to: '/clusters/$clusterId/topics/$topicName/messages' as const,      exact: false },
 ]
 
 export function TopicLayout() {
@@ -15,41 +16,51 @@ export function TopicLayout() {
     clusterId: string
     topicName: string
   }
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+
+  const activeTab = pathname.endsWith('/partitions')
+    ? 'partitions'
+    : pathname.endsWith('/config')
+    ? 'config'
+    : pathname.endsWith('/messages')
+    ? 'messages'
+    : 'overview'
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Breadcrumb */}
-      <div style={{ padding: '20px 24px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--k-muted)', marginBottom: 16 }}>
+    <div className="flex flex-col h-full">
+      <div className="px-6 pt-5">
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-4">
           <Link
             to="/clusters/$clusterId/topics"
             params={{ clusterId }}
-            style={{ color: 'var(--k-muted)', textDecoration: 'none' }}
+            className="text-muted-foreground no-underline hover:text-foreground transition-colors"
           >
             Topics
           </Link>
           <ChevronRight size={13} />
-          <span style={{ color: 'var(--k-text)', fontFamily: 'var(--k-font)' }}>{topicName}</span>
+          <span className="text-foreground font-mono text-sm">{topicName}</span>
         </div>
 
-        {/* Tab bar */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--k-border)' }}>
-          {TABS.map(({ label, to, exact }) => (
-            <Link
-              key={label}
-              to={to}
-              params={{ clusterId, topicName }}
-              className="k-tab"
-              activeProps={{ className: 'k-tab k-tab-active' }}
-              activeOptions={{ exact }}
-            >
-              {label}
-            </Link>
-          ))}
-        </div>
+        {/* Tab bar using shadcn Tabs */}
+        <Tabs value={activeTab}>
+          <TabsList>
+            {TABS.map(({ label, value, to, exact }) => (
+              <TabsTrigger key={value} value={value} asChild>
+                <Link
+                  to={to}
+                  params={{ clusterId, topicName }}
+                  activeOptions={{ exact }}
+                >
+                  {label}
+                </Link>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div className="flex-1 overflow-auto">
         <Outlet />
       </div>
     </div>

@@ -1,10 +1,28 @@
 // Screen-8: Reset Offsets modal
-// 3-step flow: configure → preview diff → confirm apply
 
 import { useState } from 'react'
 import { useConsumerGroup, useResetOffsets } from '../../hooks/useConsumerGroups'
 import { formatNumber } from '../../lib/utils'
 import type { ResetOffsetsDiff, ResetOffsetsResult } from '../../types/consumer'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { cn } from '@/lib/utils'
 
 interface ResetOffsetsModalProps {
   open: boolean
@@ -14,7 +32,6 @@ interface ResetOffsetsModalProps {
 }
 
 type Strategy = 'earliest' | 'latest' | 'timestamp' | 'offset'
-
 type Step = 'configure' | 'preview' | 'done'
 
 export function ResetOffsetsModal({ open, clusterId, groupId, onClose }: ResetOffsetsModalProps) {
@@ -46,7 +63,6 @@ export function ResetOffsetsModal({ open, clusterId, groupId, onClose }: ResetOf
 
   async function handlePreview() {
     const body = buildBody(true)
-    if (!body) return
     const result = await resetMutation.mutateAsync(body)
     setPreview(result)
     setStep('preview')
@@ -54,13 +70,12 @@ export function ResetOffsetsModal({ open, clusterId, groupId, onClose }: ResetOf
 
   async function handleApply() {
     const body = buildBody(false)
-    if (!body) return
     await resetMutation.mutateAsync(body)
     setStep('done')
   }
 
   function buildBody(dryRun: boolean) {
-    const base = {
+    return {
       scope,
       strategy,
       dry_run: dryRun,
@@ -69,39 +84,23 @@ export function ResetOffsetsModal({ open, clusterId, groupId, onClose }: ResetOf
       ...(strategy === 'timestamp' && timestampMs ? { timestamp_ms: Number(timestampMs) } : {}),
       ...(strategy === 'offset' && exactOffset ? { offset: Number(exactOffset) } : {}),
     }
-    return base
   }
-
-  if (!open) return null
-
-  const overlayStyle: React.CSSProperties = {
-    position: 'fixed', inset: 0, zIndex: 50,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'rgba(0,0,0,0.6)',
-  }
-  const modalStyle: React.CSSProperties = {
-    width: '100%', maxWidth: 560, maxHeight: '80vh', overflow: 'auto',
-    borderRadius: 8, border: '1px solid var(--k-border)',
-    background: 'var(--k-surface)', padding: 24,
-  }
-  const labelStyle: React.CSSProperties = { fontSize: 12, color: 'var(--k-muted)', display: 'block', marginBottom: 4 }
-  const fieldStyle: React.CSSProperties = { marginBottom: 14 }
 
   return (
-    <div style={overlayStyle} onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}>
-      <div style={modalStyle}>
-        <h2 style={{ margin: '0 0 4px', fontSize: 14, color: 'var(--k-text)' }}>
-          Reset Offsets — {groupId}
-        </h2>
-        <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--k-muted)' }}>
-          Moves committed offsets — consumers will re-read messages from the new position.
-        </p>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose() }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Reset Offsets — {groupId}</DialogTitle>
+          <DialogDescription>
+            Moves committed offsets — consumers will re-read messages from the new position.
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Active member warning */}
         {activeMembers > 0 && step === 'configure' && (
-          <div style={{ padding: '8px 12px', marginBottom: 14, borderRadius: 4, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', fontSize: 12, color: 'var(--k-red)' }}>
+          <div className="px-3 py-2 rounded-md bg-destructive/10 border border-destructive/30 text-sm text-destructive">
             ⚠ {activeMembers} active member{activeMembers !== 1 ? 's' : ''} — resetting offsets on a live group may cause duplicate processing.
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, color: 'var(--k-text)', cursor: 'pointer' }}>
+            <label className="flex items-center gap-1.5 mt-1.5 text-foreground cursor-pointer">
               <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
               I understand, proceed anyway
             </label>
@@ -109,171 +108,145 @@ export function ResetOffsetsModal({ open, clusterId, groupId, onClose }: ResetOf
         )}
 
         {step === 'configure' && (
-          <>
-            <div style={fieldStyle}>
-              <span style={labelStyle}>Scope</span>
-              <div style={{ display: 'flex', gap: 8 }}>
+          <div className="flex flex-col gap-3">
+            <div>
+              <span className="text-xs text-muted-foreground mb-1.5 block">Scope</span>
+              <div className="flex gap-2">
                 {(['all', 'topic'] as const).map((s) => (
-                  <button
+                  <Button
                     key={s}
+                    size="sm"
+                    variant={scope === s ? 'default' : 'outline'}
                     onClick={() => setScope(s)}
-                    className={scope === s ? 'k-btn' : 'k-btn-link'}
-                    style={{ padding: '4px 12px', fontSize: 12 }}
                   >
                     {s === 'all' ? 'All topics' : 'Single topic'}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
 
             {scope === 'topic' && (
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Topic</label>
-                <select
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  className="k-input"
-                  style={{ width: '100%' }}
-                >
-                  <option value="">Select topic…</option>
-                  {topics.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block">Topic</label>
+                <Select value={topic || '_'} onValueChange={(v) => setTopic(v === '_' ? '' : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select topic…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_">Select topic…</SelectItem>
+                    {topics.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
-            <div style={fieldStyle}>
-              <span style={labelStyle}>Strategy</span>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div>
+              <span className="text-xs text-muted-foreground mb-1.5 block">Strategy</span>
+              <div className="flex gap-2 flex-wrap">
                 {(['earliest', 'latest', 'timestamp', 'offset'] as Strategy[]).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setStrategy(s)}
-                    className={strategy === s ? 'k-btn' : 'k-btn-link'}
-                    style={{ padding: '4px 12px', fontSize: 12 }}
-                  >
+                  <Button key={s} size="sm" variant={strategy === s ? 'default' : 'outline'} onClick={() => setStrategy(s)}>
                     {s}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
 
             {strategy === 'timestamp' && (
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Timestamp (Unix ms)</label>
-                <input
-                  type="number"
-                  value={timestampMs}
-                  onChange={(e) => setTimestampMs(e.target.value)}
-                  placeholder="e.g. 1700000000000"
-                  className="k-input"
-                  style={{ width: '100%' }}
-                />
+              <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block">Timestamp (Unix ms)</label>
+                <Input type="number" value={timestampMs} onChange={(e) => setTimestampMs(e.target.value)} placeholder="e.g. 1700000000000" />
               </div>
             )}
 
             {strategy === 'offset' && (
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Exact offset</label>
-                <input
-                  type="number"
-                  value={exactOffset}
-                  onChange={(e) => setExactOffset(e.target.value)}
-                  placeholder="e.g. 12345"
-                  className="k-input"
-                  style={{ width: '100%' }}
-                />
+              <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block">Exact offset</label>
+                <Input type="number" value={exactOffset} onChange={(e) => setExactOffset(e.target.value)} placeholder="e.g. 12345" />
               </div>
             )}
 
             {resetMutation.error && (
-              <p style={{ fontSize: 12, color: 'var(--k-red)', margin: '0 0 12px' }}>
-                {(resetMutation.error as Error).message}
-              </p>
+              <p className="text-sm text-destructive">{(resetMutation.error as Error).message}</p>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button onClick={handleClose} className="k-btn-link" style={{ padding: '6px 12px', fontSize: 13 }}>Cancel</button>
-              <button
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="ghost" onClick={handleClose}>Cancel</Button>
+              <Button
                 onClick={handlePreview}
                 disabled={resetMutation.isPending || (scope === 'topic' && !topic) || (activeMembers > 0 && !force)}
-                className="k-btn"
-                style={{ padding: '6px 14px', fontSize: 13 }}
               >
                 {resetMutation.isPending ? 'Loading…' : 'Preview →'}
-              </button>
+              </Button>
             </div>
-          </>
+          </div>
         )}
 
         {step === 'preview' && preview && (
-          <>
+          <div className="flex flex-col gap-3">
             {preview.active_members > 0 && (
-              <div style={{ padding: '8px 12px', marginBottom: 12, borderRadius: 4, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', fontSize: 12, color: 'var(--k-amber)' }}>
+              <div className="px-3 py-2 rounded-md bg-amber-50 border border-amber-200 dark:bg-amber-950 dark:border-amber-800 text-sm text-amber-700 dark:text-amber-300">
                 ⚠ {preview.active_members} active member{preview.active_members !== 1 ? 's' : ''} at time of check
               </div>
             )}
-            <p style={{ fontSize: 12, color: 'var(--k-muted)', margin: '0 0 10px' }}>
+            <p className="text-sm text-muted-foreground">
               Preview — {preview.diff.length} partition{preview.diff.length !== 1 ? 's' : ''} will change
             </p>
             <DiffTable diff={preview.diff} />
             {resetMutation.error && (
-              <p style={{ fontSize: 12, color: 'var(--k-red)', margin: '8px 0 0' }}>
-                {(resetMutation.error as Error).message}
-              </p>
+              <p className="text-sm text-destructive">{(resetMutation.error as Error).message}</p>
             )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-              <button onClick={reset} className="k-btn-link" style={{ padding: '6px 12px', fontSize: 13 }}>← Back</button>
-              <button
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="ghost" onClick={reset}>← Back</Button>
+              <Button
+                variant="destructive"
                 onClick={handleApply}
                 disabled={resetMutation.isPending || preview.diff.length === 0}
-                className="k-btn"
-                style={{ padding: '6px 14px', fontSize: 13, background: 'var(--k-red)', borderColor: 'var(--k-red)' }}
               >
                 {resetMutation.isPending ? 'Applying…' : `Apply to ${preview.diff.length} partition${preview.diff.length !== 1 ? 's' : ''}`}
-              </button>
+              </Button>
             </div>
-          </>
+          </div>
         )}
 
         {step === 'done' && (
-          <div style={{ textAlign: 'center', padding: '16px 0' }}>
-            <p style={{ fontSize: 14, color: 'var(--k-text)', margin: '0 0 4px' }}>✓ Offsets reset successfully</p>
-            <p style={{ fontSize: 12, color: 'var(--k-muted)', margin: '0 0 16px' }}>Consumers will resume from the new positions.</p>
-            <button onClick={handleClose} className="k-btn" style={{ padding: '6px 16px', fontSize: 13 }}>Done</button>
+          <div className="text-center py-4">
+            <p className="text-sm font-medium mb-1">✓ Offsets reset successfully</p>
+            <p className="text-sm text-muted-foreground mb-4">Consumers will resume from the new positions.</p>
+            <Button onClick={handleClose}>Done</Button>
           </div>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
 function DiffTable({ diff }: { diff: ResetOffsetsDiff[] }) {
   return (
-    <div style={{ border: '1px solid var(--k-border)', borderRadius: 4, overflow: 'hidden', maxHeight: 260, overflowY: 'auto' }}>
-      <table className="k-table" style={{ fontSize: 12 }}>
-        <thead>
-          <tr>
-            <th>Topic</th>
-            <th>P#</th>
-            <th>Old</th>
-            <th>New</th>
-            <th>Delta</th>
-          </tr>
-        </thead>
-        <tbody>
+    <div className="rounded-md border max-h-64 overflow-y-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Topic</TableHead>
+            <TableHead>P#</TableHead>
+            <TableHead>Old</TableHead>
+            <TableHead>New</TableHead>
+            <TableHead>Delta</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {diff.map((row) => (
-            <tr key={`${row.topic}-${row.partition}`}>
-              <td style={{ fontFamily: 'var(--k-font)' }}>{row.topic}</td>
-              <td>{row.partition}</td>
-              <td style={{ color: 'var(--k-muted)' }}>{formatNumber(row.old_offset)}</td>
-              <td>{formatNumber(row.new_offset)}</td>
-              <td style={{ color: row.delta < 0 ? 'var(--k-amber)' : 'var(--k-green)' }}>
+            <TableRow key={`${row.topic}-${row.partition}`}>
+              <TableCell className="font-mono text-xs">{row.topic}</TableCell>
+              <TableCell>{row.partition}</TableCell>
+              <TableCell className="text-muted-foreground">{formatNumber(row.old_offset)}</TableCell>
+              <TableCell>{formatNumber(row.new_offset)}</TableCell>
+              <TableCell className={cn(row.delta < 0 ? 'text-amber-600' : 'text-green-600')}>
                 {row.delta > 0 ? '+' : ''}{formatNumber(row.delta)}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   )
 }

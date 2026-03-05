@@ -13,10 +13,10 @@ export function SchemasPage() {
   const hasRegistry = false
 
   return (
-    <div className="k-page">
+    <div className="p-6">
       <PageHeader title="Schema Registry" description="Avro, JSON Schema, and Protobuf schemas" />
       {hasRegistry ? (
-        <p style={{ color: 'var(--k-muted)', fontSize: 15 }}>TODO: implement schema list</p>
+        <p className="text-sm text-muted-foreground">TODO: implement schema list</p>
       ) : (
         <EmptyState
           icon={<Database size={32} />}

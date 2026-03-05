@@ -8,13 +8,13 @@ interface EmptyStateProps {
 
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '64px 16px', textAlign: 'center' }}>
-      {icon && <div style={{ marginBottom: 16, color: 'var(--k-faint)' }}>{icon}</div>}
-      <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: 'var(--k-text)' }}>{title}</p>
+    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+      {icon && <div className="mb-4 text-muted-foreground/40">{icon}</div>}
+      <p className="text-sm font-medium text-foreground">{title}</p>
       {description && (
-        <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--k-muted)', maxWidth: 320 }}>{description}</p>
+        <p className="mt-1 text-sm text-muted-foreground max-w-xs">{description}</p>
       )}
-      {action && <div style={{ marginTop: 16 }}>{action}</div>}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   )
 }

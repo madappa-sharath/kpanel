@@ -3,9 +3,9 @@
 
 export function SchemaDetailPage() {
   return (
-    <div className="k-page">
-      <div style={{ border: '1px dashed var(--k-border-2)', borderRadius: 6, padding: '48px 24px', textAlign: 'center' }}>
-        <p style={{ color: 'var(--k-muted)', fontSize: 15, margin: 0 }}>Schema detail — coming soon</p>
+    <div className="p-6">
+      <div className="rounded-md border border-dashed p-12 text-center">
+        <p className="text-sm text-muted-foreground">Schema detail — coming soon</p>
       </div>
     </div>
   )

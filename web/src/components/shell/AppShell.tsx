@@ -8,6 +8,7 @@ export function AppShell() {
 
   return (
     <div
+      className="bg-background text-foreground"
       style={{
         display: 'grid',
         gridTemplateColumns: `${collapsed ? 'var(--sidebar-w-collapsed)' : 'var(--sidebar-w)'} 1fr`,
@@ -26,12 +27,7 @@ export function AppShell() {
       <Header />
 
       {/* Main content */}
-      <main
-        style={{
-          overflow: 'auto',
-          background: 'var(--k-bg)',
-        }}
-      >
+      <main className="overflow-auto bg-background">
         <Outlet />
       </main>
     </div>

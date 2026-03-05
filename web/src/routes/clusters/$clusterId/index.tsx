@@ -2,6 +2,10 @@ import { useParams, Link } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useClusters, useConnectionStatus, useClusterOverview } from '../../../hooks/useCluster'
 import { PageHeader } from '../../../components/shared/PageHeader'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 import type { ClusterOverview } from '../../../types/broker'
 
 type RuleStatus = 'good' | 'warning' | 'info' | null
@@ -16,33 +20,20 @@ interface BestPracticeRule {
 }
 
 const BEST_PRACTICE_RULES: BestPracticeRule[] = [
-  // Reliability
   {
     label: 'Replication Factor',
     kafkaKey: 'default.replication.factor',
     category: 'Reliability',
-    check: (v, n) => {
-      if (parseInt(v, 10) >= 3) return 'good'
-      return n === 1 ? 'info' : 'warning'
-    },
-    recommendation: (_v, n) =>
-      n === 1
-        ? 'Single-broker — not suitable for production'
-        : 'Set ≥ 3 for production durability',
+    check: (v, n) => { if (parseInt(v, 10) >= 3) return 'good'; return n === 1 ? 'info' : 'warning' },
+    recommendation: (_v, n) => n === 1 ? 'Single-broker — not suitable for production' : 'Set ≥ 3 for production durability',
     why: 'RF < 3 means one broker failure can make you unrecoverable if another fails.',
   },
   {
     label: 'Min In-Sync Replicas',
     kafkaKey: 'min.insync.replicas',
     category: 'Reliability',
-    check: (v, n) => {
-      if (parseInt(v, 10) >= 2) return 'good'
-      return n === 1 ? 'info' : 'warning'
-    },
-    recommendation: (_v, n) =>
-      n === 1
-        ? 'Single-broker — only one replica possible'
-        : 'Set ≥ 2 to prevent silent data loss',
+    check: (v, n) => { if (parseInt(v, 10) >= 2) return 'good'; return n === 1 ? 'info' : 'warning' },
+    recommendation: (_v, n) => n === 1 ? 'Single-broker — only one replica possible' : 'Set ≥ 2 to prevent silent data loss',
     why: 'min.insync.replicas=1 allows acks=all writes to exist on only one broker.',
   },
   {
@@ -57,47 +48,20 @@ const BEST_PRACTICE_RULES: BestPracticeRule[] = [
     label: 'Offsets Topic Replication',
     kafkaKey: 'offsets.topic.replication.factor',
     category: 'Reliability',
-    check: (v, n) => {
-      if (parseInt(v, 10) >= 3) return 'good'
-      return n === 1 ? 'info' : 'warning'
-    },
-    recommendation: (_v, n) =>
-      n === 1
-        ? 'Single-broker — consumer offset durability limited'
-        : 'Set ≥ 3 to protect consumer group state',
+    check: (v, n) => { if (parseInt(v, 10) >= 3) return 'good'; return n === 1 ? 'info' : 'warning' },
+    recommendation: (_v, n) => n === 1 ? 'Single-broker — consumer offset durability limited' : 'Set ≥ 3 to protect consumer group state',
     why: '__consumer_offsets stores group positions; low RF risks losing commit history.',
   },
   {
     label: 'Transaction Log Replication',
     kafkaKey: 'transaction.state.log.replication.factor',
     category: 'Reliability',
-    check: (v, n) => {
-      if (parseInt(v, 10) >= 3) return 'good'
-      return n === 1 ? 'info' : 'warning'
-    },
-    recommendation: (_v, n) =>
-      n === 1
-        ? 'Single-broker — transaction state durability limited'
-        : 'Set ≥ 3 to protect transaction state',
+    check: (v, n) => { if (parseInt(v, 10) >= 3) return 'good'; return n === 1 ? 'info' : 'warning' },
+    recommendation: (_v, n) => n === 1 ? 'Single-broker — transaction state durability limited' : 'Set ≥ 3 to protect transaction state',
     why: '__transaction_state needs sufficient replication to avoid coordinator outages.',
   },
-  {
-    label: 'Transaction Log Min ISR',
-    kafkaKey: 'transaction.state.log.min.isr',
-    category: 'Reliability',
-    check: () => null,
-    recommendation: () => '',
-    why: '',
-  },
-  // Retention
-  {
-    label: 'Log Retention Hours',
-    kafkaKey: 'log.retention.hours',
-    category: 'Retention',
-    check: () => null,
-    recommendation: () => '',
-    why: '',
-  },
+  { label: 'Transaction Log Min ISR', kafkaKey: 'transaction.state.log.min.isr', category: 'Reliability', check: () => null, recommendation: () => '', why: '' },
+  { label: 'Log Retention Hours', kafkaKey: 'log.retention.hours', category: 'Retention', check: () => null, recommendation: () => '', why: '' },
   {
     label: 'Log Retention Bytes',
     kafkaKey: 'log.retention.bytes',
@@ -106,15 +70,7 @@ const BEST_PRACTICE_RULES: BestPracticeRule[] = [
     recommendation: () => 'Consider a byte cap to prevent disk exhaustion',
     why: 'Unlimited retention means disk fills until time-based retention kicks in.',
   },
-  {
-    label: 'Log Retention Ms',
-    kafkaKey: 'log.retention.ms',
-    category: 'Retention',
-    check: () => null,
-    recommendation: () => '',
-    why: '',
-  },
-  // Governance
+  { label: 'Log Retention Ms', kafkaKey: 'log.retention.ms', category: 'Retention', check: () => null, recommendation: () => '', why: '' },
   {
     label: 'Auto-create Topics',
     kafkaKey: 'auto.create.topics.enable',
@@ -131,7 +87,6 @@ const BEST_PRACTICE_RULES: BestPracticeRule[] = [
     recommendation: () => 'Enable so topics can be deleted via admin API',
     why: 'With delete disabled, topic deletion requests are silently ignored.',
   },
-  // Performance
   {
     label: 'Default Partitions',
     kafkaKey: 'num.partitions',
@@ -140,181 +95,26 @@ const BEST_PRACTICE_RULES: BestPracticeRule[] = [
     recommendation: () => 'Consider increasing for better consumer parallelism',
     why: '1 default partition limits throughput and parallelism for auto-created topics.',
   },
-  {
-    label: 'Max Message Bytes',
-    kafkaKey: 'message.max.bytes',
-    category: 'Performance',
-    check: () => null,
-    recommendation: () => '',
-    why: '',
-  },
+  { label: 'Max Message Bytes', kafkaKey: 'message.max.bytes', category: 'Performance', check: () => null, recommendation: () => '', why: '' },
 ]
 
 const CATEGORY_ORDER = ['Reliability', 'Retention', 'Governance', 'Performance'] as const
 
-function Skel({ w = '100%', h = 14 }: { w?: string | number; h?: number }) {
-  return (
-    <div
-      style={{
-        width: w,
-        height: h,
-        borderRadius: 4,
-        background: 'var(--k-border)',
-        flexShrink: 0,
-      }}
-    />
-  )
-}
-
-function SectionHeader({ title, count }: { title: string; count?: number }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-      <span
-        style={{
-          fontSize: 12,
-          fontWeight: 600,
-          color: 'var(--k-muted)',
-          fontFamily: 'var(--k-font)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-        }}
-      >
-        {title}
-      </span>
-      {count !== undefined && (
-        <span
-          style={{
-            fontSize: 11,
-            padding: '1px 7px',
-            borderRadius: 10,
-            border: '1px solid var(--k-border-2)',
-            background: 'var(--k-border)',
-            color: 'var(--k-muted)',
-            fontFamily: 'var(--k-font)',
-          }}
-        >
-          {count}
-        </span>
-      )}
-    </div>
-  )
-}
-
 function ConfigStatusBadge({ status, title }: { status: RuleStatus; title?: string }) {
   if (status === null) return null
-  const cls =
-    status === 'warning'
-      ? 'k-badge k-badge-amber'
-      : status === 'good'
-        ? 'k-badge k-badge-green'
-        : 'k-badge k-badge-muted'
-  const label = status === 'warning' ? 'Warning' : status === 'good' ? 'OK' : 'Info'
-  return (
-    <span className={cls} title={title}>
-      {label}
-    </span>
-  )
-}
-
-function ConfigSkeleton() {
-  return (
-    <div
-      style={{
-        border: '1px solid var(--k-border)',
-        borderRadius: 8,
-        overflow: 'hidden',
-        background: 'var(--k-surface)',
-      }}
-    >
-      {/* header row */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '220px 120px 90px 1fr',
-          padding: '8px 16px',
-          borderBottom: '1px solid var(--k-border)',
-          background: 'var(--k-border)',
-          gap: 12,
-        }}
-      >
-        {['Config Name', 'Value', 'Status', 'Note'].map((col) => (
-          <span
-            key={col}
-            style={{
-              fontSize: 10,
-              fontFamily: 'var(--k-font)',
-              color: 'var(--k-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              fontWeight: 600,
-            }}
-          >
-            {col}
-          </span>
-        ))}
-      </div>
-      {[0, 1, 2, 3, 4].map((i) => (
-        <div
-          key={i}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '220px 120px 90px 1fr',
-            padding: '12px 16px',
-            borderBottom: i < 4 ? '1px solid var(--k-border)' : 'none',
-            gap: 12,
-            alignItems: 'center',
-          }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <Skel h={11} w="80%" />
-            <Skel h={9} w="90%" />
-          </div>
-          <Skel h={11} w="60%" />
-          <Skel h={18} w={50} />
-          <Skel h={11} w="70%" />
-        </div>
-      ))}
-    </div>
-  )
+  if (status === 'warning') return <Badge variant="outline" className="text-amber-600 border-amber-600/30 bg-amber-50 dark:bg-amber-950 dark:text-amber-400" title={title}>Warning</Badge>
+  if (status === 'good') return <Badge variant="outline" className="text-green-600 border-green-600/30 bg-green-50 dark:bg-green-950 dark:text-green-400" title={title}>OK</Badge>
+  return <Badge variant="secondary" title={title}>Info</Badge>
 }
 
 function ConfigTable({ overview }: { overview: ClusterOverview }) {
   const brokerCount = overview.brokerCount
 
   return (
-    <div
-      style={{
-        border: '1px solid var(--k-border)',
-        borderRadius: 8,
-        overflow: 'hidden',
-        background: 'var(--k-surface)',
-      }}
-    >
-      {/* Table header */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '220px 120px 90px 1fr',
-          padding: '8px 16px',
-          borderBottom: '1px solid var(--k-border)',
-          background: 'var(--k-border)',
-          gap: 12,
-        }}
-      >
-        {['Config Name', 'Value', 'Status', 'Note'].map((col) => (
-          <span
-            key={col}
-            style={{
-              fontSize: 10,
-              fontFamily: 'var(--k-font)',
-              color: 'var(--k-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              fontWeight: 600,
-            }}
-          >
-            {col}
-          </span>
+    <div className="rounded-md border overflow-hidden text-sm">
+      <div className="grid px-4 py-2 bg-muted/50 border-b text-xs text-muted-foreground uppercase tracking-wider font-medium" style={{ gridTemplateColumns: '1fr 160px 1fr' }}>
+        {['Config', 'Value', 'Status / Note'].map((col) => (
+          <span key={col}>{col}</span>
         ))}
       </div>
 
@@ -323,7 +123,6 @@ function ConfigTable({ overview }: { overview: ClusterOverview }) {
         const visibleRules = rules.filter((r) => overview.configs[r.kafkaKey] !== undefined)
         if (visibleRules.length === 0) return null
 
-        // Sort: warnings first, then info, then good, then null
         const statusOrder: Record<string, number> = { warning: 0, info: 1, good: 2 }
         const sorted = [...visibleRules].sort((a, b) => {
           const ea = overview.configs[a.kafkaKey]
@@ -337,115 +136,33 @@ function ConfigTable({ overview }: { overview: ClusterOverview }) {
 
         return (
           <div key={category}>
-            {/* Category sub-header */}
-            <div
-              style={{
-                padding: '5px 16px',
-                background: 'var(--k-border-2)',
-                borderBottom: '1px solid var(--k-border-2)',
-                borderTop: '1px solid var(--k-border-2)',
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 10,
-                  fontFamily: 'var(--k-font)',
-                  color: 'var(--k-muted)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.12em',
-                  fontWeight: 600,
-                }}
-              >
-                {category}
-              </span>
+            <div className="px-4 py-1 bg-muted/30 border-y text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+              {category}
             </div>
-
-            {sorted.map((rule, idx) => {
+            {sorted.map((rule) => {
               const entry = overview.configs[rule.kafkaKey]
               if (!entry) return null
               const status = rule.check(entry.value, brokerCount)
+              const isDefault = entry.source === 'default'
 
               return (
                 <div
                   key={rule.kafkaKey}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '220px 120px 90px 1fr',
-                    padding: '11px 16px',
-                    borderBottom:
-                      idx < sorted.length - 1 ? '1px solid var(--k-border)' : 'none',
-                    gap: 12,
-                    alignItems: 'center',
-                  }}
+                  className="grid px-4 py-2 border-b last:border-b-0 items-center gap-4 hover:bg-muted/30 transition-colors"
+                  style={{ gridTemplateColumns: '1fr 160px 1fr' }}
                 >
-                  {/* Col 1: label + key */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span
-                      style={{
-                        fontSize: 13,
-                        fontFamily: 'var(--k-font)',
-                        color: 'var(--k-text)',
-                      }}
-                    >
-                      {rule.label}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontFamily: 'monospace',
-                        color: 'var(--k-muted)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {rule.kafkaKey}
-                    </span>
-                  </div>
-
-                  {/* Col 2: value + default chip */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <span
-                      style={{
-                        fontSize: 13,
-                        fontFamily: 'monospace',
-                        color: 'var(--k-text)',
-                      }}
-                    >
-                      {entry.value}
-                    </span>
-                    {entry.source === 'default' && (
-                      <span
-                        style={{
-                          fontSize: 10,
-                          padding: '1px 5px',
-                          borderRadius: 4,
-                          border: '1px solid var(--k-border)',
-                          background: 'var(--k-faint, var(--k-border))',
-                          color: 'var(--k-muted)',
-                          fontFamily: 'var(--k-font)',
-                        }}
-                      >
-                        default
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Col 3: status badge */}
                   <div>
+                    <span className="text-foreground">{rule.label}</span>
+                    <span className="block text-xs font-mono text-muted-foreground/60 leading-tight">{rule.kafkaKey}</span>
+                  </div>
+                  <span className={cn('font-mono', isDefault && 'text-muted-foreground')}>
+                    {entry.value}
+                    {isDefault && <span className="ml-1.5 text-xs text-muted-foreground/50">default</span>}
+                  </span>
+                  <div className="flex items-center gap-2">
                     <ConfigStatusBadge status={status} title={rule.why || undefined} />
-                  </div>
-
-                  {/* Col 4: always rendered so all rows have 4 grid cells */}
-                  <div>
                     {(status === 'warning' || status === 'info') && (
-                      <span
-                        style={{
-                          fontSize: 12,
-                          fontFamily: 'var(--k-font)',
-                          color: status === 'warning' ? 'var(--k-amber)' : 'var(--k-muted)',
-                        }}
-                      >
+                      <span className={cn(status === 'warning' ? 'text-amber-600' : 'text-muted-foreground')}>
                         {rule.recommendation(entry.value, brokerCount)}
                       </span>
                     )}
@@ -470,11 +187,9 @@ export function DashboardPage() {
   const cluster = clusters?.find((c) => c.id === clusterId)
 
   const platformLabel =
-    cluster?.platform === 'aws'
-      ? 'AWS MSK'
-      : cluster?.platform === 'confluent'
-        ? 'Confluent Cloud'
-        : (cluster?.platform ?? 'Kafka')
+    cluster?.platform === 'aws' ? 'AWS MSK'
+    : cluster?.platform === 'confluent' ? 'Confluent Cloud'
+    : (cluster?.platform ?? 'Kafka')
 
   function copyClusterId() {
     if (overview?.clusterId) {
@@ -484,173 +199,76 @@ export function DashboardPage() {
     }
   }
 
-  // Partition health subtitle for the stat card
-  let partitionSubtitle = '● healthy'
-  let partitionSubtitleColor = 'var(--k-green)'
-  if (overview) {
-    if (overview.offlinePartitions > 0) {
-      partitionSubtitle = `${overview.offlinePartitions} offline`
-      partitionSubtitleColor = 'var(--k-red)'
-    } else if (overview.underReplicated > 0) {
-      partitionSubtitle = `${overview.underReplicated} under-replicated`
-      partitionSubtitleColor = 'var(--k-amber)'
-    }
-  }
-
-  const statCardBase: React.CSSProperties = {
-    border: '1px solid var(--k-border)',
-    borderRadius: 8,
-    padding: '20px 24px',
-    background: 'var(--k-surface)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
-    height: '100%',
-    boxSizing: 'border-box',
-  }
-
-  const statNum: React.CSSProperties = {
-    fontSize: 28,
-    fontWeight: 700,
-    fontFamily: 'var(--k-font)',
-    color: 'var(--k-text)',
-    lineHeight: 1,
-  }
-
-  const statLabel: React.CSSProperties = {
-    fontSize: 11,
-    fontFamily: 'var(--k-font)',
-    color: 'var(--k-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.07em',
-    fontWeight: 500,
-  }
-
-  const identityRow: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 3,
-  }
-
-  const identityKey: React.CSSProperties = {
-    fontSize: 10,
-    fontFamily: 'var(--k-font)',
-    color: 'var(--k-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-  }
-
-  const identityVal: React.CSSProperties = {
-    fontSize: 13,
-    fontFamily: 'var(--k-font)',
-    color: 'var(--k-text)',
-  }
+  const hasPartitionIssues = overview && (overview.offlinePartitions > 0 || overview.underReplicated > 0)
+  const partitionSubtitle = overview
+    ? overview.offlinePartitions > 0
+      ? `${overview.offlinePartitions} offline`
+      : overview.underReplicated > 0
+      ? `${overview.underReplicated} under-replicated`
+      : '● healthy'
+    : ''
 
   return (
-    <div className="k-page">
+    <div className="p-6">
       <PageHeader title={cluster?.name ?? clusterId} description={platformLabel} />
 
       {/* Disconnected banner */}
       {status && !status.connected && (
-        <div
-          style={{
-            border: '1px solid rgba(217,82,82,0.25)',
-            borderRadius: 6,
-            padding: '10px 16px',
-            background: 'var(--k-red-dim)',
-            color: 'var(--k-red)',
-            fontSize: 13,
-            fontFamily: 'var(--k-font)',
-            marginBottom: 24,
-          }}
-        >
+        <div className="rounded-md border border-destructive/25 bg-destructive/10 text-destructive px-4 py-2.5 text-sm mb-6">
           Unable to connect to cluster{status.error ? `: ${status.error}` : ''}
         </div>
       )}
 
       {/* ── Stat Cards ─────────────────────────────────────────────── */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 12,
-          marginBottom: 20,
-        }}
-      >
+      <div className="grid grid-cols-4 gap-3 mb-5">
         {isLoading ? (
-          <>
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} style={{ ...statCardBase, gap: 10 }}>
-                <Skel h={28} w="45%" />
-                <Skel h={10} w="55%" />
-              </div>
-            ))}
-          </>
+          [0, 1, 2, 3].map((i) => (
+            <div key={i} className="rounded-md border bg-card p-5 flex flex-col gap-2.5">
+              <Skeleton className="h-7 w-2/5" />
+              <Skeleton className="h-2.5 w-3/5" />
+            </div>
+          ))
         ) : (
           <>
             {/* Brokers */}
-            <div style={statCardBase}>
-              <span style={statNum}>{overview?.brokerCount ?? '—'}</span>
-              <span style={statLabel}>Brokers</span>
+            <div className="rounded-md border bg-card p-5 flex flex-col gap-1.5">
+              <span className="text-2xl font-bold font-mono">{overview?.brokerCount ?? '—'}</span>
+              <span className="text-xs text-muted-foreground uppercase tracking-wide">Brokers</span>
               {overview && (
-                <span style={{ fontSize: 11, fontFamily: 'var(--k-font)', color: partitionSubtitleColor }}>
+                <span className={cn(
+                  'text-xs',
+                  hasPartitionIssues ? (overview.offlinePartitions > 0 ? 'text-destructive' : 'text-amber-600') : 'text-green-600',
+                )}>
                   {partitionSubtitle}
                 </span>
               )}
             </div>
 
             {/* Topics — linked */}
-            <Link
-              to="/clusters/$clusterId/topics"
-              params={{ clusterId }}
-              style={{ textDecoration: 'none' }}
-            >
-              <div
-                style={statCardBase}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--k-border-2)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--k-border)'
-                }}
-              >
-                <span style={statNum}>{overview?.topicCount ?? '—'}</span>
-                <span style={statLabel}>Topics</span>
+            <Link to="/clusters/$clusterId/topics" params={{ clusterId }} className="no-underline">
+              <div className="rounded-md border bg-card p-5 flex flex-col gap-1.5 h-full hover:border-border/80 hover:bg-muted/30 transition-colors cursor-pointer">
+                <span className="text-2xl font-bold font-mono">{overview?.topicCount ?? '—'}</span>
+                <span className="text-xs text-muted-foreground uppercase tracking-wide">Topics</span>
               </div>
             </Link>
 
             {/* Consumer Groups — linked */}
-            <Link
-              to="/clusters/$clusterId/consumer-groups"
-              params={{ clusterId }}
-              style={{ textDecoration: 'none' }}
-            >
-              <div
-                style={statCardBase}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--k-border-2)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--k-border)'
-                }}
-              >
-                <span style={statNum}>{overview?.consumerGroupCount ?? '—'}</span>
-                <span style={statLabel}>Groups</span>
+            <Link to="/clusters/$clusterId/consumer-groups" params={{ clusterId }} className="no-underline">
+              <div className="rounded-md border bg-card p-5 flex flex-col gap-1.5 h-full hover:border-border/80 hover:bg-muted/30 transition-colors cursor-pointer">
+                <span className="text-2xl font-bold font-mono">{overview?.consumerGroupCount ?? '—'}</span>
+                <span className="text-xs text-muted-foreground uppercase tracking-wide">Groups</span>
               </div>
             </Link>
 
             {/* Partitions */}
-            <div style={statCardBase}>
-              <span style={statNum}>{overview?.totalPartitions ?? '—'}</span>
-              <span style={statLabel}>Partitions</span>
+            <div className="rounded-md border bg-card p-5 flex flex-col gap-1.5">
+              <span className="text-2xl font-bold font-mono">{overview?.totalPartitions ?? '—'}</span>
+              <span className="text-xs text-muted-foreground uppercase tracking-wide">Partitions</span>
               {overview && (
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontFamily: 'var(--k-font)',
-                    color: partitionSubtitleColor,
-                  }}
-                >
+                <span className={cn(
+                  'text-xs',
+                  hasPartitionIssues ? (overview.offlinePartitions > 0 ? 'text-destructive' : 'text-amber-600') : 'text-green-600',
+                )}>
                   {partitionSubtitle}
                 </span>
               )}
@@ -660,87 +278,32 @@ export function DashboardPage() {
       </div>
 
       {/* ── Partition Health + Cluster Identity ────────────────────── */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '3fr 2fr',
-          gap: 12,
-          marginBottom: 20,
-        }}
-      >
+      <div className="grid gap-3 mb-5" style={{ gridTemplateColumns: '3fr 2fr' }}>
         {/* Partition Health */}
-        <div
-          style={{
-            border: '1px solid var(--k-border)',
-            borderRadius: 8,
-            padding: '20px 24px',
-            background: 'var(--k-surface)',
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: 'var(--k-muted)',
-              fontFamily: 'var(--k-font)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              marginBottom: 16,
-            }}
-          >
-            Partition Health
-          </div>
+        <div className="rounded-md border bg-card p-5">
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Partition Health</div>
           {isLoading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <Skel h={12} w="70%" />
-              <Skel h={12} w="80%" />
-              <Skel h={12} w="65%" />
+            <div className="flex flex-col gap-2.5">
+              <Skeleton className="h-3 w-3/4" />
+              <Skeleton className="h-3 w-4/5" />
+              <Skeleton className="h-3 w-2/3" />
             </div>
           ) : overview ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="flex flex-col gap-3">
               {[
-                { label: 'Total', value: overview.totalPartitions, color: 'var(--k-blue)', active: true },
-                {
-                  label: 'Under-replicated',
-                  value: overview.underReplicated,
-                  color: 'var(--k-amber)',
-                  active: overview.underReplicated > 0,
-                },
-                {
-                  label: 'Offline',
-                  value: overview.offlinePartitions,
-                  color: 'var(--k-red)',
-                  active: overview.offlinePartitions > 0,
-                },
-              ].map(({ label, value, color, active }) => (
-                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: active ? color : 'var(--k-border-2)',
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontFamily: 'var(--k-font)',
-                      color: 'var(--k-muted)',
-                      flex: 1,
-                    }}
-                  >
-                    {label}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontFamily: 'var(--k-font)',
-                      color: active && label !== 'Total' ? color : 'var(--k-text)',
-                      fontWeight: 600,
-                    }}
-                  >
+                { label: 'Total', value: overview.totalPartitions, colorClass: 'bg-blue-500', active: true },
+                { label: 'Under-replicated', value: overview.underReplicated, colorClass: 'bg-amber-500', active: overview.underReplicated > 0 },
+                { label: 'Offline', value: overview.offlinePartitions, colorClass: 'bg-destructive', active: overview.offlinePartitions > 0 },
+              ].map(({ label, value, colorClass, active }) => (
+                <div key={label} className="flex items-center gap-2.5">
+                  <div className={cn('size-2 rounded-full flex-shrink-0', active ? colorClass : 'bg-muted-foreground/30')} />
+                  <span className="text-sm text-muted-foreground flex-1">{label}</span>
+                  <span className={cn(
+                    'text-sm font-semibold',
+                    active && label !== 'Total'
+                      ? label === 'Offline' ? 'text-destructive' : 'text-amber-600'
+                      : 'text-foreground',
+                  )}>
                     {value}
                   </span>
                 </div>
@@ -750,89 +313,42 @@ export function DashboardPage() {
         </div>
 
         {/* Cluster Identity */}
-        <div
-          style={{
-            border: '1px solid var(--k-border)',
-            borderRadius: 8,
-            padding: '20px 24px',
-            background: 'var(--k-surface)',
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: 'var(--k-muted)',
-              fontFamily: 'var(--k-font)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              marginBottom: 16,
-            }}
-          >
-            Cluster Identity
-          </div>
+        <div className="rounded-md border bg-card p-5">
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Cluster Identity</div>
           {isLoading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <Skel h={9} w="40%" />
-                <Skel h={12} w="85%" />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <Skel h={9} w="45%" />
-                <Skel h={12} w="60%" />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <Skel h={9} w="40%" />
-                <Skel h={12} w="50%" />
-              </div>
+            <div className="flex flex-col gap-3">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex flex-col gap-1.5">
+                  <Skeleton className="h-2 w-2/5" />
+                  <Skeleton className="h-3 w-4/5" />
+                </div>
+              ))}
             </div>
           ) : overview ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="flex flex-col gap-3">
               {overview.clusterId && (
-                <div style={identityRow}>
-                  <span style={identityKey}>Cluster ID</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span
-                      style={{
-                        fontSize: 12,
-                        fontFamily: 'monospace',
-                        color: 'var(--k-text)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        flex: 1,
-                        minWidth: 0,
-                      }}
-                    >
-                      {overview.clusterId}
-                    </span>
-                    <button
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide">Cluster ID</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-mono truncate flex-1 min-w-0">{overview.clusterId}</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={copyClusterId}
-                      style={{
-                        border: '1px solid var(--k-border-2)',
-                        borderRadius: 4,
-                        background: 'transparent',
-                        color: copied ? 'var(--k-green)' : 'var(--k-muted)',
-                        fontSize: 10,
-                        padding: '2px 6px',
-                        cursor: 'pointer',
-                        fontFamily: 'var(--k-font)',
-                        flexShrink: 0,
-                        lineHeight: 1.5,
-                      }}
+                      className={cn('h-5 px-1.5 text-xs flex-shrink-0', copied && 'text-green-600')}
                     >
                       {copied ? '✓' : 'copy'}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
-              <div style={identityRow}>
-                <span style={identityKey}>Kafka Version</span>
-                <span style={identityVal}>{overview.kafkaVersion}</span>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-wide">Kafka Version</span>
+                <span className="text-sm">{overview.kafkaVersion}</span>
               </div>
-              <div style={identityRow}>
-                <span style={identityKey}>Controller</span>
-                <span style={identityVal}>Broker {overview.controllerId}</span>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-wide">Controller</span>
+                <span className="text-sm">Broker {overview.controllerId}</span>
               </div>
             </div>
           ) : null}
@@ -840,164 +356,62 @@ export function DashboardPage() {
       </div>
 
       {/* ── Broker Fleet ───────────────────────────────────────────── */}
-      <div style={{ marginBottom: 20 }}>
-        <SectionHeader title="Brokers" count={overview?.brokerCount} />
+      <div className="mb-5">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Brokers</span>
+          {overview?.brokerCount !== undefined && (
+            <Badge variant="secondary" className="text-xs">{overview.brokerCount}</Badge>
+          )}
+        </div>
         {isLoading ? (
-          <div
-            style={{
-              border: '1px solid var(--k-border)',
-              borderRadius: 8,
-              overflow: 'hidden',
-              background: 'var(--k-surface)',
-            }}
-          >
+          <div className="rounded-md border overflow-hidden">
             {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                style={{
-                  padding: '12px 16px',
-                  borderBottom: i < 2 ? '1px solid var(--k-border)' : 'none',
-                  display: 'flex',
-                  gap: 24,
-                  alignItems: 'center',
-                }}
-              >
-                <Skel w={32} h={11} />
-                <Skel w={150} h={11} />
-                <Skel w={70} h={11} />
+              <div key={i} className={cn('flex gap-6 px-4 py-3 items-center', i < 2 && 'border-b')}>
+                <Skeleton className="h-2.5 w-8" />
+                <Skeleton className="h-2.5 w-36" />
+                <Skeleton className="h-2.5 w-16" />
               </div>
             ))}
           </div>
         ) : overview?.brokers && overview.brokers.length > 0 ? (
-          <div
-            style={{
-              border: '1px solid var(--k-border)',
-              borderRadius: 8,
-              overflow: 'hidden',
-              background: 'var(--k-surface)',
-            }}
-          >
-            {/* Table header */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '56px 1fr 110px 80px',
-                padding: '8px 16px',
-                borderBottom: '1px solid var(--k-border)',
-                background: 'var(--k-border)',
-              }}
-            >
+          <div className="rounded-md border overflow-hidden">
+            <div className="grid gap-3 px-4 py-2 bg-muted/50 border-b text-xs text-muted-foreground uppercase tracking-wider font-semibold" style={{ gridTemplateColumns: '56px 1fr 110px 80px' }}>
               {['Node', 'Address', 'Role', 'Rack'].map((col) => (
-                <span
-                  key={col}
-                  style={{
-                    fontSize: 10,
-                    fontFamily: 'var(--k-font)',
-                    color: 'var(--k-muted)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.08em',
-                    fontWeight: 600,
-                  }}
-                >
-                  {col}
-                </span>
+                <span key={col}>{col}</span>
               ))}
             </div>
-
             {overview.brokers.map((broker, idx) => (
               <Link
                 key={broker.nodeId}
                 to="/clusters/$clusterId/brokers"
                 params={{ clusterId }}
-                style={{ textDecoration: 'none', display: 'block' }}
+                className="no-underline block"
               >
                 <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '56px 1fr 110px 80px',
-                    padding: '11px 16px',
-                    borderBottom:
-                      idx < overview.brokers.length - 1 ? '1px solid var(--k-border)' : 'none',
-                    cursor: 'pointer',
-                    alignItems: 'center',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'var(--k-border)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent'
-                  }}
+                  className={cn(
+                    'grid gap-3 px-4 py-3 cursor-pointer hover:bg-muted/40 transition-colors items-center',
+                    idx < overview.brokers.length - 1 && 'border-b',
+                  )}
+                  style={{ gridTemplateColumns: '56px 1fr 110px 80px' }}
                 >
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontFamily: 'var(--k-font)',
-                      color: 'var(--k-muted)',
-                    }}
-                  >
-                    {broker.nodeId}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontFamily: 'var(--k-font)',
-                      color: 'var(--k-text)',
-                    }}
-                  >
-                    {broker.host}:{broker.port}
-                  </span>
+                  <span className="text-sm font-mono text-muted-foreground">{broker.nodeId}</span>
+                  <span className="text-sm font-mono">{broker.host}:{broker.port}</span>
                   <div>
                     {broker.isController ? (
-                      <span
-                        style={{
-                          fontSize: 11,
-                          padding: '2px 8px',
-                          borderRadius: 10,
-                          border: '1px solid rgba(217,159,34,0.35)',
-                          background: 'rgba(217,159,34,0.12)',
-                          color: 'var(--k-amber)',
-                          fontFamily: 'var(--k-font)',
-                        }}
-                      >
+                      <Badge variant="outline" className="text-amber-600 border-amber-600/30 bg-amber-50 dark:bg-amber-950 dark:text-amber-400">
                         Controller
-                      </span>
+                      </Badge>
                     ) : (
-                      <span
-                        style={{
-                          fontSize: 12,
-                          fontFamily: 'var(--k-font)',
-                          color: 'var(--k-muted)',
-                        }}
-                      >
-                        Broker
-                      </span>
+                      <span className="text-sm text-muted-foreground">Broker</span>
                     )}
                   </div>
-                  <span
-                    style={{
-                      fontSize: 12,
-                      fontFamily: 'var(--k-font)',
-                      color: 'var(--k-muted)',
-                    }}
-                  >
-                    {broker.rack ?? '—'}
-                  </span>
+                  <span className="text-sm text-muted-foreground">{broker.rack ?? '—'}</span>
                 </div>
               </Link>
             ))}
           </div>
         ) : (
-          <div
-            style={{
-              border: '1px dashed var(--k-border-2)',
-              borderRadius: 6,
-              padding: 24,
-              textAlign: 'center',
-              color: 'var(--k-muted)',
-              fontSize: 13,
-              fontFamily: 'var(--k-font)',
-            }}
-          >
+          <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
             No broker data available
           </div>
         )}
@@ -1005,9 +419,22 @@ export function DashboardPage() {
 
       {/* ── Cluster Configuration ──────────────────────────────────── */}
       {(isLoading || (overview && Object.keys(overview.configs).length > 0)) && (
-        <div style={{ marginBottom: 20 }}>
-          <SectionHeader title="Configuration" />
-          {isLoading ? <ConfigSkeleton /> : overview && <ConfigTable overview={overview} />}
+        <div className="mb-5">
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Configuration</div>
+          {isLoading ? (
+            <div className="rounded-md border overflow-hidden">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <div key={i} className={cn('grid gap-3 px-4 py-3 items-center', i < 4 && 'border-b')} style={{ gridTemplateColumns: '220px 120px 90px 1fr' }}>
+                  <div className="flex flex-col gap-1"><Skeleton className="h-3 w-4/5" /><Skeleton className="h-2 w-9/10" /></div>
+                  <Skeleton className="h-3 w-3/5" />
+                  <Skeleton className="h-5 w-12" />
+                  <Skeleton className="h-3 w-3/4" />
+                </div>
+              ))}
+            </div>
+          ) : overview ? (
+            <ConfigTable overview={overview} />
+          ) : null}
         </div>
       )}
     </div>

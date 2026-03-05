@@ -10,21 +10,21 @@ export function SchemaLayout() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ padding: '20px 24px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--k-muted)', marginBottom: 16 }}>
+    <div className="flex flex-col h-full">
+      <div className="px-6 pt-5 pb-0">
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-4">
           <Link
             to="/clusters/$clusterId/schemas"
             params={{ clusterId }}
-            style={{ color: 'var(--k-muted)', textDecoration: 'none' }}
+            className="hover:text-foreground transition-colors"
           >
             Schemas
           </Link>
           <ChevronRight size={13} />
-          <span style={{ color: 'var(--k-text)', fontFamily: 'var(--k-font)' }}>{schemaId}</span>
+          <span className="text-foreground font-mono">{schemaId}</span>
         </div>
       </div>
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div className="flex-1 overflow-auto">
         <Outlet />
       </div>
     </div>

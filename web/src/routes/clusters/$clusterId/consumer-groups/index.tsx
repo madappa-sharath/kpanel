@@ -7,6 +7,8 @@ import { GroupTable } from '../../../../components/consumer-groups/GroupTable'
 import { useConsumerGroups } from '../../../../hooks/useConsumerGroups'
 import { EmptyState } from '../../../../components/shared/EmptyState'
 import { Users } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 const ALL_STATES = ['Stable', 'Empty', 'PreparingRebalance', 'CompletingRebalance', 'Dead']
 
@@ -23,31 +25,30 @@ export function GroupsPage() {
   })
 
   return (
-    <div className="k-page">
+    <div className="p-6">
       <PageHeader title="Consumer Groups" description={`${groups?.length ?? '…'} groups`}>
-        <select
-          value={stateFilter}
-          onChange={(e) => setStateFilter(e.target.value)}
-          className="k-input"
-          style={{ width: 160 }}
-        >
-          <option value="">All states</option>
-          {ALL_STATES.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-        <input
+        <Select value={stateFilter || 'all'} onValueChange={(v) => setStateFilter(v === 'all' ? '' : v)}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="All states" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All states</SelectItem>
+            {ALL_STATES.map((s) => (
+              <SelectItem key={s} value={s}>{s}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
           type="search"
           placeholder="Search groups…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="k-input"
-          style={{ width: 192 }}
+          className="w-48"
         />
       </PageHeader>
 
-      {isLoading && <p style={{ color: 'var(--k-muted)', fontSize: 15 }}>Loading consumer groups…</p>}
-      {error && <p style={{ color: 'var(--k-red)', fontSize: 15 }}>{(error as Error).message}</p>}
+      {isLoading && <p className="text-muted-foreground">Loading consumer groups…</p>}
+      {error && <p className="text-destructive">{(error as Error).message}</p>}
       {!isLoading && !error && filtered.length === 0 && (
         <EmptyState
           icon={<Users size={32} />}

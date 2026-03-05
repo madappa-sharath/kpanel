@@ -17,11 +17,9 @@ const columns: Column<Topic>[] = [
     header: 'ISR Health',
     render: (t) =>
       t.isr_health === 'degraded' ? (
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span className="flex items-center gap-1.5">
           <StatusBadge variant="warn" label="Degraded" />
-          <span style={{ fontSize: 11, color: 'var(--k-muted)' }}>
-            {t.under_replicated_partitions}p
-          </span>
+          <span className="text-xs text-muted-foreground">{t.under_replicated_partitions}p</span>
         </span>
       ) : (
         <StatusBadge variant="ok" label="Healthy" />

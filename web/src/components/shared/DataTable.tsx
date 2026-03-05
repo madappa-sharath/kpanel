@@ -1,5 +1,14 @@
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+
 export interface Column<T> {
-  key: keyof T & string  // string keys of T only; used as React key and fallback accessor
+  key: keyof T & string
   header: string
   render?: (row: T) => React.ReactNode
   width?: string
@@ -20,63 +29,49 @@ export function DataTable<T>({
   onRowClick,
   emptyMessage = 'No data',
 }: DataTableProps<T>) {
-  // Guard: API stubs or unexpected responses may return a non-array
   const data = Array.isArray(rawData) ? rawData : []
 
   return (
-    <div
-      style={{
-        border:       '1px solid var(--k-border)',
-        borderRadius: 6,
-        overflow:     'hidden',
-        background:   'var(--k-surface)',
-      }}
-    >
-      <table className="k-table">
-        <thead>
-          <tr>
+    <div className="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
             {columns.map((col) => (
-              <th key={String(col.key)} style={{ width: col.width }}>
+              <TableHead key={String(col.key)} style={{ width: col.width }}>
                 {col.header}
-              </th>
+              </TableHead>
             ))}
-          </tr>
-        </thead>
-        <tbody>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {data.length === 0 ? (
-            <tr>
-              <td
+            <TableRow>
+              <TableCell
                 colSpan={columns.length}
-                style={{
-                  textAlign:  'center',
-                  padding:    '32px 14px',
-                  color:      'var(--k-muted)',
-                  fontFamily: 'var(--k-font)',
-                  fontSize:   12,
-                }}
+                className="text-center py-8 text-sm text-muted-foreground"
               >
                 {emptyMessage}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ) : (
             data.map((row) => (
-              <tr
+              <TableRow
                 key={rowKey(row)}
-                className={onRowClick ? 'clickable' : undefined}
+                className={onRowClick ? 'cursor-pointer' : undefined}
                 onClick={() => onRowClick?.(row)}
               >
                 {columns.map((col) => (
-                  <td key={String(col.key)}>
+                  <TableCell key={String(col.key)}>
                     {col.render
                       ? col.render(row)
                       : String((row as Record<string, unknown>)[String(col.key)] ?? '—')}
-                  </td>
+                  </TableCell>
                 ))}
-              </tr>
+              </TableRow>
             ))
           )}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   )
 }

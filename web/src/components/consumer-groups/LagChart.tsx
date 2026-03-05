@@ -56,7 +56,7 @@ export function LagChart({ clusterId, groupId }: LagChartProps) {
 
   if (isLoading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 260, color: 'var(--k-muted)', fontSize: 14 }}>
+      <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">
         Loading lag history…
       </div>
     )
@@ -64,7 +64,7 @@ export function LagChart({ clusterId, groupId }: LagChartProps) {
 
   if (error) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 260, color: 'var(--k-red)', fontSize: 14 }}>
+      <div className="flex items-center justify-center h-64 text-sm text-destructive">
         {(error as Error).message}
       </div>
     )
@@ -72,7 +72,7 @@ export function LagChart({ clusterId, groupId }: LagChartProps) {
 
   if (!rows.length) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 260, color: 'var(--k-muted)', fontSize: 14 }}>
+      <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">
         No lag history yet — data accumulates every 15 s as you view this page.
       </div>
     )
@@ -82,30 +82,32 @@ export function LagChart({ clusterId, groupId }: LagChartProps) {
   const showTopics = topics.length > 0 && topics.length <= 8
 
   return (
-    <div style={{ border: '1px solid var(--k-border)', borderRadius: 6, background: 'var(--k-surface)', padding: 16 }}>
-      <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--k-muted)' }}>
+    <div className="rounded-md border bg-card p-4">
+      <p className="text-sm text-muted-foreground mb-3">
         Lag over time · auto-refreshes every 15 s · last {rows.length} sample{rows.length !== 1 ? 's' : ''}
       </p>
       <ResponsiveContainer width="100%" height={260}>
         <LineChart data={rows} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--k-border)" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis
             dataKey="ts"
             tickFormatter={fmtTime}
-            tick={{ fill: 'var(--k-muted)', fontSize: 11 }}
+            tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
             minTickGap={60}
           />
           <YAxis
             tickFormatter={(v) => formatNumber(v)}
-            tick={{ fill: 'var(--k-muted)', fontSize: 11 }}
+            tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
             width={60}
           />
           <Tooltip
-            formatter={(v: number, name: string) => [formatNumber(v), name]}
-            labelFormatter={(ts: number) => fmtTime(ts)}
-            contentStyle={{ background: 'var(--k-surface)', border: '1px solid var(--k-border)', fontSize: 12 }}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            formatter={((v: any) => [formatNumber(v as number)]) as any}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            labelFormatter={((ts: any) => fmtTime(ts as number)) as any}
+            contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 12 }}
           />
-          <Legend wrapperStyle={{ fontSize: 12, color: 'var(--k-muted)' }} />
+          <Legend wrapperStyle={{ fontSize: 12, color: 'var(--muted-foreground)' }} />
           <Line
             type="monotone"
             dataKey="total_lag"

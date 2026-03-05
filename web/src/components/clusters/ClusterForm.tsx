@@ -5,6 +5,10 @@ import { ArrowRight, AlertCircle } from 'lucide-react'
 import type { Platform, AuthMechanism, AddClusterRequest } from '../../types/cluster'
 import { useAddCluster } from '../../hooks/useClusterConnection'
 import { slugify } from '../../lib/utils'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
 
 type Step = 'platform' | 'connection' | 'auth'
 
@@ -28,16 +32,6 @@ const INITIAL: FormState = {
   password:   '',
   awsProfile: 'default',
   awsRegion:  'us-east-1',
-}
-
-const LABEL_STYLE: React.CSSProperties = {
-  display:       'block',
-  fontSize:      12,
-  fontFamily:    'var(--k-font)',
-  color:         'var(--k-muted)',
-  marginBottom:  6,
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
 }
 
 interface ClusterFormProps {
@@ -73,38 +67,31 @@ export function ClusterForm({ onSuccess, onCancel }: ClusterFormProps) {
   return (
     <div>
       {/* Step indicator */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 22 }}>
+      <div className="flex gap-1.5 mb-5">
         {STEPS.map((s, i) => (
-          <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div key={s} className="flex items-center gap-1.5">
             <div
-              style={{
-                width: 22, height: 22, borderRadius: '50%',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 11, fontFamily: 'var(--k-font)',
-                background: step === s
-                  ? 'var(--k-amber)'
+              className={cn(
+                'w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium border',
+                step === s
+                  ? 'bg-primary text-primary-foreground border-primary'
                   : STEPS.indexOf(step) > i
-                  ? 'var(--k-green-dim)'
-                  : 'var(--k-surface-3)',
-                color: step === s ? '#000' : 'var(--k-muted)',
-                border: '1px solid',
-                borderColor: step === s ? 'var(--k-amber)' : 'var(--k-border-2)',
-              }}
+                  ? 'bg-green-100 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-400 dark:border-green-700'
+                  : 'bg-muted text-muted-foreground border-border',
+              )}
             >
               {i + 1}
             </div>
-            <span style={{ fontSize: 13, color: step === s ? 'var(--k-text)' : 'var(--k-muted)', fontFamily: 'var(--k-font)' }}>
-              {s}
-            </span>
-            {i < 2 && <span style={{ color: 'var(--k-border-3)', fontSize: 13 }}>—</span>}
+            <span className={cn('text-sm', step === s ? 'text-foreground' : 'text-muted-foreground')}>{s}</span>
+            {i < 2 && <span className="text-muted-foreground/40 text-sm">—</span>}
           </div>
         ))}
       </div>
 
       {/* Step 1: Platform */}
       {step === 'platform' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
             {([
               { value: 'generic',   label: 'Generic Kafka',   sub: 'Self-hosted, Redpanda, Aiven, or any Kafka-compatible broker' },
               { value: 'aws',       label: 'AWS MSK',         sub: 'IAM auth + CloudWatch metrics + auto-discovery' },
@@ -112,13 +99,12 @@ export function ClusterForm({ onSuccess, onCancel }: ClusterFormProps) {
             ] as { value: Platform; label: string; sub: string }[]).map(({ value, label, sub }) => (
               <label
                 key={value}
-                style={{
-                  display: 'flex', gap: 12, padding: '12px 14px', borderRadius: 6,
-                  border: '1px solid',
-                  borderColor: form.platform === value ? 'var(--k-amber-border)' : 'var(--k-border-2)',
-                  background:  form.platform === value ? 'var(--k-amber-dim)'    : 'var(--k-surface-3)',
-                  cursor: 'pointer', transition: 'all 120ms ease',
-                }}
+                className={cn(
+                  'flex gap-3 p-3 rounded-md border cursor-pointer transition-colors',
+                  form.platform === value
+                    ? 'border-amber-400 bg-amber-50 dark:bg-amber-950 dark:border-amber-700'
+                    : 'border-border bg-muted/30 hover:bg-muted/50',
+                )}
               >
                 <input
                   type="radio"
@@ -126,35 +112,30 @@ export function ClusterForm({ onSuccess, onCancel }: ClusterFormProps) {
                   value={value}
                   checked={form.platform === value}
                   onChange={() => patch({ platform: value })}
-                  style={{ accentColor: 'var(--k-amber)', marginTop: 2, flexShrink: 0 }}
+                  className="mt-0.5 flex-shrink-0 accent-amber-500"
                 />
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--k-text)', fontFamily: 'var(--k-font)', marginBottom: 3 }}>
-                    {label}
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--k-muted)', fontFamily: 'var(--k-font)' }}>
-                    {sub}
-                  </div>
+                  <div className="text-sm font-medium">{label}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>
                 </div>
               </label>
             ))}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <button className="k-btn k-btn-ghost" onClick={onCancel}>Cancel</button>
-            <button className="k-btn k-btn-primary" onClick={() => setStep('connection')}>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={onCancel}>Cancel</Button>
+            <Button onClick={() => setStep('connection')}>
               Next <ArrowRight size={12} />
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {/* Step 2: Connection */}
       {step === 'connection' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="flex flex-col gap-3">
           <div>
-            <label style={LABEL_STYLE}>Name</label>
-            <input
-              className="k-input"
+            <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">Name</label>
+            <Input
               value={form.name}
               onChange={(e) => patch({ name: e.target.value })}
               placeholder="production-msk"
@@ -162,70 +143,68 @@ export function ClusterForm({ onSuccess, onCancel }: ClusterFormProps) {
             />
           </div>
           <div>
-            <label style={LABEL_STYLE}>Broker addresses</label>
-            <input
-              className="k-input"
+            <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">Broker addresses</label>
+            <Input
               value={form.brokers}
               onChange={(e) => patch({ brokers: e.target.value })}
               placeholder="broker-1:9092, broker-2:9092"
             />
-            <p style={{ marginTop: 5, fontSize: 12, color: 'var(--k-muted)', fontFamily: 'var(--k-font)' }}>
-              comma-separated host:port pairs
-            </p>
+            <p className="mt-1 text-xs text-muted-foreground">comma-separated host:port pairs</p>
           </div>
           {form.name && (
-            <p style={{ fontSize: 12, color: 'var(--k-muted)', fontFamily: 'var(--k-font)' }}>
-              id: <span style={{ color: 'var(--k-amber)' }}>{slugify(form.name)}</span>
+            <p className="text-xs text-muted-foreground">
+              id: <span className="text-amber-600 font-mono">{slugify(form.name)}</span>
               {' '}(generated once, never changes)
             </p>
           )}
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <button className="k-btn k-btn-ghost" onClick={() => setStep('platform')}>← Back</button>
-            <button
-              className="k-btn k-btn-primary"
-              onClick={() => setStep('auth')}
-              disabled={!form.name || !form.brokers}
-            >
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={() => setStep('platform')}>← Back</Button>
+            <Button onClick={() => setStep('auth')} disabled={!form.name || !form.brokers}>
               Next <ArrowRight size={12} />
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {/* Step 3: Auth */}
       {step === 'auth' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="flex flex-col gap-3">
           {form.platform === 'aws' ? (
             <>
               <div>
-                <label style={LABEL_STYLE}>AWS Profile</label>
-                <input className="k-input" value={form.awsProfile} onChange={(e) => patch({ awsProfile: e.target.value })} />
+                <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">AWS Profile</label>
+                <Input value={form.awsProfile} onChange={(e) => patch({ awsProfile: e.target.value })} />
               </div>
               <div>
-                <label style={LABEL_STYLE}>AWS Region</label>
-                <input className="k-input" value={form.awsRegion} onChange={(e) => patch({ awsRegion: e.target.value })} />
+                <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">AWS Region</label>
+                <Input value={form.awsRegion} onChange={(e) => patch({ awsRegion: e.target.value })} />
               </div>
             </>
           ) : (
             <>
               <div>
-                <label style={LABEL_STYLE}>Auth mechanism</label>
-                <select className="k-input" value={form.mechanism} onChange={(e) => patch({ mechanism: e.target.value as AuthMechanism })}>
-                  <option value="none">None</option>
-                  <option value="sasl_plain">SASL PLAIN</option>
-                  <option value="sasl_scram_sha256">SASL SCRAM-SHA-256</option>
-                  <option value="sasl_scram_sha512">SASL SCRAM-SHA-512</option>
-                </select>
+                <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">Auth mechanism</label>
+                <Select value={form.mechanism} onValueChange={(v) => patch({ mechanism: v as AuthMechanism })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="sasl_plain">SASL PLAIN</SelectItem>
+                    <SelectItem value="sasl_scram_sha256">SASL SCRAM-SHA-256</SelectItem>
+                    <SelectItem value="sasl_scram_sha512">SASL SCRAM-SHA-512</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               {form.mechanism !== 'none' && (
                 <>
                   <div>
-                    <label style={LABEL_STYLE}>Username</label>
-                    <input className="k-input" value={form.username} onChange={(e) => patch({ username: e.target.value })} />
+                    <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">Username</label>
+                    <Input value={form.username} onChange={(e) => patch({ username: e.target.value })} />
                   </div>
                   <div>
-                    <label style={LABEL_STYLE}>Password</label>
-                    <input className="k-input" type="password" value={form.password} onChange={(e) => patch({ password: e.target.value })} />
+                    <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">Password</label>
+                    <Input type="password" value={form.password} onChange={(e) => patch({ password: e.target.value })} />
                   </div>
                 </>
               )}
@@ -233,22 +212,17 @@ export function ClusterForm({ onSuccess, onCancel }: ClusterFormProps) {
           )}
 
           {error && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '8px 10px', borderRadius: 4,
-              background: 'var(--k-red-dim)', border: '1px solid rgba(217,82,82,0.2)',
-              color: 'var(--k-red)', fontSize: 13, fontFamily: 'var(--k-font)',
-            }}>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm">
               <AlertCircle size={13} />
               {(error as Error).message}
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <button className="k-btn k-btn-ghost" onClick={() => setStep('connection')}>← Back</button>
-            <button className="k-btn k-btn-primary" onClick={submit} disabled={isPending}>
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={() => setStep('connection')}>← Back</Button>
+            <Button onClick={submit} disabled={isPending}>
               {isPending ? 'Saving…' : 'Save cluster'}
-            </button>
+            </Button>
           </div>
         </div>
       )}

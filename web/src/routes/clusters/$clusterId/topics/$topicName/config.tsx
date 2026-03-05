@@ -1,5 +1,4 @@
 // Screen-4c: Topic Configuration
-// Key-value config viewer with search, inline editing, export, and tooltips
 
 import { useState } from 'react'
 import { useParams } from '@tanstack/react-router'
@@ -7,6 +6,10 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useTopic } from '../../../../../hooks/useTopics'
 import { api } from '../../../../../lib/api'
 import { queryKeys } from '../../../../../lib/queryKeys'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 
 const HIGHLIGHTED_KEYS = new Set([
   'cleanup.policy',
@@ -50,8 +53,8 @@ export function TopicConfigPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [exportToast, setExportToast] = useState(false)
 
-  if (isLoading) return <div className="k-loading">Loading…</div>
-  if (error) return <div className="k-error">{(error as Error).message}</div>
+  if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>
+  if (error) return <div className="p-6 text-destructive">{(error as Error).message}</div>
   if (!topic) return null
 
   const allEntries = Object.entries(topic.config).sort(([a], [b]) => a.localeCompare(b))
@@ -97,31 +100,30 @@ export function TopicConfigPage() {
   }
 
   return (
-    <div className="k-page">
+    <div className="p-6">
       {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        <input
-          className="k-input"
+      <div className="flex items-center gap-2.5 mb-3 flex-wrap">
+        <Input
           type="text"
           placeholder="Search keys…"
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
-          style={{ width: 200 }}
+          className="w-48"
         />
-        <span style={{ fontSize: 13, color: 'var(--k-muted)', flex: 1 }}>
+        <span className="text-sm text-muted-foreground flex-1">
           {entries.length} of {allEntries.length} key{allEntries.length !== 1 ? 's' : ''}
           {hideDefaults && defaultCount > 0 && ` · ${defaultCount} default${defaultCount > 1 ? 's' : ''} hidden`}
         </span>
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           onClick={exportNonDefaults}
           disabled={nonDefaultEntries.length === 0}
-          className="k-btn"
-          style={{ opacity: nonDefaultEntries.length === 0 ? 0.4 : 1 }}
           title="Copy non-default configs as JSON"
         >
           {exportToast ? '✓ Copied!' : 'Export non-defaults'}
-        </button>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--k-muted)', cursor: 'pointer', userSelect: 'none' }}>
+        </Button>
+        <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer select-none">
           <input
             type="checkbox"
             checked={hideDefaults}
@@ -132,12 +134,12 @@ export function TopicConfigPage() {
       </div>
 
       {saveError && (
-        <p style={{ color: 'var(--k-red)', fontSize: 13, marginBottom: 8 }}>{saveError}</p>
+        <p className="text-destructive text-sm mb-2">{saveError}</p>
       )}
 
-      <div style={{ border: '1px solid var(--k-border)', borderRadius: 6, overflow: 'hidden' }}>
+      <div className="rounded-md border">
         {entries.length === 0 ? (
-          <p style={{ padding: '24px', color: 'var(--k-muted)', fontSize: 14, textAlign: 'center' }}>
+          <p className="p-6 text-sm text-muted-foreground text-center">
             {searchText
               ? `No keys matching "${searchText}"`
               : hideDefaults
@@ -153,76 +155,56 @@ export function TopicConfigPage() {
             return (
               <div
                 key={key}
-                className="k-hover-row"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '9px 16px',
-                  borderBottom: '1px solid var(--k-border)',
-                  gap: 24,
-                  background: highlighted ? 'color-mix(in srgb, var(--k-amber) 5%, transparent)' : undefined,
-                }}
+                className={cn(
+                  'flex items-center px-4 py-2.5 border-b last:border-b-0 gap-6 hover:bg-muted/40 transition-colors',
+                  highlighted && 'bg-amber-50/50 dark:bg-amber-950/20',
+                )}
               >
                 <code
-                  style={{
-                    fontSize: 12,
-                    color: highlighted ? 'var(--k-text)' : 'var(--k-muted)',
-                    fontWeight: highlighted ? 500 : undefined,
-                    width: 280,
-                    flexShrink: 0,
-                    fontFamily: 'var(--k-font)',
-                  }}
+                  className={cn(
+                    'text-xs w-72 flex-shrink-0 font-mono',
+                    highlighted ? 'text-foreground font-medium' : 'text-muted-foreground',
+                  )}
                   title={description}
                 >
                   {key}
-                  {description && (
-                    <span style={{ marginLeft: 4, color: 'var(--k-faint)', fontSize: 10 }}>ⓘ</span>
-                  )}
+                  {description && <span className="ml-1 text-muted-foreground/40 text-xs">ⓘ</span>}
                 </code>
 
                 {isEditing ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-                    <input
-                      className="k-input"
+                  <div className="flex items-center gap-2 flex-1">
+                    <Input
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') saveEdit(key)
                         if (e.key === 'Escape') cancelEdit()
                       }}
-                      style={{ flex: 1, fontFamily: 'var(--k-font)', fontSize: 13 }}
+                      className="flex-1 font-mono text-sm"
                       autoFocus
                     />
-                    <button
-                      onClick={() => saveEdit(key)}
-                      disabled={saving}
-                      className="k-btn"
-                      style={{ opacity: saving ? 0.4 : 1 }}
-                    >
+                    <Button size="sm" onClick={() => saveEdit(key)} disabled={saving}>
                       {saving ? 'Saving…' : 'Save'}
-                    </button>
-                    <button onClick={cancelEdit} className="k-btn" style={{ color: 'var(--k-muted)' }}>
-                      Cancel
-                    </button>
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={cancelEdit}>Cancel</Button>
                   </div>
                 ) : (
                   <>
-                    <code style={{ fontSize: 13, color: 'var(--k-text)', fontFamily: 'var(--k-font)', flex: 1 }}>
-                      {entry.value}
-                    </code>
+                    <code className="text-sm font-mono flex-1">{entry.value}</code>
                     {entry.source !== 'default' && (
-                      <span style={{ fontSize: 11, color: 'var(--k-amber)', background: 'color-mix(in srgb, var(--k-amber) 15%, transparent)', padding: '2px 6px', borderRadius: 3, flexShrink: 0 }}>
+                      <Badge variant="outline" className="text-amber-600 border-amber-600/30 bg-amber-50 dark:bg-amber-950 dark:text-amber-400 flex-shrink-0">
                         {entry.source}
-                      </span>
+                      </Badge>
                     )}
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => startEdit(key, entry.value)}
-                      className="k-hover-show"
-                      style={{ background: 'none', border: 'none', padding: '2px 6px', cursor: 'pointer', color: 'var(--k-muted)', fontSize: 13, flexShrink: 0 }}
+                      className="flex-shrink-0 h-7 px-2 opacity-0 group-hover:opacity-100 text-muted-foreground"
                       title={`Edit ${key}`}
                     >
                       ✎
-                    </button>
+                    </Button>
                   </>
                 )}
               </div>

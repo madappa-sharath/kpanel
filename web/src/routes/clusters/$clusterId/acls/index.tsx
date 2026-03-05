@@ -10,7 +10,7 @@ export function AclsPage() {
   useParams({ strict: false })
 
   return (
-    <div className="k-page">
+    <div className="p-6">
       <PageHeader title="Access Control" description="Kafka ACLs — principal, resource, operation" />
       <EmptyState
         icon={<ShieldCheck size={32} />}

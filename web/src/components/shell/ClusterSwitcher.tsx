@@ -20,48 +20,28 @@ export function ClusterSwitcher() {
 
   if (!clusters || clusters.length === 0) {
     return (
-      <span style={{ color: 'var(--k-muted)', fontSize: 11, fontFamily: 'var(--k-font)' }}>
-        no clusters
-      </span>
+      <span className="text-xs text-muted-foreground">no clusters</span>
     )
   }
 
   return (
-    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+    <div className="relative flex items-center">
       <select
         value={activeClusterId ?? ''}
         onChange={handleChange}
-        style={{
-          appearance:  'none',
-          background:  'transparent',
-          border:      'none',
-          fontFamily:  'var(--k-font)',
-          fontSize:    13,
-          fontWeight:  500,
-          color:       active ? 'var(--k-text)' : 'var(--k-muted)',
-          paddingRight: 18,
-          cursor:      'pointer',
-          outline:     'none',
-        }}
+        className="appearance-none bg-transparent border-none text-sm font-medium text-foreground pr-4 cursor-pointer outline-none"
+        style={{ color: active ? undefined : 'var(--muted-foreground)' }}
       >
         {!active && (
           <option value="">select cluster…</option>
         )}
         {clusters.map((c) => (
-          <option key={c.id} value={c.id} style={{ background: '#111', color: '#DAD5CF' }}>
+          <option key={c.id} value={c.id}>
             {c.name}
           </option>
         ))}
       </select>
-      <ChevronDown
-        size={12}
-        style={{
-          position:       'absolute',
-          right:          0,
-          color:          'var(--k-muted)',
-          pointerEvents:  'none',
-        }}
-      />
+      <ChevronDown size={12} className="absolute right-0 text-muted-foreground pointer-events-none" />
     </div>
   )
 }

@@ -1,5 +1,4 @@
 // Screen-3: Topic List
-// Searchable table of all topics in the cluster
 
 import { useState } from 'react'
 import { useParams } from '@tanstack/react-router'
@@ -8,6 +7,8 @@ import { TopicTable } from '../../../../components/topics/TopicTable'
 import { useTopics } from '../../../../hooks/useTopics'
 import { EmptyState } from '../../../../components/shared/EmptyState'
 import { MessageSquare } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 export function TopicsPage() {
   const { clusterId } = useParams({ strict: false }) as { clusterId: string }
@@ -26,50 +27,43 @@ export function TopicsPage() {
   const degradedCount = allTopics.filter((t) => t.isr_health === 'degraded').length
 
   return (
-    <div className="k-page">
+    <div className="p-6">
       <PageHeader title="Topics" description={`${allTopics.length} topics · ${totalPartitions} partitions`}>
-        <input
+        <Input
           type="search"
           placeholder="Search topics…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="k-input"
-          style={{ width: 192 }}
+          className="w-48"
         />
       </PageHeader>
 
       {/* Summary bar */}
-      {!isLoading && !error && allTopics.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, fontSize: 13, color: 'var(--k-muted)' }}>
+      {!isLoading && !error && allTopics.length > 0 && (degradedCount > 0 || hiddenInternalCount > 0) && (
+        <div className="flex items-center gap-4 mb-4 text-sm text-muted-foreground">
           {degradedCount > 0 && (
-            <span style={{ color: 'var(--k-amber)', fontWeight: 500 }}>
+            <span className="text-amber-600 font-medium">
               ⚠ {degradedCount} topic{degradedCount > 1 ? 's' : ''} under-replicated
             </span>
           )}
           {hiddenInternalCount > 0 && (
             <span>
               {hiddenInternalCount} internal topic{hiddenInternalCount > 1 ? 's' : ''} hidden —{' '}
-              <button
-                onClick={() => setShowInternal(true)}
-                style={{ background: 'none', border: 'none', padding: 0, color: 'var(--k-text)', cursor: 'pointer', fontSize: 13, textDecoration: 'underline' }}
-              >
+              <Button variant="link" size="sm" className="h-auto p-0" onClick={() => setShowInternal(true)}>
                 show
-              </button>
+              </Button>
             </span>
           )}
           {showInternal && hiddenInternalCount > 0 && (
-            <button
-              onClick={() => setShowInternal(false)}
-              style={{ background: 'none', border: 'none', padding: 0, color: 'var(--k-muted)', cursor: 'pointer', fontSize: 13, textDecoration: 'underline' }}
-            >
+            <Button variant="link" size="sm" className="h-auto p-0 text-muted-foreground" onClick={() => setShowInternal(false)}>
               hide internal
-            </button>
+            </Button>
           )}
         </div>
       )}
 
-      {isLoading && <p style={{ color: 'var(--k-muted)', fontSize: 15 }}>Loading topics…</p>}
-      {error && <p style={{ color: 'var(--k-red)', fontSize: 15 }}>{(error as Error).message}</p>}
+      {isLoading && <p className="text-muted-foreground">Loading topics…</p>}
+      {error && <p className="text-destructive">{(error as Error).message}</p>}
       {!isLoading && !error && visibleTopics.length === 0 && (
         <EmptyState
           icon={<MessageSquare size={32} />}

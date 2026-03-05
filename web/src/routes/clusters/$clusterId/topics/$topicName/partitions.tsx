@@ -1,5 +1,4 @@
 // Screen-4b: Topic Partitions
-// Per-partition table: leader, replicas, ISR, offsets, message count, skew, status
 
 import { useParams, useNavigate } from '@tanstack/react-router'
 import { useTopic } from '../../../../../hooks/useTopics'
@@ -16,8 +15,8 @@ export function TopicPartitionsPage() {
   const navigate = useNavigate()
   const { data: topic, isLoading, error } = useTopic(clusterId, topicName)
 
-  if (isLoading) return <div className="k-loading">Loading…</div>
-  if (error) return <div className="k-error">{(error as Error).message}</div>
+  if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>
+  if (error) return <div className="p-6 text-destructive">{(error as Error).message}</div>
   if (!topic) return null
 
   const totalMessages = topic.partitions.reduce(
@@ -43,7 +42,7 @@ export function TopicPartitionsPage() {
       key: 'isr',
       header: 'ISR',
       render: (p) => (
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span className="flex items-center gap-1.5">
           {p.isr.join(', ')}
           {p.isr.length < p.replicas.length && (
             <StatusBadge variant="warn" label="Under-replicated" />
@@ -100,7 +99,7 @@ export function TopicPartitionsPage() {
   }
 
   return (
-    <div className="k-page">
+    <div className="p-6">
       <DataTable
         columns={columns}
         data={topic.partitions}

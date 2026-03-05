@@ -1,10 +1,9 @@
-// TODO: Screen-7 — implement as part of Consumer Groups screen.
-
 import { useNavigate } from '@tanstack/react-router'
 import type { ConsumerGroup } from '../../types/consumer'
 import { DataTable, type Column } from '../shared/DataTable'
 import { StatusBadge, groupStateVariant } from '../shared/StatusBadge'
 import { formatNumber } from '../../lib/utils'
+import { cn } from '@/lib/utils'
 
 interface GroupTableProps {
   clusterId: string
@@ -22,15 +21,13 @@ const columns: Column<ConsumerGroup>[] = [
   {
     key: 'topics',
     header: 'Topics',
-    render: (g) => (
-      <span title={g.topics.join(', ')}>{g.topics.length}</span>
-    ),
+    render: (g) => <span title={g.topics.join(', ')}>{g.topics.length}</span>,
   },
   {
     key: 'total_lag',
     header: 'Total Lag',
     render: (g) => (
-      <span style={g.total_lag > 10_000 ? { color: 'var(--k-amber)' } : undefined}>
+      <span className={cn(g.total_lag > 10_000 && 'text-amber-600')}>
         {formatNumber(g.total_lag)}
       </span>
     ),
@@ -38,7 +35,7 @@ const columns: Column<ConsumerGroup>[] = [
   {
     key: 'coordinator_id',
     header: 'Coordinator',
-    render: (g) => <span style={{ color: 'var(--k-muted)' }}>broker-{g.coordinator_id}</span>,
+    render: (g) => <span className="text-muted-foreground">broker-{g.coordinator_id}</span>,
   },
 ]
 

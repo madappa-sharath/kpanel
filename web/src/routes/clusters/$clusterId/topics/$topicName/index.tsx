@@ -1,11 +1,11 @@
 // Screen-4: Topic Overview
-// Stats cards, ISR health callout, leader distribution chart, consumer groups
 
 import { useParams } from '@tanstack/react-router'
 import { useTopic } from '../../../../../hooks/useTopics'
 import { useConsumerGroups } from '../../../../../hooks/useConsumerGroups'
 import { formatRetention } from '../../../../../lib/utils'
 import { StatusBadge } from '../../../../../components/shared/StatusBadge'
+import { cn } from '@/lib/utils'
 
 export function TopicOverviewPage() {
   const { clusterId, topicName } = useParams({ strict: false }) as {
@@ -15,8 +15,8 @@ export function TopicOverviewPage() {
   const { data: topic, isLoading, error } = useTopic(clusterId, topicName)
   const { data: allGroups } = useConsumerGroups(clusterId)
 
-  if (isLoading) return <div className="k-loading">Loading…</div>
-  if (error) return <div className="k-error">{(error as Error).message}</div>
+  if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>
+  if (error) return <div className="p-6 text-destructive">{(error as Error).message}</div>
   if (!topic) return null
 
   const underReplicated = topic.partitions.filter((p) => p.isr.length < p.replicas.length).length
@@ -39,56 +39,35 @@ export function TopicOverviewPage() {
   const cleanupPolicy = topic.config['cleanup.policy']?.value ?? 'delete'
   const replicationFactor = topic.partitions[0]?.replicas.length ?? '—'
 
-  // Leader balance: balanced if max ≤ 1.5× avg
   const leaderCounts = Object.values(leaderCount)
   const avgLeaders = leaderCounts.length > 0
     ? leaderCounts.reduce((a, b) => a + b, 0) / leaderCounts.length
     : 0
   const maxLeaders = leaderCounts.length > 0 ? Math.max(...leaderCounts) : 0
   const isBalanced = avgLeaders === 0 || maxLeaders <= avgLeaders * 1.5
-  const barColor = isBalanced ? 'var(--k-green)' : 'var(--k-amber)'
 
-  // Consumer groups using this topic
   const activeGroups = (allGroups ?? []).filter((g) => g.topics.includes(topicName))
 
   return (
-    <div className="k-page">
+    <div className="p-6">
       {/* Health callout */}
       {(underReplicated > 0 || offline > 0) ? (
-        <div style={{
-          padding: '10px 16px',
-          borderRadius: 6,
-          background: 'color-mix(in srgb, var(--k-amber) 12%, transparent)',
-          border: '1px solid color-mix(in srgb, var(--k-amber) 35%, transparent)',
-          marginBottom: 20,
-          fontSize: 13,
-          color: 'var(--k-text)',
-          display: 'flex',
-          gap: 16,
-        }}>
+        <div className="px-4 py-2.5 rounded-md bg-amber-50 border border-amber-200 dark:bg-amber-950 dark:border-amber-800 mb-5 text-sm flex gap-4">
           {underReplicated > 0 && (
-            <span>⚠ <strong>{underReplicated}</strong> under-replicated partition{underReplicated > 1 ? 's' : ''}</span>
+            <span className="text-amber-700 dark:text-amber-300">⚠ <strong>{underReplicated}</strong> under-replicated partition{underReplicated > 1 ? 's' : ''}</span>
           )}
           {offline > 0 && (
-            <span style={{ color: 'var(--k-red)' }}>✕ <strong>{offline}</strong> offline partition{offline > 1 ? 's' : ''}</span>
+            <span className="text-destructive">✕ <strong>{offline}</strong> offline partition{offline > 1 ? 's' : ''}</span>
           )}
         </div>
       ) : (
-        <div style={{
-          padding: '10px 16px',
-          borderRadius: 6,
-          background: 'color-mix(in srgb, var(--k-green) 10%, transparent)',
-          border: '1px solid color-mix(in srgb, var(--k-green) 30%, transparent)',
-          marginBottom: 20,
-          fontSize: 13,
-          color: 'var(--k-text)',
-        }}>
+        <div className="px-4 py-2.5 rounded-md bg-green-50 border border-green-200 dark:bg-green-950 dark:border-green-800 mb-5 text-sm text-green-700 dark:text-green-300">
           ✓ All replicas in sync
         </div>
       )}
 
       {/* Stats cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 28 }}>
+      <div className="grid grid-cols-6 gap-3 mb-7">
         {[
           { label: 'Partitions', value: topic.partitions.length },
           { label: 'Total Messages', value: totalMessages.toLocaleString() },
@@ -97,53 +76,48 @@ export function TopicOverviewPage() {
           { label: 'Retention', value: formatRetention(retentionMs) },
           { label: 'Cleanup', value: cleanupPolicy },
         ].map(({ label, value }) => (
-          <div key={label} style={{ border: '1px solid var(--k-border)', borderRadius: 6, padding: '12px 16px', background: 'var(--k-surface)' }}>
-            <p style={{ margin: '0 0 4px', fontSize: 11, color: 'var(--k-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</p>
-            <p style={{ margin: 0, fontSize: 20, fontWeight: 600, color: 'var(--k-text)', fontFamily: 'var(--k-font)' }}>{value}</p>
+          <div key={label} className="border rounded-md p-3 bg-card">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
+            <p className="text-xl font-semibold font-mono">{value}</p>
           </div>
         ))}
       </div>
 
       {/* Leader distribution */}
-      <p style={{ margin: '0 0 12px', fontSize: 11, color: 'var(--k-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-        Partition Leader Distribution
-      </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 28 }}>
+      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">Partition Leader Distribution</p>
+      <div className="flex flex-col gap-2 mb-7">
         {Object.entries(leaderCount)
           .sort(([a], [b]) => Number(a) - Number(b))
           .map(([brokerId, count]) => (
-            <div key={brokerId} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 12, color: 'var(--k-muted)', width: 72, flexShrink: 0 }}>Broker {brokerId}</span>
-              <div style={{ flex: 1, height: 6, background: 'var(--k-surface-3)', borderRadius: 3, overflow: 'hidden' }}>
+            <div key={brokerId} className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground w-18 flex-shrink-0">Broker {brokerId}</span>
+              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
                 <div
-                  style={{ height: '100%', background: barColor, borderRadius: 3, width: `${(count / topic.partitions.length) * 100}%` }}
+                  className={cn('h-full rounded-full', isBalanced ? 'bg-green-500' : 'bg-amber-500')}
+                  style={{ width: `${(count / topic.partitions.length) * 100}%` }}
                 />
               </div>
-              <span style={{ fontSize: 12, color: 'var(--k-muted)', width: 24, textAlign: 'right' }}>{count}</span>
+              <span className="text-xs text-muted-foreground w-6 text-right">{count}</span>
             </div>
           ))}
       </div>
 
       {/* Consumer groups */}
-      <p style={{ margin: '0 0 12px', fontSize: 11, color: 'var(--k-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-        Active Consumer Groups
-      </p>
+      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">Active Consumer Groups</p>
       {activeGroups.length === 0 ? (
-        <p style={{ fontSize: 13, color: 'var(--k-muted)', padding: '16px 0' }}>No active consumers for this topic</p>
+        <p className="text-sm text-muted-foreground py-4">No active consumers for this topic</p>
       ) : (
-        <div style={{ border: '1px solid var(--k-border)', borderRadius: 6, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 100px', padding: '6px 16px', fontSize: 11, color: 'var(--k-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', background: 'var(--k-surface-2)' }}>
+        <div className="rounded-md border">
+          <div className="grid gap-3 px-4 py-2 text-xs text-muted-foreground uppercase tracking-wide bg-muted/50" style={{ gridTemplateColumns: '1fr 120px 100px' }}>
             <span>Group ID</span>
             <span>State</span>
-            <span style={{ textAlign: 'right' }}>Lag</span>
+            <span className="text-right">Lag</span>
           </div>
           {activeGroups.map((g) => (
-            <div key={g.id} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 100px', padding: '9px 16px', borderTop: '1px solid var(--k-border)', alignItems: 'center' }}>
-              <span style={{ fontSize: 13, fontFamily: 'var(--k-font)', color: 'var(--k-text)' }}>{g.id}</span>
+            <div key={g.id} className="grid gap-3 px-4 py-2.5 border-t items-center" style={{ gridTemplateColumns: '1fr 120px 100px' }}>
+              <span className="text-sm font-mono">{g.id}</span>
               <span><StatusBadge variant={g.state === 'Stable' ? 'ok' : 'warn'} label={g.state} /></span>
-              <span style={{ fontSize: 13, fontFamily: 'var(--k-font)', textAlign: 'right', color: 'var(--k-text)' }}>
-                {g.total_lag.toLocaleString()}
-              </span>
+              <span className="text-sm font-mono text-right">{g.total_lag.toLocaleString()}</span>
             </div>
           ))}
         </div>

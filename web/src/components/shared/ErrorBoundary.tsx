@@ -31,10 +31,10 @@ export class ErrorBoundary extends Component<Props, State> {
       return this.props.fallback ? (
         this.props.fallback(error, this.reset)
       ) : (
-        <div style={{ padding: 24 }}>
-          <p style={{ margin: '0 0 4px', fontSize: 14, color: 'var(--k-red)' }}>Something went wrong</p>
-          <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--k-muted)', fontFamily: 'var(--k-font)' }}>{error.message}</p>
-          <button onClick={this.reset} className="k-btn-link" style={{ textDecoration: 'underline' }}>
+        <div className="p-6">
+          <p className="text-sm text-destructive mb-1">Something went wrong</p>
+          <p className="text-xs text-muted-foreground font-mono mb-3">{error.message}</p>
+          <button onClick={this.reset} className="text-sm underline text-muted-foreground hover:text-foreground">
             Try again
           </button>
         </div>

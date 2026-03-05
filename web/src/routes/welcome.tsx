@@ -6,6 +6,8 @@ import { useDeleteCluster } from '../hooks/useClusterConnection'
 import { useAppStore } from '../stores/appStore'
 import { ConfirmModal } from '../components/shared/ConfirmModal'
 import { ClusterForm } from '../components/clusters/ClusterForm'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 
 export function WelcomePage() {
   const navigate                      = useNavigate()
@@ -21,95 +23,65 @@ export function WelcomePage() {
   }
 
   return (
-    <div
-      className="k-dot-grid"
-      style={{
-        minHeight:      '100vh',
-        display:        'flex',
-        alignItems:     'center',
-        justifyContent: 'center',
-        padding:        '40px 20px',
-        background:     'var(--k-bg)',
-      }}
-    >
-      <div style={{ width: '100%', maxWidth: 420 }}>
+    <div className="min-h-screen flex items-center justify-center bg-background px-5 py-10">
+      <div className="w-full max-w-sm">
 
         {/* Wordmark */}
-        <div style={{ textAlign: 'center', marginBottom: 48 }}>
-          <div
-            style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              width: 48, height: 48, background: 'var(--k-amber)', borderRadius: 10,
-              marginBottom: 18, fontFamily: 'var(--k-font)', fontWeight: 600,
-              fontSize: 24, color: '#000',
-            }}
-          >
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center justify-center w-12 h-12 bg-amber-500 rounded-xl mb-4 font-mono font-semibold text-2xl text-black">
             k
           </div>
-          <h1 style={{ margin: 0, fontFamily: 'var(--k-font)', fontSize: 26, fontWeight: 500, color: 'var(--k-text)', letterSpacing: '-0.02em' }}>
-            kpanel
-          </h1>
-          <p style={{ margin: '8px 0 0', fontFamily: 'var(--k-font)', fontSize: 14, color: 'var(--k-muted)' }}>
-            kafka cluster manager
-          </p>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">kpanel</h1>
+          <p className="mt-2 text-sm text-muted-foreground">kafka cluster manager</p>
         </div>
 
         {/* Card */}
-        <div style={{ background: 'var(--k-surface)', border: '1px solid var(--k-border)', borderRadius: 8, overflow: 'hidden' }}>
+        <div className="rounded-lg border bg-card overflow-hidden">
 
           {!showForm && (
             <>
               {isLoading && (
-                <div style={{ padding: '20px 18px', color: 'var(--k-muted)', fontSize: 14, fontFamily: 'var(--k-font)' }}>
-                  Loading…
-                </div>
+                <div className="px-4 py-5 text-sm text-muted-foreground">Loading…</div>
               )}
 
               {!isLoading && clusters && clusters.length > 0 && (
                 <div>
-                  <div style={{
-                    padding: '10px 16px 8px', fontSize: 11, color: 'var(--k-muted)',
-                    fontFamily: 'var(--k-font)', borderBottom: '1px solid var(--k-border)',
-                    textTransform: 'uppercase', letterSpacing: '0.08em',
-                  }}>
+                  <div className="px-4 py-2.5 text-xs text-muted-foreground border-b uppercase tracking-wider">
                     Saved clusters
                   </div>
                   {clusters.map((c) => (
                     <div
                       key={c.id}
-                      className="k-hover-row"
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        padding: '12px 14px', borderBottom: '1px solid var(--k-border)',
-                      }}
+                      className="flex items-center gap-3 px-4 py-3 border-b hover:bg-muted/40 transition-colors"
                     >
-                      <span className="k-dot k-dot-muted" />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontFamily: 'var(--k-font)', fontSize: 15, fontWeight: 500, color: 'var(--k-text)', marginBottom: 2 }}>
-                          {c.name}
-                        </div>
-                        <div style={{ fontFamily: 'var(--k-font)', fontSize: 12, color: 'var(--k-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {c.brokers.join(', ')}
-                        </div>
+                      <div className="size-1.5 rounded-full bg-muted-foreground/40 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-foreground">{c.name}</div>
+                        <div className="text-xs text-muted-foreground truncate">{c.brokers.join(', ')}</div>
                       </div>
                       {c.platform === 'aws' && (
-                        <span className="k-badge k-badge-amber" style={{ flexShrink: 0 }}>MSK</span>
+                        <Badge variant="outline" className="text-amber-600 border-amber-600/30 bg-amber-50 dark:bg-amber-950 dark:text-amber-400 flex-shrink-0">
+                          MSK
+                        </Badge>
                       )}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                        <button
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => connectTo(c.id)}
-                          className="k-btn-link"
-                          style={{ color: 'var(--k-amber)', fontWeight: 500, fontSize: 13 }}
+                          className="h-7 text-amber-600 hover:text-amber-600 gap-1"
                         >
                           Connect <ArrowRight size={11} />
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => setConfirm(c.id)}
-                          className="k-icon-btn k-icon-btn-danger"
                           aria-label={`Delete ${c.name}`}
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
                         >
                           <Trash2 size={12} />
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -117,31 +89,29 @@ export function WelcomePage() {
               )}
 
               {!isLoading && (!clusters || clusters.length === 0) && (
-                <div style={{ padding: '32px 18px', textAlign: 'center', fontFamily: 'var(--k-font)', color: 'var(--k-muted)', fontSize: 14 }}>
-                  <p style={{ margin: '0 0 4px', color: 'var(--k-text)', fontWeight: 500 }}>No clusters configured</p>
-                  <p style={{ margin: 0, fontSize: 13 }}>Connect to any Kafka cluster to begin.</p>
+                <div className="px-4 py-8 text-center text-sm">
+                  <p className="font-medium text-foreground mb-1">No clusters configured</p>
+                  <p className="text-muted-foreground">Connect to any Kafka cluster to begin.</p>
                 </div>
               )}
 
-              <div style={{ padding: '12px 14px', borderTop: '1px solid var(--k-border)' }}>
-                <button
-                  className="k-btn k-btn-ghost"
+              <div className="px-4 py-3 border-t">
+                <Button
+                  variant="outline"
+                  className="w-full justify-center gap-1.5"
                   onClick={() => setShowForm(true)}
-                  style={{ width: '100%', justifyContent: 'center' }}
                 >
                   <Plus size={13} />
                   Add cluster
-                </button>
+                </Button>
               </div>
             </>
           )}
 
           {showForm && (
-            <div style={{ padding: '18px 18px 20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                <span style={{ fontFamily: 'var(--k-font)', fontSize: 15, fontWeight: 500, color: 'var(--k-text)' }}>
-                  Add cluster
-                </span>
+            <div className="p-5">
+              <div className="flex items-center justify-between mb-5">
+                <span className="text-sm font-medium">Add cluster</span>
               </div>
               <ClusterForm
                 onSuccess={() => setShowForm(false)}
@@ -151,7 +121,7 @@ export function WelcomePage() {
           )}
         </div>
 
-        <p style={{ marginTop: 16, textAlign: 'center', fontSize: 12, color: 'var(--k-faint)', fontFamily: 'var(--k-font)' }}>
+        <p className="mt-4 text-center text-xs text-muted-foreground/50">
           credentials stored in system keychain · no data leaves your machine
         </p>
       </div>

@@ -1,5 +1,4 @@
 // Screen-8b: Consumer Group Offsets
-// Per-partition committed offset vs log-end with lag highlight
 
 import { useState, useMemo } from 'react'
 import { useParams } from '@tanstack/react-router'
@@ -7,6 +6,8 @@ import { useConsumerGroup } from '../../../../../hooks/useConsumerGroups'
 import { DataTable, type Column } from '../../../../../components/shared/DataTable'
 import type { GroupOffset } from '../../../../../types/consumer'
 import { formatNumber } from '../../../../../lib/utils'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
 
 function makeColumns(memberMap: Map<string, string>): Column<GroupOffset>[] {
   return [
@@ -18,7 +19,7 @@ function makeColumns(memberMap: Map<string, string>): Column<GroupOffset>[] {
       key: 'lag',
       header: 'Lag',
       render: (o) => (
-        <span style={{ color: o.lag > 10_000 ? 'var(--k-red)' : o.lag > 1_000 ? 'var(--k-amber)' : undefined }}>
+        <span className={cn(o.lag > 10_000 ? 'text-destructive' : o.lag > 1_000 ? 'text-amber-600' : '')}>
           {formatNumber(o.lag)}
           {o.lag > 10_000 && ' ⚠'}
         </span>
@@ -29,7 +30,7 @@ function makeColumns(memberMap: Map<string, string>): Column<GroupOffset>[] {
       header: 'Assigned Member',
       render: (o) => {
         const label = o.member_id ? (memberMap.get(o.member_id) ?? o.member_id) : '—'
-        return <span style={{ color: o.member_id ? 'var(--k-text)' : 'var(--k-faint)', fontFamily: 'var(--k-font)', fontSize: 11 }}>{label}</span>
+        return <span className={cn('font-mono text-xs', !o.member_id && 'text-muted-foreground/40')}>{label}</span>
       },
     },
   ]
@@ -49,7 +50,6 @@ export function GroupOffsetsPage() {
     [group],
   )
 
-  // Build memberId → clientId map for readable display
   const memberMap = useMemo(() => {
     const m = new Map<string, string>()
     for (const mem of group?.members ?? []) {
@@ -67,23 +67,23 @@ export function GroupOffsetsPage() {
     return data
   }, [group, topicFilter, sortByLag])
 
-  if (isLoading) return <div className="k-loading">Loading…</div>
-  if (error) return <div className="k-error">{(error as Error).message}</div>
+  if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>
+  if (error) return <div className="p-6 text-destructive">{(error as Error).message}</div>
   if (!group) return null
 
   return (
-    <div className="k-page">
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
-        <select
-          value={topicFilter}
-          onChange={(e) => setTopicFilter(e.target.value)}
-          className="k-input"
-          style={{ width: 220 }}
-        >
-          <option value="">All topics</option>
-          {topics.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--k-muted)', cursor: 'pointer' }}>
+    <div className="p-6">
+      <div className="flex gap-2 mb-3 items-center">
+        <Select value={topicFilter || 'all'} onValueChange={(v) => setTopicFilter(v === 'all' ? '' : v)}>
+          <SelectTrigger className="w-56">
+            <SelectValue placeholder="All topics" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All topics</SelectItem>
+            {topics.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer">
           <input
             type="checkbox"
             checked={sortByLag}
