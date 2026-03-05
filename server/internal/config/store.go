@@ -18,6 +18,11 @@ type Store struct {
 	cfg  Config
 }
 
+// Dir returns the directory that holds config.json and related files.
+func (s *Store) Dir() string {
+	return filepath.Dir(s.path)
+}
+
 // NewStore loads (or creates) config.json in configDir and returns a Store.
 func NewStore(configDir string) (*Store, error) {
 	s := &Store{

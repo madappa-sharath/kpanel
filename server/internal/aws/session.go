@@ -30,7 +30,7 @@ func CheckSession(ctx context.Context, profile, region string) SessionStatus {
 	if region != "" {
 		loadOpts = append(loadOpts, config.WithRegion(region))
 	}
-	if profile != "" && profile != "default" {
+	if profile != "" {
 		loadOpts = append(loadOpts, config.WithSharedConfigProfile(profile))
 	}
 
@@ -76,7 +76,7 @@ func recoveryHint(profile string, err error) string {
 	msg := strings.ToLower(err.Error())
 	if strings.Contains(msg, "sso") || strings.Contains(msg, "token") ||
 		strings.Contains(msg, "expired") || strings.Contains(msg, "not authorized") {
-		if profile != "" && profile != "default" {
+		if profile != "" {
 			return fmt.Sprintf("aws sso login --profile %s", profile)
 		}
 		return "aws sso login"

@@ -20,6 +20,7 @@ func Mount(r chi.Router, store *config.Store) {
 		r.Use(middleware.SetHeader("Content-Type", "application/json"))
 		r.Get("/", h.ListConnections)
 		r.Post("/", h.AddConnection)
+		r.Put("/{id}", h.UpdateConnection)
 		r.Delete("/{id}", h.DeleteConnection)
 		r.Get("/{id}/status", h.ConnectionStatus)
 		r.Get("/{id}/session", h.ConnectionSession)

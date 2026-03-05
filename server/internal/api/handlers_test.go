@@ -15,7 +15,8 @@ import (
 // testServer creates a fresh chi router with a real config.Store backed by a temp dir.
 func testServer(t *testing.T) (http.Handler, *config.Store) {
 	t.Helper()
-	store, err := config.NewStore(t.TempDir())
+	dir := t.TempDir()
+	store, err := config.NewStore(dir)
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
 	}

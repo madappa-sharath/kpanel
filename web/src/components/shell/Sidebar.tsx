@@ -46,14 +46,16 @@ export function Sidebar() {
         flexShrink: 0,
       }}
     >
-      {/* Logo mark */}
-      <div
-        className="border-b border-border flex items-center gap-2.5 flex-shrink-0"
+      {/* Logo mark — links to /welcome (add / switch / delete clusters) */}
+      <Link
+        to="/welcome"
+        className="no-underline border-b border-border flex items-center gap-2.5 flex-shrink-0 hover:bg-accent transition-colors"
         style={{
           height:          'var(--header-h)',
           padding:         collapsed ? '0' : '0 12px',
           justifyContent:  collapsed ? 'center' : 'flex-start',
         }}
+        title="Manage clusters"
       >
         <div className="w-6 h-6 bg-amber-500 rounded flex items-center justify-center flex-shrink-0 font-semibold text-sm text-black font-mono">
           k
@@ -63,7 +65,7 @@ export function Sidebar() {
             kpanel
           </span>
         )}
-      </div>
+      </Link>
 
       {/* Nav */}
       <nav className="flex-1 p-1.5 flex flex-col gap-0.5 overflow-y-auto overflow-x-hidden">
@@ -102,17 +104,35 @@ export function Sidebar() {
 
       {/* Bottom: settings + collapse toggle */}
       <div className="p-1.5 border-t border-border flex flex-col gap-0.5">
-        <Link to="/settings" className="no-underline">
-          {({ isActive }) => (
-            <div
-              className={navItemClass(isActive, collapsed)}
-              title={collapsed ? 'Settings' : undefined}
-            >
-              <Settings size={15} className="flex-shrink-0" />
-              {!collapsed && <span>Settings</span>}
-            </div>
-          )}
-        </Link>
+        {clusterId ? (
+          <Link
+            to="/clusters/$clusterId/settings"
+            params={{ clusterId }}
+            className="no-underline"
+          >
+            {({ isActive }) => (
+              <div
+                className={navItemClass(isActive, collapsed)}
+                title={collapsed ? 'Settings' : undefined}
+              >
+                <Settings size={15} className="flex-shrink-0" />
+                {!collapsed && <span>Settings</span>}
+              </div>
+            )}
+          </Link>
+        ) : (
+          <Link to="/settings" className="no-underline">
+            {({ isActive }) => (
+              <div
+                className={navItemClass(isActive, collapsed)}
+                title={collapsed ? 'Settings' : undefined}
+              >
+                <Settings size={15} className="flex-shrink-0" />
+                {!collapsed && <span>Settings</span>}
+              </div>
+            )}
+          </Link>
+        )}
 
         <button
           onClick={toggleSidebar}

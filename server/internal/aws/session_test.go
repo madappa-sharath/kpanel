@@ -20,7 +20,7 @@ var recoveryHintCases = []struct {
 	{"expired keyword", "prod", errors.New("credentials expired"), "aws sso login --profile prod"},
 	{"not authorized keyword", "prod", errors.New("not authorized to perform this action"), "aws sso login --profile prod"},
 	{"uppercase SSO", "prod", errors.New("SSO session expired"), "aws sso login --profile prod"},
-	{"default profile", "default", errors.New("sso expired"), "aws sso login"},
+	{"default profile", "default", errors.New("sso expired"), "aws sso login --profile default"},
 	{"empty profile", "", errors.New("sso expired"), "aws sso login"},
 	{"generic network error", "prod", errors.New("connection refused"), ""},
 	{"timeout error", "prod", errors.New("request timed out"), ""},

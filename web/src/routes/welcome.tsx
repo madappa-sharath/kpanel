@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowRight, Plus, Trash2 } from 'lucide-react'
+import { ArrowRight, Plus, Pencil, Trash2 } from 'lucide-react'
 import { useClusters } from '../hooks/useCluster'
 import { useDeleteCluster } from '../hooks/useClusterConnection'
 import { useAppStore } from '../stores/appStore'
@@ -72,6 +72,18 @@ export function WelcomePage() {
                           className="h-7 text-amber-600 hover:text-amber-600 gap-1"
                         >
                           Connect <ArrowRight size={11} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setActive(c.id)
+                            navigate({ to: '/clusters/$clusterId/settings', params: { clusterId: c.id } })
+                          }}
+                          aria-label={`Edit ${c.name}`}
+                          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                        >
+                          <Pencil size={12} />
                         </Button>
                         <Button
                           variant="ghost"

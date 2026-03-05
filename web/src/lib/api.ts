@@ -1,4 +1,4 @@
-import type { Cluster, SessionStatus, AddClusterRequest } from '../types/cluster'
+import type { Cluster, SessionStatus, AddClusterRequest, UpdateClusterRequest } from '../types/cluster'
 import type { Topic, TopicDetail, Message, PeekRequest } from '../types/topic'
 import type { ConsumerGroup, GroupDetail, LagSnapshot, ResetOffsetsRequest, ResetOffsetsResult } from '../types/consumer'
 import type { Broker, ClusterStatus, ClusterOverview } from '../types/broker'
@@ -26,6 +26,8 @@ export const api = {
     list: () => request<Cluster[]>('/connections'),
     add: (body: AddClusterRequest) =>
       request<Cluster>('/connections', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: string, body: UpdateClusterRequest) =>
+      request<Cluster>(`/connections/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
     delete: (id: string) =>
       request<void>(`/connections/${id}`, { method: 'DELETE' }),
     session: (id: string) =>

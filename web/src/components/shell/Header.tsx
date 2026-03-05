@@ -81,6 +81,7 @@ export function Header() {
       {clusterId && (
         <Badge
           variant="outline"
+          title={status?.identity ?? undefined}
           className={cn(
             'gap-1.5 text-xs',
             (isLoading || status === undefined)

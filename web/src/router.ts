@@ -28,6 +28,9 @@ import { GroupMembersPage } from './routes/clusters/$clusterId/consumer-groups/$
 import { GroupOffsetsPage } from './routes/clusters/$clusterId/consumer-groups/$groupId/offsets'
 import { GroupLagPage } from './routes/clusters/$clusterId/consumer-groups/$groupId/lag'
 
+// Cluster settings
+import { ClusterSettingsPage } from './routes/clusters/$clusterId/settings/index'
+
 // Schema + ACL pages
 import { SchemasPage } from './routes/clusters/$clusterId/schemas/index'
 import { SchemaLayout } from './routes/clusters/$clusterId/schemas/$schemaId/__layout'
@@ -184,6 +187,13 @@ const schemaDetailRoute = createRoute({
   component: SchemaDetailPage,
 })
 
+// ─── Cluster settings route ───────────────────────────────────────────────────
+const clusterSettingsRoute = createRoute({
+  getParentRoute: () => clusterRoute,
+  path: '/settings',
+  component: ClusterSettingsPage,
+})
+
 // ─── ACL routes ───────────────────────────────────────────────────────────────
 const aclsRoute = createRoute({
   getParentRoute: () => clusterRoute,
@@ -217,6 +227,7 @@ const routeTree = rootRoute.addChildren([
       schemasRoute,
       schemaRoute.addChildren([schemaDetailRoute]),
       aclsRoute,
+      clusterSettingsRoute,
     ]),
   ]),
 ])

@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { queryKeys } from '../lib/queryKeys'
 import { useAppStore } from '../stores/appStore'
-import type { AddClusterRequest } from '../types/cluster'
+import type { AddClusterRequest, UpdateClusterRequest } from '../types/cluster'
 
 export function useAddCluster() {
   const qc = useQueryClient()
@@ -13,6 +13,16 @@ export function useAddCluster() {
     onSuccess: (cluster) => {
       qc.invalidateQueries({ queryKey: queryKeys.connections.all() })
       setActive(cluster.id)
+    },
+  })
+}
+
+export function useUpdateCluster(clusterId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: UpdateClusterRequest) => api.connections.update(clusterId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.connections.all() })
     },
   })
 }

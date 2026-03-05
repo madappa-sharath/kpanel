@@ -13,6 +13,7 @@ export interface ClusterStatus {
   connected: boolean
   brokerCount?: number
   controllerId?: number
+  identity?: string // AWS ARN of the principal used for auth
   error?: string
 }
 

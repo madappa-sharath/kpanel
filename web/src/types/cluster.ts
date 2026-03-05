@@ -11,23 +11,23 @@ export type AuthMechanism =
 
 export interface ClusterAuth {
   mechanism: AuthMechanism
-  credential_ref?: string // keyring key, omitted when no creds stored
+  credentialRef?: string // keyring key, omitted when no creds stored
 }
 
 export interface TLSConfig {
   enabled: boolean
-  ca_file?: string
+  caCertPath?: string
 }
 
 export interface AWSPlatformConfig {
   profile: string
   region: string
-  cluster_arn?: string
+  clusterArn?: string
 }
 
 export interface ConfluentPlatformConfig {
-  environment_id: string
-  cluster_id: string
+  environment: string
+  clusterId: string
 }
 
 export interface Cluster {
@@ -37,7 +37,7 @@ export interface Cluster {
   brokers: string[]
   auth: ClusterAuth
   tls: TLSConfig
-  platform_config?: AWSPlatformConfig | ConfluentPlatformConfig
+  platformConfig?: { aws?: AWSPlatformConfig; confluent?: ConfluentPlatformConfig }
 }
 
 export interface SessionStatus {
@@ -45,6 +45,9 @@ export interface SessionStatus {
   identity?: string // AWS ARN for aws clusters
   error?: string
 }
+
+// Request body for PUT /api/connections/:id (same shape, id omitted — locked server-side)
+export type UpdateClusterRequest = Omit<AddClusterRequest, 'id'>
 
 // Request body for POST /api/connections
 export interface AddClusterRequest {
@@ -56,11 +59,11 @@ export interface AddClusterRequest {
     mechanism: AuthMechanism
     username?: string
     password?: string
-    aws_profile?: string
-    aws_region?: string
+    awsProfile?: string
+    awsRegion?: string
   }
   tls?: {
     enabled: boolean
-    ca_file?: string
+    caCert?: string // PEM content — only sent when uploading a new cert; omit to keep existing
   }
 }

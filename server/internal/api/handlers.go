@@ -30,13 +30,18 @@ func slugify(s string) string {
 
 // Handlers holds shared dependencies for HTTP handlers.
 type Handlers struct {
-	store    *config.Store
-	lagStore *LagStore
+	store     *config.Store
+	certsDir  string // ~/.kpanel/certs/ — managed CA cert files live here
+	lagStore  *LagStore
 }
 
 // NewHandlers creates a Handlers instance.
 func NewHandlers(store *config.Store) *Handlers {
-	return &Handlers{store: store, lagStore: NewLagStore()}
+	return &Handlers{
+		store:    store,
+		certsDir: store.Dir() + "/certs",
+		lagStore: NewLagStore(),
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

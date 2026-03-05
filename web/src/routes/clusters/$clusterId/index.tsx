@@ -180,7 +180,7 @@ function ConfigTable({ overview }: { overview: ClusterOverview }) {
 export function DashboardPage() {
   const { clusterId } = useParams({ strict: false }) as { clusterId: string }
   const { data: clusters } = useClusters()
-  const { data: status } = useConnectionStatus(clusterId)
+  const { data: status, isLoading: statusLoading } = useConnectionStatus(clusterId)
   const { data: overview, isLoading } = useClusterOverview(clusterId)
   const [copied, setCopied] = useState(false)
 
@@ -350,6 +350,12 @@ export function DashboardPage() {
                 <span className="text-xs text-muted-foreground uppercase tracking-wide">Controller</span>
                 <span className="text-sm">Broker {overview.controllerId}</span>
               </div>
+              {!statusLoading && status?.identity && (
+                <div className="flex flex-col gap-1 pt-1 border-t border-border">
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide">Auth Principal</span>
+                  <span className="text-xs font-mono text-muted-foreground break-all">{status.identity}</span>
+                </div>
+              )}
             </div>
           ) : null}
         </div>

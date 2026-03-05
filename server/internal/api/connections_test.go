@@ -238,6 +238,174 @@ func TestAddConnection_Upsert(t *testing.T) {
 	}
 }
 
+// --- UpdateConnection ---
+
+func TestUpdateConnection_Basic(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{ID: "upd", Name: "Old Name", Platform: "generic", Brokers: []string{"old:9092"}})
+
+	body := map[string]any{
+		"name":    "New Name",
+		"brokers": []string{"new:9092"},
+	}
+	w := do(t, h, http.MethodPut, "/api/connections/upd", body)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d (body: %s)", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp config.Cluster
+	decodeJSON(t, w, &resp)
+	if resp.ID != "upd" {
+		t.Errorf("ID must not change: got %q", resp.ID)
+	}
+	if resp.Name != "New Name" {
+		t.Errorf("Name: got %q, want New Name", resp.Name)
+	}
+	if len(resp.Brokers) != 1 || resp.Brokers[0] != "new:9092" {
+		t.Errorf("Brokers: got %v", resp.Brokers)
+	}
+}
+
+func TestUpdateConnection_NotFound(t *testing.T) {
+	h, _ := testServer(t)
+	body := map[string]any{"name": "X", "brokers": []string{"b:9092"}}
+	w := do(t, h, http.MethodPut, "/api/connections/ghost", body)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestUpdateConnection_MissingName(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{ID: "c", Name: "C", Platform: "generic", Brokers: []string{"b"}})
+
+	w := do(t, h, http.MethodPut, "/api/connections/c", map[string]any{"brokers": []string{"b"}})
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestUpdateConnection_UpsertCredentials(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{
+		ID: "sasl", Name: "SASL", Platform: "generic", Brokers: []string{"b"},
+		Auth: &config.ClusterAuth{Mechanism: "sasl_plain", CredentialRef: "sasl"},
+	})
+	_ = credentials.Set("sasl", credentials.Credential{Username: "old", Password: "oldpw"})
+
+	body := map[string]any{
+		"name":    "SASL",
+		"brokers": []string{"b"},
+		"auth": map[string]any{
+			"mechanism": "sasl_plain",
+			"username":  "new",
+			"password":  "newpw",
+		},
+	}
+	w := do(t, h, http.MethodPut, "/api/connections/sasl", body)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d (body: %s)", w.Code, http.StatusOK, w.Body.String())
+	}
+	cred, err := credentials.Get("sasl")
+	if err != nil {
+		t.Fatalf("credentials.Get: %v", err)
+	}
+	if cred.Username != "new" || cred.Password != "newpw" {
+		t.Errorf("updated cred: got {%q, %q}", cred.Username, cred.Password)
+	}
+}
+
+func TestUpdateConnection_PreservesCredRefWhenNoPassword(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{
+		ID: "keep", Name: "Keep", Platform: "generic", Brokers: []string{"b"},
+		Auth: &config.ClusterAuth{Mechanism: "sasl_plain", CredentialRef: "keep"},
+	})
+	_ = credentials.Set("keep", credentials.Credential{Username: "u", Password: "p"})
+
+	body := map[string]any{
+		"name":    "Keep",
+		"brokers": []string{"b2"},
+		"auth":    map[string]any{"mechanism": "sasl_plain"},
+	}
+	w := do(t, h, http.MethodPut, "/api/connections/keep", body)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusOK)
+	}
+	var resp config.Cluster
+	decodeJSON(t, w, &resp)
+	if resp.Auth == nil || resp.Auth.CredentialRef != "keep" {
+		t.Errorf("CredentialRef should be preserved: got %v", resp.Auth)
+	}
+	// Original credential still intact.
+	cred, err := credentials.Get("keep")
+	if err != nil {
+		t.Fatalf("credentials.Get: %v", err)
+	}
+	if cred.Password != "p" {
+		t.Errorf("password changed unexpectedly: got %q", cred.Password)
+	}
+}
+
+func TestUpdateConnection_RemovesCredWhenSwitchingToNone(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{
+		ID: "rm-auth", Name: "RM", Platform: "generic", Brokers: []string{"b"},
+		Auth: &config.ClusterAuth{Mechanism: "sasl_plain", CredentialRef: "rm-auth"},
+	})
+	_ = credentials.Set("rm-auth", credentials.Credential{Username: "u", Password: "p"})
+
+	body := map[string]any{
+		"name":    "RM",
+		"brokers": []string{"b"},
+		"auth":    map[string]any{"mechanism": "none"},
+	}
+	w := do(t, h, http.MethodPut, "/api/connections/rm-auth", body)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusOK)
+	}
+	if _, err := credentials.Get("rm-auth"); err == nil {
+		t.Error("expected credential to be deleted from keyring")
+	}
+}
+
+func TestUpdateConnection_AWSProfilePersisted(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{ID: "msk", Name: "MSK", Platform: "aws", Brokers: []string{"b"}})
+
+	body := map[string]any{
+		"name":    "MSK",
+		"brokers": []string{"b"},
+		"auth": map[string]any{
+			"mechanism":  "aws_iam",
+			"awsProfile": "prod-profile",
+			"awsRegion":  "eu-west-1",
+		},
+	}
+	w := do(t, h, http.MethodPut, "/api/connections/msk", body)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d (body: %s)", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp config.Cluster
+	decodeJSON(t, w, &resp)
+	awsCfg, ok := resp.GetAWSConfig()
+	if !ok {
+		t.Fatal("expected AWS config to be present")
+	}
+	if awsCfg.Profile != "prod-profile" {
+		t.Errorf("Profile: got %q, want prod-profile", awsCfg.Profile)
+	}
+	if awsCfg.Region != "eu-west-1" {
+		t.Errorf("Region: got %q, want eu-west-1", awsCfg.Region)
+	}
+}
+
 // --- DeleteConnection ---
 
 func TestDeleteConnection_Found(t *testing.T) {

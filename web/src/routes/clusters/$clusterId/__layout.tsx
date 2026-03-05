@@ -10,10 +10,7 @@ export function ClusterLayout() {
   const { data: clusters } = useClusters()
   const cluster = clusters?.find((c) => c.id === clusterId)
 
-  const awsCfg =
-    cluster?.platform === 'aws' && cluster.platform_config
-      ? (cluster.platform_config as { profile?: string })
-      : null
+  const awsCfg = cluster?.platform === 'aws' ? cluster.platformConfig?.aws : null
 
   return (
     <>

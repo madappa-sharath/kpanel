@@ -1,48 +1,82 @@
-// Add Cluster wizard — 3-step: Platform → Connection → Auth
+// Add Cluster wizard — 3-step (add): Platform → Connection → Auth
+// Edit mode (cluster prop): 2-step: Connection → Auth (platform locked)
 
 import { useState } from 'react'
-import { ArrowRight, AlertCircle } from 'lucide-react'
-import type { Platform, AuthMechanism, AddClusterRequest } from '../../types/cluster'
-import { useAddCluster } from '../../hooks/useClusterConnection'
+import { ArrowRight, AlertCircle, Check } from 'lucide-react'
+import type { Platform, AuthMechanism, AddClusterRequest, Cluster } from '../../types/cluster'
+import { useAddCluster, useUpdateCluster } from '../../hooks/useClusterConnection'
 import { slugify } from '../../lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
 type Step = 'platform' | 'connection' | 'auth'
 
 interface FormState {
-  platform:   Platform
-  name:       string
-  brokers:    string
-  mechanism:  AuthMechanism
-  username:   string
-  password:   string
-  awsProfile: string
-  awsRegion:  string
+  platform:    Platform
+  name:        string
+  brokers:     string
+  mechanism:   AuthMechanism
+  username:    string
+  password:    string
+  awsProfile:  string
+  awsRegion:   string
+  tlsEnabled:  boolean
+  tlsCaCert:   string  // PEM content of newly-uploaded cert; '' = keep existing
 }
 
 const INITIAL: FormState = {
-  platform:   'generic',
-  name:       '',
-  brokers:    '',
-  mechanism:  'none',
-  username:   '',
-  password:   '',
-  awsProfile: 'default',
-  awsRegion:  'us-east-1',
+  platform:    'generic',
+  name:        '',
+  brokers:     '',
+  mechanism:   'none',
+  username:    '',
+  password:    '',
+  awsProfile:  'default',
+  awsRegion:   'us-east-1',
+  tlsEnabled:  false,
+  tlsCaCert:   '',
 }
 
 interface ClusterFormProps {
   onSuccess: () => void
-  onCancel: () => void
+  onCancel:  () => void
+  cluster?:  Cluster   // when present = edit mode
 }
 
-export function ClusterForm({ onSuccess, onCancel }: ClusterFormProps) {
-  const [step, setStep]   = useState<Step>('platform')
-  const [form, setForm]   = useState<FormState>(INITIAL)
-  const { mutate, isPending, error } = useAddCluster()
+export function ClusterForm({ onSuccess, onCancel, cluster }: ClusterFormProps) {
+  const isEdit = !!cluster
+
+  function initialState(): FormState {
+    if (!cluster) return INITIAL
+    const awsCfg = cluster.platform === 'aws' ? cluster.platformConfig?.aws : undefined
+    return {
+      platform:   cluster.platform,
+      name:       cluster.name,
+      brokers:    cluster.brokers.join(', '),
+      mechanism:  cluster.platform === 'aws' ? 'aws_iam' : (cluster.auth?.mechanism ?? 'none'),
+      username:   '',
+      password:   '',
+      awsProfile: awsCfg?.profile ?? 'default',
+      awsRegion:  awsCfg?.region  ?? 'us-east-1',
+      tlsEnabled: cluster.tls?.enabled ?? false,
+      tlsCaCert:  '', // never pre-fill cert content — server keeps existing if blank
+    }
+  }
+
+  const existingCaCert = isEdit && cluster!.tls?.caCertPath
+
+  const STEPS: Step[] = isEdit ? ['connection', 'auth'] : ['platform', 'connection', 'auth']
+
+  const [step, setStep]   = useState<Step>(isEdit ? 'connection' : 'platform')
+  const [form, setForm]   = useState<FormState>(initialState)
+  const [saved, setSaved] = useState(false)
+
+  const addMutation    = useAddCluster()
+  const updateMutation = useUpdateCluster(cluster?.id ?? '')
+  const { mutate, isPending, error } = isEdit ? updateMutation : addMutation
 
   function patch(u: Partial<FormState>) { setForm((s) => ({ ...s, ...u })) }
 
@@ -52,17 +86,35 @@ export function ClusterForm({ onSuccess, onCancel }: ClusterFormProps) {
       platform: form.platform,
       brokers:  form.brokers.split(',').map((b) => b.trim()).filter(Boolean),
       auth: {
-        mechanism:   form.mechanism,
-        username:    form.username  || undefined,
-        password:    form.password  || undefined,
-        aws_profile: form.platform === 'aws' ? form.awsProfile : undefined,
-        aws_region:  form.platform === 'aws' ? form.awsRegion  : undefined,
+        mechanism:  form.platform === 'aws' ? 'aws_iam' : form.mechanism,
+        username:   form.username  || undefined,
+        password:   form.password  || undefined,
+        awsProfile: form.platform === 'aws' ? form.awsProfile : undefined,
+        awsRegion:  form.platform === 'aws' ? form.awsRegion  : undefined,
       },
+      tls: form.tlsEnabled
+        ? { enabled: true, caCert: form.tlsCaCert || undefined }
+        : { enabled: false },
     }
-    mutate(body, { onSuccess })
+
+    if (isEdit) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(mutate as any)(body, {
+        onSuccess: () => {
+          setSaved(true)
+          setTimeout(() => setSaved(false), 1500)
+        },
+      })
+    } else {
+      mutate(body as Parameters<typeof mutate>[0], { onSuccess })
+    }
   }
 
-  const STEPS: Step[] = ['platform', 'connection', 'auth']
+  const platformLabel: Record<Platform, string> = {
+    generic:   'Generic Kafka',
+    aws:       'AWS MSK',
+    confluent: 'Confluent Cloud',
+  }
 
   return (
     <div>
@@ -83,12 +135,12 @@ export function ClusterForm({ onSuccess, onCancel }: ClusterFormProps) {
               {i + 1}
             </div>
             <span className={cn('text-sm', step === s ? 'text-foreground' : 'text-muted-foreground')}>{s}</span>
-            {i < 2 && <span className="text-muted-foreground/40 text-sm">—</span>}
+            {i < STEPS.length - 1 && <span className="text-muted-foreground/40 text-sm">—</span>}
           </div>
         ))}
       </div>
 
-      {/* Step 1: Platform */}
+      {/* Step: Platform (add-only) */}
       {step === 'platform' && (
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
@@ -130,9 +182,15 @@ export function ClusterForm({ onSuccess, onCancel }: ClusterFormProps) {
         </div>
       )}
 
-      {/* Step 2: Connection */}
+      {/* Step: Connection */}
       {step === 'connection' && (
         <div className="flex flex-col gap-3">
+          {isEdit && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Platform:</span>
+              <Badge variant="outline">{platformLabel[form.platform]}</Badge>
+            </div>
+          )}
           <div>
             <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">Name</label>
             <Input
@@ -151,14 +209,64 @@ export function ClusterForm({ onSuccess, onCancel }: ClusterFormProps) {
             />
             <p className="mt-1 text-xs text-muted-foreground">comma-separated host:port pairs</p>
           </div>
-          {form.name && (
+
+          {/* TLS */}
+          <div className="flex items-center gap-2">
+            <input
+              id="tls-toggle"
+              type="checkbox"
+              checked={form.tlsEnabled}
+              onChange={(e) => patch({ tlsEnabled: e.target.checked })}
+              className="accent-amber-500"
+            />
+            <label htmlFor="tls-toggle" className="text-sm cursor-pointer select-none">Enable TLS</label>
+          </div>
+          {form.tlsEnabled && (
+            <div>
+              <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">
+                CA certificate <span className="normal-case text-muted-foreground/70">(optional)</span>
+              </label>
+              {existingCaCert && !form.tlsCaCert && (
+                <p className="text-xs text-muted-foreground mb-1.5">
+                  on file — upload a new .pem to replace
+                </p>
+              )}
+              <Input
+                type="file"
+                accept=".pem,.crt,.cer"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) { patch({ tlsCaCert: '' }); return }
+                  file.text().then((content) => patch({ tlsCaCert: content }))
+                }}
+                className="cursor-pointer"
+              />
+              {form.tlsCaCert && (
+                <p className="mt-1 text-xs text-green-600 dark:text-green-400">
+                  {Math.round(form.tlsCaCert.length / 1024 * 10) / 10} KB ready to upload
+                </p>
+              )}
+            </div>
+          )}
+
+          {isEdit ? (
             <p className="text-xs text-muted-foreground">
-              id: <span className="text-amber-600 font-mono">{slugify(form.name)}</span>
-              {' '}(generated once, never changes)
+              id: <span className="text-amber-600 font-mono">{cluster!.id}</span>
+              {' '}(cannot be changed)
             </p>
+          ) : (
+            form.name && (
+              <p className="text-xs text-muted-foreground">
+                id: <span className="text-amber-600 font-mono">{slugify(form.name)}</span>
+                {' '}(generated once, never changes)
+              </p>
+            )
           )}
           <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep('platform')}>← Back</Button>
+            {isEdit
+              ? <Button variant="outline" onClick={onCancel}>Cancel</Button>
+              : <Button variant="outline" onClick={() => setStep('platform')}>← Back</Button>
+            }
             <Button onClick={() => setStep('auth')} disabled={!form.name || !form.brokers}>
               Next <ArrowRight size={12} />
             </Button>
@@ -166,7 +274,7 @@ export function ClusterForm({ onSuccess, onCancel }: ClusterFormProps) {
         </div>
       )}
 
-      {/* Step 3: Auth */}
+      {/* Step: Auth */}
       {step === 'auth' && (
         <div className="flex flex-col gap-3">
           {form.platform === 'aws' ? (
@@ -204,7 +312,12 @@ export function ClusterForm({ onSuccess, onCancel }: ClusterFormProps) {
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">Password</label>
-                    <Input type="password" value={form.password} onChange={(e) => patch({ password: e.target.value })} />
+                    <Input
+                      type="password"
+                      value={form.password}
+                      onChange={(e) => patch({ password: e.target.value })}
+                      placeholder={isEdit ? 'leave blank to keep existing' : undefined}
+                    />
                   </div>
                 </>
               )}
@@ -221,7 +334,7 @@ export function ClusterForm({ onSuccess, onCancel }: ClusterFormProps) {
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep('connection')}>← Back</Button>
             <Button onClick={submit} disabled={isPending}>
-              {isPending ? 'Saving…' : 'Save cluster'}
+              {isPending ? 'Saving…' : saved ? <><Check size={13} /> Saved!</> : isEdit ? 'Save changes' : 'Save cluster'}
             </Button>
           </div>
         </div>
