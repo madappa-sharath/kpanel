@@ -64,6 +64,10 @@ func (h *Handlers) AddConnection(w http.ResponseWriter, r *http.Request) {
 	if req.ID == "" {
 		req.ID = slugify(req.Name)
 	}
+	if _, exists := h.store.Get(req.ID); exists {
+		writeError(w, http.StatusConflict, "connection id already exists")
+		return
+	}
 
 	platform := req.Platform
 	if platform == "" {

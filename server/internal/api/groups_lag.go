@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"sync"
 	"time"
@@ -17,7 +18,7 @@ const (
 
 // LagSnapshot is a point-in-time lag measurement for a consumer group.
 type LagSnapshot struct {
-	Ts       int64            `json:"ts"`        // unix milliseconds
+	Ts       int64            `json:"ts"` // unix milliseconds
 	TotalLag int64            `json:"total_lag"`
 	ByTopic  map[string]int64 `json:"by_topic"`
 }
@@ -117,7 +118,8 @@ func (h *Handlers) GetLagHistory(w http.ResponseWriter, r *http.Request) {
 	}
 	groupID := chi.URLParam(r, "name")
 
-	ctx := r.Context()
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
 	admClient, err := kafka.NewClient(ctx, cluster)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -133,7 +135,11 @@ func (h *Handlers) GetLagHistory(w http.ResponseWriter, r *http.Request) {
 	for topic := range groupResp.Fetched {
 		topicList = append(topicList, topic)
 	}
-	leos, _ := admClient.ListEndOffsets(ctx, topicList...)
+	leos, err := admClient.ListEndOffsets(ctx, topicList...)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "list end offsets: "+err.Error())
+		return
+	}
 
 	// Compute the current lag snapshot.
 	byTopic := map[string]int64{}

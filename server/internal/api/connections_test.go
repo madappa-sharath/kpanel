@@ -214,7 +214,7 @@ func TestAddConnection_SlugTrimsEdgeDashes(t *testing.T) {
 	}
 }
 
-func TestAddConnection_Upsert(t *testing.T) {
+func TestAddConnection_DuplicateIDConflict(t *testing.T) {
 	h, _ := testServer(t)
 	body := map[string]any{"id": "dup", "name": "Original", "brokers": []string{"b"}}
 	do(t, h, http.MethodPost, "/api/connections/", body)
@@ -222,8 +222,8 @@ func TestAddConnection_Upsert(t *testing.T) {
 	body["name"] = "Updated"
 	w := do(t, h, http.MethodPost, "/api/connections/", body)
 
-	if w.Code != http.StatusCreated {
-		t.Errorf("status: got %d, want %d", w.Code, http.StatusCreated)
+	if w.Code != http.StatusConflict {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusConflict)
 	}
 
 	// List should still have only one cluster.
@@ -233,8 +233,8 @@ func TestAddConnection_Upsert(t *testing.T) {
 	if len(list) != 1 {
 		t.Errorf("expected 1 cluster after upsert, got %d", len(list))
 	}
-	if list[0].Name != "Updated" {
-		t.Errorf("Name: got %q, want Updated", list[0].Name)
+	if list[0].Name != "Original" {
+		t.Errorf("Name: got %q, want Original", list[0].Name)
 	}
 }
 

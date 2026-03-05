@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/kpanel/kpanel/internal/kafka"
+	"github.com/twmb/franz-go/pkg/kadm"
 )
 
 type resetScope string
@@ -29,11 +29,13 @@ type resetOffsetDiff struct {
 }
 
 type resetOffsetsRequest struct {
-	Scope    resetScope `json:"scope"`              // "all" | "topic"
-	Topic    string     `json:"topic,omitempty"`    // required when scope = "topic"
-	Strategy any        `json:"strategy"`           // "earliest" | "latest" | {"timestamp":"..."} | {"offset":N}
-	DryRun   bool       `json:"dry_run,omitempty"`
-	Force    bool       `json:"force,omitempty"` // bypass active-member guard
+	Scope       resetScope `json:"scope"`           // "all" | "topic"
+	Topic       string     `json:"topic,omitempty"` // required when scope = "topic"
+	Strategy    any        `json:"strategy"`        // "earliest" | "latest" | "timestamp" | "offset" | {"timestamp":"..."} | {"offset":N}
+	TimestampMS *int64     `json:"timestamp_ms,omitempty"`
+	Offset      *int64     `json:"offset,omitempty"`
+	DryRun      bool       `json:"dry_run,omitempty"`
+	Force       bool       `json:"force,omitempty"` // bypass active-member guard
 }
 
 type resetOffsetsResponse struct {
@@ -129,24 +131,25 @@ func (h *Handlers) ResetOffsets(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve the target offsets based on strategy.
 	var targetOffsets kadm.ListedOffsets
-	strategy, _ := parseStrategy(req.Strategy)
+	strategy, tsMillis, exactOffset, err := resolveResetStrategy(req)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid strategy: "+err.Error())
+		return
+	}
 	switch strategy {
 	case "earliest":
 		targetOffsets, err = admClient.ListStartOffsets(ctx, topics...)
 	case "latest":
 		targetOffsets, err = admClient.ListEndOffsets(ctx, topics...)
 	case "timestamp":
-		ms, tsErr := parseTimestampStrategy(req.Strategy)
-		if tsErr != nil {
-			writeError(w, http.StatusBadRequest, "invalid timestamp: "+tsErr.Error())
-			return
-		}
-		targetOffsets, err = admClient.ListOffsetsAfterMilli(ctx, ms, topics...)
+		targetOffsets, err = admClient.ListOffsetsAfterMilli(ctx, tsMillis, topics...)
+	case "offset":
+		// Exact offset does not require broker-side resolution.
 	default:
-		writeError(w, http.StatusBadRequest, "strategy must be 'earliest', 'latest', {timestamp:...}, or {offset:N}")
+		writeError(w, http.StatusBadRequest, "strategy must be 'earliest', 'latest', 'timestamp', 'offset', {timestamp:...}, or {offset:N}")
 		return
 	}
-	if err != nil {
+	if strategy != "offset" && err != nil {
 		writeError(w, http.StatusInternalServerError, "resolve target offsets: "+err.Error())
 		return
 	}
@@ -161,14 +164,9 @@ func (h *Handlers) ResetOffsets(w http.ResponseWriter, r *http.Request) {
 			if old.Err != nil {
 				continue
 			}
-			newAt := int64(0)
+			newAt := exactOffset
 			if strategy == "offset" {
-				// per-partition exact offset — fall back to handling below
-				newAt, err = parseExactOffsetStrategy(req.Strategy)
-				if err != nil {
-					writeError(w, http.StatusBadRequest, "invalid offset value: "+err.Error())
-					return
-				}
+				// per-partition exact offset already resolved in resolveResetStrategy
 			} else {
 				if t, ok := topicTarget[partID]; ok && t.Err == nil {
 					newAt = t.Offset
@@ -212,12 +210,44 @@ func (h *Handlers) ResetOffsets(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+func resolveResetStrategy(req resetOffsetsRequest) (string, int64, int64, error) {
+	strategy, err := parseStrategy(req.Strategy)
+	if err != nil {
+		return "", 0, 0, err
+	}
+
+	switch strategy {
+	case "earliest", "latest":
+		return strategy, 0, 0, nil
+	case "timestamp":
+		if req.TimestampMS != nil {
+			return strategy, *req.TimestampMS, 0, nil
+		}
+		ts, err := parseTimestampStrategy(req.Strategy)
+		if err != nil {
+			return "", 0, 0, err
+		}
+		return strategy, ts, 0, nil
+	case "offset":
+		if req.Offset != nil {
+			return strategy, 0, *req.Offset, nil
+		}
+		off, err := parseExactOffsetStrategy(req.Strategy)
+		if err != nil {
+			return "", 0, 0, err
+		}
+		return strategy, 0, off, nil
+	default:
+		return "", 0, 0, fmt.Errorf("unknown strategy %q", strategy)
+	}
+}
+
 // parseStrategy extracts the strategy name string from the decoded JSON value.
 // Strategy is either a string ("earliest", "latest") or an object ({"timestamp":"..."} or {"offset":N}).
 func parseStrategy(raw any) (string, error) {
 	switch v := raw.(type) {
 	case string:
-		if v == "earliest" || v == "latest" {
+		if v == "earliest" || v == "latest" || v == "timestamp" || v == "offset" {
 			return v, nil
 		}
 		return "", fmt.Errorf("unknown strategy %q", v)

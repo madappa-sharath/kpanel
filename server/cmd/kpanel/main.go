@@ -7,7 +7,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -58,7 +60,31 @@ func main() {
 	// In production this serves the full React app.
 	publicFS, err := fs.Sub(publicFiles, "public")
 	if err == nil {
-		r.Handle("/*", http.FileServer(http.FS(publicFS)))
+		static := http.FileServer(http.FS(publicFS))
+		r.Handle("/*", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if strings.HasPrefix(req.URL.Path, "/api/") {
+				http.NotFound(w, req)
+				return
+			}
+
+			cleanPath := strings.TrimPrefix(path.Clean(req.URL.Path), "/")
+			if cleanPath == "." || cleanPath == "" {
+				cleanPath = "index.html"
+			}
+
+			if _, statErr := fs.Stat(publicFS, cleanPath); statErr == nil {
+				static.ServeHTTP(w, req)
+				return
+			}
+			if _, statErr := fs.Stat(publicFS, "index.html"); statErr != nil {
+				http.NotFound(w, req)
+				return
+			}
+
+			fallback := req.Clone(req.Context())
+			fallback.URL.Path = "/index.html"
+			static.ServeHTTP(w, fallback)
+		}))
 	}
 
 	addr := fmt.Sprintf(":%s", port)
