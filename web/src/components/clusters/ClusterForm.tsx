@@ -15,29 +15,31 @@ import { cn } from '@/lib/utils'
 type Step = 'platform' | 'connection' | 'auth'
 
 interface FormState {
-  platform:    Platform
-  name:        string
-  brokers:     string
-  mechanism:   AuthMechanism
-  username:    string
-  password:    string
-  awsProfile:  string
-  awsRegion:   string
-  tlsEnabled:  boolean
-  tlsCaCert:   string  // PEM content of newly-uploaded cert; '' = keep existing
+  platform:       Platform
+  name:           string
+  brokers:        string
+  mechanism:      AuthMechanism
+  username:       string
+  password:       string
+  awsProfile:     string
+  awsRegion:      string
+  awsClusterName: string
+  tlsEnabled:     boolean
+  tlsCaCert:      string  // PEM content of newly-uploaded cert; '' = keep existing
 }
 
 const INITIAL: FormState = {
-  platform:    'generic',
-  name:        '',
-  brokers:     '',
-  mechanism:   'none',
-  username:    '',
-  password:    '',
-  awsProfile:  'default',
-  awsRegion:   'us-east-1',
-  tlsEnabled:  false,
-  tlsCaCert:   '',
+  platform:       'generic',
+  name:           '',
+  brokers:        '',
+  mechanism:      'none',
+  username:       '',
+  password:       '',
+  awsProfile:     'default',
+  awsRegion:      'us-east-1',
+  awsClusterName: '',
+  tlsEnabled:     false,
+  tlsCaCert:      '',
 }
 
 interface ClusterFormProps {
@@ -53,16 +55,17 @@ export function ClusterForm({ onSuccess, onCancel, cluster }: ClusterFormProps) 
     if (!cluster) return INITIAL
     const awsCfg = cluster.platform === 'aws' ? cluster.platformConfig?.aws : undefined
     return {
-      platform:   cluster.platform,
-      name:       cluster.name,
-      brokers:    cluster.brokers.join(', '),
-      mechanism:  cluster.platform === 'aws' ? 'aws_iam' : (cluster.auth?.mechanism ?? 'none'),
-      username:   '',
-      password:   '',
-      awsProfile: awsCfg?.profile ?? 'default',
-      awsRegion:  awsCfg?.region  ?? 'us-east-1',
-      tlsEnabled: cluster.tls?.enabled ?? false,
-      tlsCaCert:  '', // never pre-fill cert content — server keeps existing if blank
+      platform:       cluster.platform,
+      name:           cluster.name,
+      brokers:        cluster.brokers.join(', '),
+      mechanism:      cluster.platform === 'aws' ? 'aws_iam' : (cluster.auth?.mechanism ?? 'none'),
+      username:       '',
+      password:       '',
+      awsProfile:     awsCfg?.profile     ?? 'default',
+      awsRegion:      awsCfg?.region      ?? 'us-east-1',
+      awsClusterName: awsCfg?.clusterName ?? '',
+      tlsEnabled:     cluster.tls?.enabled ?? false,
+      tlsCaCert:      '', // never pre-fill cert content — server keeps existing if blank
     }
   }
 
@@ -86,11 +89,12 @@ export function ClusterForm({ onSuccess, onCancel, cluster }: ClusterFormProps) 
       platform: form.platform,
       brokers:  form.brokers.split(',').map((b) => b.trim()).filter(Boolean),
       auth: {
-        mechanism:  form.platform === 'aws' ? 'aws_iam' : form.mechanism,
-        username:   form.username  || undefined,
-        password:   form.password  || undefined,
-        awsProfile: form.platform === 'aws' ? form.awsProfile : undefined,
-        awsRegion:  form.platform === 'aws' ? form.awsRegion  : undefined,
+        mechanism:      form.platform === 'aws' ? 'aws_iam' : form.mechanism,
+        username:       form.username  || undefined,
+        password:       form.password  || undefined,
+        awsProfile:     form.platform === 'aws' ? form.awsProfile                    : undefined,
+        awsRegion:      form.platform === 'aws' ? form.awsRegion                     : undefined,
+        awsClusterName: form.platform === 'aws' ? (form.awsClusterName || undefined) : undefined,
       },
       tls: form.tlsEnabled
         ? { enabled: true, caCert: form.tlsCaCert || undefined }
@@ -286,6 +290,19 @@ export function ClusterForm({ onSuccess, onCancel, cluster }: ClusterFormProps) 
               <div>
                 <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">AWS Region</label>
                 <Input value={form.awsRegion} onChange={(e) => patch({ awsRegion: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">
+                  CloudWatch cluster name <span className="normal-case text-muted-foreground/70">(optional)</span>
+                </label>
+                <Input
+                  value={form.awsClusterName}
+                  onChange={(e) => patch({ awsClusterName: e.target.value })}
+                  placeholder="my-msk-cluster"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Required for CloudWatch metrics. Use the plain MSK cluster name from the AWS console.
+                </p>
               </div>
             </>
           ) : (

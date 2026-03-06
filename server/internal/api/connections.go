@@ -23,11 +23,12 @@ type addConnectionRequest struct {
 	Platform string   `json:"platform"` // "aws" | "confluent" | "generic"; defaults to "generic"
 	Brokers  []string `json:"brokers"`
 	Auth     struct {
-		Mechanism  string `json:"mechanism"` // "sasl_plain" | "sasl_scram_sha256" | "sasl_scram_sha512" | "aws_iam"
-		Username   string `json:"username,omitempty"`
-		Password   string `json:"password,omitempty"`
-		AWSProfile string `json:"awsProfile,omitempty"`
-		AWSRegion  string `json:"awsRegion,omitempty"`
+		Mechanism      string `json:"mechanism"` // "sasl_plain" | "sasl_scram_sha256" | "sasl_scram_sha512" | "aws_iam"
+		Username       string `json:"username,omitempty"`
+		Password       string `json:"password,omitempty"`
+		AWSProfile     string `json:"awsProfile,omitempty"`
+		AWSRegion      string `json:"awsRegion,omitempty"`
+		AWSClusterName string `json:"awsClusterName,omitempty"`
 	} `json:"auth,omitempty"`
 	TLS struct {
 		Enabled bool   `json:"enabled"`
@@ -125,8 +126,9 @@ func (h *Handlers) AddConnection(w http.ResponseWriter, r *http.Request) {
 
 	if platform == "aws" {
 		awsCfg := config.AWSPlatformConfig{
-			Profile: req.Auth.AWSProfile,
-			Region:  req.Auth.AWSRegion,
+			Profile:     req.Auth.AWSProfile,
+			Region:      req.Auth.AWSRegion,
+			ClusterName: req.Auth.AWSClusterName,
 		}
 		if awsCfg.Profile == "" {
 			awsCfg.Profile = "default"
@@ -224,8 +226,9 @@ func (h *Handlers) UpdateConnection(w http.ResponseWriter, r *http.Request) {
 
 	if existing.Platform == "aws" {
 		awsCfg := config.AWSPlatformConfig{
-			Profile: req.Auth.AWSProfile,
-			Region:  req.Auth.AWSRegion,
+			Profile:     req.Auth.AWSProfile,
+			Region:      req.Auth.AWSRegion,
+			ClusterName: req.Auth.AWSClusterName,
 		}
 		if awsCfg.Profile == "" {
 			awsCfg.Profile = "default"

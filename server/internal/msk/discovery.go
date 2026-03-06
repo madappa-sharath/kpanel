@@ -11,6 +11,31 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kafka"
 )
 
+// ClusterName resolves the human-readable MSK cluster name for the given ARN
+// by calling DescribeClusterV2. This works for both provisioned and serverless clusters.
+func ClusterName(ctx context.Context, region, profile, arn string) (string, error) {
+	loadOpts := []func(*config.LoadOptions) error{
+		config.WithRegion(region),
+	}
+	if profile != "" {
+		loadOpts = append(loadOpts, config.WithSharedConfigProfile(profile))
+	}
+	awsCfg, err := config.LoadDefaultConfig(ctx, loadOpts...)
+	if err != nil {
+		return "", fmt.Errorf("load aws config: %w", err)
+	}
+	out, err := kafka.NewFromConfig(awsCfg).DescribeClusterV2(ctx, &kafka.DescribeClusterV2Input{
+		ClusterArn: aws.String(arn),
+	})
+	if err != nil {
+		return "", fmt.Errorf("describe cluster: %w", err)
+	}
+	if out.ClusterInfo == nil || out.ClusterInfo.ClusterName == nil {
+		return "", fmt.Errorf("cluster info missing from response")
+	}
+	return aws.ToString(out.ClusterInfo.ClusterName), nil
+}
+
 // ClusterInfo holds the discovered details of an MSK cluster.
 type ClusterInfo struct {
 	ARN     string   `json:"arn"`

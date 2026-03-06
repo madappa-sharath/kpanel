@@ -3,6 +3,10 @@
 import { useParams } from '@tanstack/react-router'
 import { useTopic } from '../../../../../hooks/useTopics'
 import { useConsumerGroups } from '../../../../../hooks/useConsumerGroups'
+import { useClusters } from '../../../../../hooks/useCluster'
+import { useTopicMetrics } from '../../../../../hooks/useMetrics'
+import { MetricsChart } from '../../../../../components/metrics/MetricsChart'
+import { MetricsErrorBanner } from '../../../../../components/metrics/MetricsErrorBanner'
 import { formatRetention } from '../../../../../lib/utils'
 import { StatusBadge } from '../../../../../components/shared/StatusBadge'
 import { cn } from '@/lib/utils'
@@ -14,6 +18,13 @@ export function TopicOverviewPage() {
   }
   const { data: topic, isLoading, error } = useTopic(clusterId, topicName)
   const { data: allGroups } = useConsumerGroups(clusterId)
+  const { data: clusters } = useClusters()
+  const isAWS = clusters?.find((c) => c.id === clusterId)?.platform === 'aws'
+  const { data: metricsData, isLoading: metricsLoading, error: metricsError } = useTopicMetrics(
+    clusterId,
+    topicName,
+    isAWS,
+  )
 
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>
   if (error) return <div className="p-6 text-destructive">{(error as Error).message}</div>
@@ -120,6 +131,32 @@ export function TopicOverviewPage() {
               <span className="text-sm font-mono text-right">{g.total_lag.toLocaleString()}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* CloudWatch Metrics (AWS MSK only) */}
+      {isAWS && (
+        <div className="mt-7">
+          <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">
+            CloudWatch Metrics · last 3 hours
+          </p>
+          <MetricsErrorBanner error={metricsError as Error | null} />
+          <div className="grid grid-cols-2 gap-4">
+            {[
+              { id: 'bytes_in', title: 'Bytes In/sec' },
+              { id: 'bytes_out', title: 'Bytes Out/sec' },
+            ].map(({ id, title }) => (
+              <div key={id} className="rounded-md border bg-card p-4">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
+                  {title}
+                </p>
+                <MetricsChart
+                  series={metricsData?.series.find((s) => s.id === id)}
+                  isLoading={metricsLoading}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

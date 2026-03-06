@@ -34,9 +34,10 @@ type TLSConfig struct {
 
 // AWSPlatformConfig is the typed representation of PlatformConfig["aws"].
 type AWSPlatformConfig struct {
-	Profile    string `json:"profile"`
-	Region     string `json:"region"`
-	ClusterArn string `json:"clusterArn,omitempty"`
+	Profile     string `json:"profile"`
+	Region      string `json:"region"`
+	ClusterArn  string `json:"clusterArn,omitempty"`
+	ClusterName string `json:"clusterName,omitempty"` // CloudWatch "Cluster Name" dimension; derived from ARN if absent
 }
 
 // ConfluentPlatformConfig is the typed representation of PlatformConfig["confluent"].

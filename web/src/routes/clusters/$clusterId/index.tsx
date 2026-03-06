@@ -182,9 +182,8 @@ export function DashboardPage() {
   const { data: clusters } = useClusters()
   const { data: status, isLoading: statusLoading } = useConnectionStatus(clusterId)
   const { data: overview, isLoading } = useClusterOverview(clusterId)
-  const [copied, setCopied] = useState(false)
-
   const cluster = clusters?.find((c) => c.id === clusterId)
+  const [copied, setCopied] = useState(false)
 
   const platformLabel =
     cluster?.platform === 'aws' ? 'AWS MSK'
@@ -443,6 +442,7 @@ export function DashboardPage() {
           ) : null}
         </div>
       )}
+
     </div>
   )
 }

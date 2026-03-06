@@ -23,6 +23,7 @@ export interface AWSPlatformConfig {
   profile: string
   region: string
   clusterArn?: string
+  clusterName?: string
 }
 
 export interface ConfluentPlatformConfig {
@@ -61,6 +62,7 @@ export interface AddClusterRequest {
     password?: string
     awsProfile?: string
     awsRegion?: string
+    awsClusterName?: string
   }
   tls?: {
     enabled: boolean

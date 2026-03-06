@@ -501,6 +501,68 @@ func TestConnectionSession_NonAWSCluster(t *testing.T) {
 
 // --- GetMetrics ---
 
+// TestUpdateConnection_AWSClusterNamePersisted verifies that awsClusterName
+// is stored in AWSPlatformConfig.ClusterName.
+func TestUpdateConnection_AWSClusterNamePersisted(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{ID: "msk2", Name: "MSK2", Platform: "aws", Brokers: []string{"b"}})
+
+	body := map[string]any{
+		"name":    "MSK2",
+		"brokers": []string{"b"},
+		"auth": map[string]any{
+			"mechanism":      "aws_iam",
+			"awsProfile":     "myprofile",
+			"awsRegion":      "us-east-1",
+			"awsClusterName": "my-msk-cluster",
+		},
+	}
+	w := do(t, h, http.MethodPut, "/api/connections/msk2", body)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d (body: %s)", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp config.Cluster
+	decodeJSON(t, w, &resp)
+	awsCfg, ok := resp.GetAWSConfig()
+	if !ok {
+		t.Fatal("expected AWS config to be present")
+	}
+	if awsCfg.ClusterName != "my-msk-cluster" {
+		t.Errorf("ClusterName: got %q, want my-msk-cluster", awsCfg.ClusterName)
+	}
+}
+
+func TestAddConnection_AWSClusterNamePersisted(t *testing.T) {
+	h, _ := testServer(t)
+	body := map[string]any{
+		"id":      "msk3",
+		"name":    "MSK3",
+		"brokers": []string{"b:9092"},
+		"auth": map[string]any{
+			"mechanism":      "aws_iam",
+			"awsRegion":      "us-east-1",
+			"awsClusterName": "explicit-name",
+		},
+	}
+	w := do(t, h, http.MethodPost, "/api/connections/", body)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status: got %d, want %d (body: %s)", w.Code, http.StatusCreated, w.Body.String())
+	}
+	var resp config.Cluster
+	decodeJSON(t, w, &resp)
+	awsCfg, ok := resp.GetAWSConfig()
+	if !ok {
+		t.Fatal("expected AWS config to be present")
+	}
+	if awsCfg.ClusterName != "explicit-name" {
+		t.Errorf("ClusterName: got %q, want explicit-name", awsCfg.ClusterName)
+	}
+}
+
+// --- GetMetrics ---
+
 func TestGetMetrics_NotFound(t *testing.T) {
 	h, _ := testServer(t)
 	w := do(t, h, http.MethodGet, "/api/connections/ghost/metrics", nil)
@@ -523,5 +585,87 @@ func TestGetMetrics_NonMSKCluster(t *testing.T) {
 	decodeJSON(t, w, &resp)
 	if !strings.Contains(resp["error"], "MSK") {
 		t.Errorf("error message should mention MSK: %q", resp["error"])
+	}
+}
+
+func TestGetMetrics_MissingAWSPlatformConfig(t *testing.T) {
+	h, store := testServer(t)
+	// AWS cluster but no platformConfig set → GetAWSConfig returns false.
+	_ = store.Add(config.Cluster{ID: "aws-no-cfg", Platform: "aws", Brokers: []string{"b:9092"}})
+
+	w := do(t, h, http.MethodGet, "/api/connections/aws-no-cfg/metrics", nil)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status: got %d, want %d (body: %s)", w.Code, http.StatusInternalServerError, w.Body.String())
+	}
+}
+
+func TestGetMetrics_NoClusterNameResolvable(t *testing.T) {
+	h, store := testServer(t)
+	// No ClusterName and no ClusterArn configured.
+	cl := config.Cluster{ID: "aws-unknown", Platform: "aws", Brokers: []string{"custom.broker.example.com:9092"}}
+	if err := cl.SetAWSConfig(config.AWSPlatformConfig{Profile: "default", Region: "us-east-1"}); err != nil {
+		t.Fatalf("SetAWSConfig: %v", err)
+	}
+	_ = store.Add(cl)
+
+	w := do(t, h, http.MethodGet, "/api/connections/aws-unknown/metrics", nil)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d (body: %s)", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+	var resp map[string]string
+	decodeJSON(t, w, &resp)
+	if !strings.Contains(resp["error"], "CloudWatch cluster name is required") {
+		t.Errorf("error should mention missing CloudWatch cluster name: %q", resp["error"])
+	}
+}
+
+func TestGetMetrics_WithoutClusterNameOrArnEvenWithMSKBrokerFails(t *testing.T) {
+	h, store := testServer(t)
+	// Broker hostname is no longer parsed for cluster name inference.
+	cl := config.Cluster{
+		ID:       "aws-msk-broker",
+		Platform: "aws",
+		Brokers:  []string{"b-1-public.msk.hkmpj6.c1.kafka.us-east-1.amazonaws.com:9198"},
+	}
+	if err := cl.SetAWSConfig(config.AWSPlatformConfig{Profile: "default", Region: "us-east-1"}); err != nil {
+		t.Fatalf("SetAWSConfig: %v", err)
+	}
+	_ = store.Add(cl)
+
+	w := do(t, h, http.MethodGet, "/api/connections/aws-msk-broker/metrics", nil)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d (body: %s)", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+	var resp map[string]string
+	decodeJSON(t, w, &resp)
+	if !strings.Contains(resp["error"], "CloudWatch cluster name is required") {
+		t.Errorf("error should mention missing CloudWatch cluster name: %q", resp["error"])
+	}
+}
+
+func TestGetMetrics_ClusterNameFromExplicitConfig(t *testing.T) {
+	h, store := testServer(t)
+	// Explicit ClusterName in config → used directly, no hostname parsing needed.
+	cl := config.Cluster{ID: "aws-explicit", Platform: "aws", Brokers: []string{"custom.endpoint:9092"}}
+	if err := cl.SetAWSConfig(config.AWSPlatformConfig{
+		Profile:     "default",
+		Region:      "us-east-1",
+		ClusterName: "my-explicit-cluster",
+	}); err != nil {
+		t.Fatalf("SetAWSConfig: %v", err)
+	}
+	_ = store.Add(cl)
+
+	w := do(t, h, http.MethodGet, "/api/connections/aws-explicit/metrics", nil)
+
+	if w.Code == http.StatusBadRequest {
+		var resp map[string]string
+		decodeJSON(t, w, &resp)
+		if strings.Contains(resp["error"], "cannot determine") {
+			t.Errorf("should not fail on name resolution when ClusterName is set: %q", resp["error"])
+		}
 	}
 }

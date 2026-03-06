@@ -28,6 +28,9 @@ import { GroupMembersPage } from './routes/clusters/$clusterId/consumer-groups/$
 import { GroupOffsetsPage } from './routes/clusters/$clusterId/consumer-groups/$groupId/offsets'
 import { GroupLagPage } from './routes/clusters/$clusterId/consumer-groups/$groupId/lag'
 
+// Metrics page
+import { MetricsPage } from './routes/clusters/$clusterId/metrics/index'
+
 // Cluster settings
 import { ClusterSettingsPage } from './routes/clusters/$clusterId/settings/index'
 
@@ -187,6 +190,13 @@ const schemaDetailRoute = createRoute({
   component: SchemaDetailPage,
 })
 
+// ─── Metrics route ────────────────────────────────────────────────────────────
+const clusterMetricsRoute = createRoute({
+  getParentRoute: () => clusterRoute,
+  path: '/metrics',
+  component: MetricsPage,
+})
+
 // ─── Cluster settings route ───────────────────────────────────────────────────
 const clusterSettingsRoute = createRoute({
   getParentRoute: () => clusterRoute,
@@ -224,6 +234,7 @@ const routeTree = rootRoute.addChildren([
         groupOffsetsRoute,
         groupLagRoute,
       ]),
+      clusterMetricsRoute,
       schemasRoute,
       schemaRoute.addChildren([schemaDetailRoute]),
       aclsRoute,

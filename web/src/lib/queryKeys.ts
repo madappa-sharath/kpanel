@@ -26,4 +26,9 @@ export const queryKeys = {
   msk: {
     clusters: () => ['msk', 'clusters'] as const,
   },
+
+  metrics: {
+    byScope: (clusterId: string, scope: string, extra?: string) =>
+      ['metrics', clusterId, scope, extra] as const,
+  },
 } as const

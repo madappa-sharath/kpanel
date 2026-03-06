@@ -1,4 +1,5 @@
 import type { Cluster, SessionStatus, AddClusterRequest, UpdateClusterRequest } from '../types/cluster'
+import type { MetricsResponse } from '../types/metrics'
 import type {
   Topic,
   TopicDetail,
@@ -99,5 +100,12 @@ export const api = {
     discover: () => request<unknown[]>('/msk/clusters'),
     import: (arn: string) =>
       request<Cluster>(`/msk/clusters/${encodeURIComponent(arn)}/import`, { method: 'POST' }),
+  },
+
+  metrics: {
+    get: (clusterId: string, params: Record<string, string>) =>
+      request<MetricsResponse>(
+        `/connections/${encodeURIComponent(clusterId)}/metrics?${new URLSearchParams(params)}`,
+      ),
   },
 } as const
