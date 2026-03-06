@@ -14,8 +14,9 @@ web/dist/
 dist/
 server/kafkaseed
 
-# Config (don't commit local connections)
+# Config (don't commit local/private runtime data)
 .kpanel/
+.private/
 
 # Environment
 .env

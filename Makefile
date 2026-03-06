@@ -1,4 +1,4 @@
-.PHONY: dev dev-server dev-web setup build build-web build-server build-linux build-darwin clean kafka-up kafka-down kafka-logs kafka-seed kafka-seed-reset kafka-produce kafka-consume kafka-consume-all kafka-members dev-full test test-integration
+.PHONY: dev dev-server dev-web setup build build-web build-server build-linux build-darwin clean kafka-up kafka-down kafka-logs kafka-seed kafka-seed-reset kafka-produce kafka-consume kafka-consume-all kafka-members dev-full test test-integration create-dev-msk destroy-dev-msk
 
 test:
 	cd server && go test ./...
@@ -83,3 +83,9 @@ kafka-members:
 
 dev-full: kafka-up
 	$(MAKE) dev
+
+create-dev-msk:
+	bash .private/msk-test/create-msk.sh
+
+destroy-dev-msk:
+	bash .private/msk-test/destroy-msk.sh
