@@ -81,6 +81,19 @@ chmod +x kpanel
 open http://localhost:8080
 ```
 
+## Install Channels
+
+Wave-1 package channels:
+
+- Homebrew (macOS/Linux): custom tap formula
+- Scoop (Windows): portable manifest
+
+Secondary channel scaffolding:
+
+- winget (manifest + PR automation workflow)
+
+Release assets also include direct binary archives for all supported platforms.
+
 ## Build from Source
 
 ```bash
@@ -91,6 +104,23 @@ make build
 make build-linux   # Linux amd64
 make build-darwin  # macOS arm64
 ```
+
+## Release Security
+
+- Artifacts are built with deterministic flags (`-trimpath` + embedded version metadata)
+- Release files are checksummed (`checksums.txt`)
+- Artifacts are keylessly signed with Cosign (GitHub OIDC)
+- SBOMs are published per artifact (SPDX JSON)
+- Build provenance is attested in GitHub artifact attestations
+- macOS artifacts are signed and notarized in a dedicated workflow
+
+Windows binaries are currently unsigned, so SmartScreen warnings are expected in MVP.
+
+Operational docs:
+
+- [Distribution pipeline](./docs/distribution.md)
+- [Artifact verification](./docs/artifact-verification.md)
+- [Release incident playbook](./docs/release-incident-playbook.md)
 
 ## Configuration
 

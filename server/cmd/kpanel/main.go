@@ -25,7 +25,18 @@ import (
 //go:embed all:public
 var publicFiles embed.FS
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+		fmt.Printf("kpanel %s (%s, %s)\n", version, commit, date)
+		return
+	}
+
 	port := os.Getenv("KPANEL_PORT")
 	if port == "" {
 		port = "8080"
@@ -88,7 +99,7 @@ func main() {
 	}
 
 	addr := fmt.Sprintf(":%s", port)
-	log.Printf("kpanel listening on http://localhost%s", addr)
+	log.Printf("kpanel %s (%s, %s) listening on http://localhost%s", version, commit, date, addr)
 	log.Printf("config dir: %s", configDir)
 
 	if err := http.ListenAndServe(addr, r); err != nil {

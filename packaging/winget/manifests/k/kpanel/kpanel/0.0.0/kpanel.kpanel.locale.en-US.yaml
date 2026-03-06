@@ -1,0 +1,19 @@
+PackageIdentifier: kpanel.kpanel
+PackageVersion: 0.0.0
+PackageLocale: en-US
+Publisher: kpanel maintainers
+PublisherUrl: https://github.com/kpanel/kpanel
+PublisherSupportUrl: https://github.com/kpanel/kpanel/issues
+Author: kpanel maintainers
+PackageName: kpanel
+PackageUrl: https://github.com/kpanel/kpanel
+License: MIT
+LicenseUrl: https://github.com/kpanel/kpanel/blob/main/LICENSE
+ShortDescription: Lightweight Kafka GUI
+Moniker: kpanel
+Tags:
+  - kafka
+  - msk
+  - developer-tools
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

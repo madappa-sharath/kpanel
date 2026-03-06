@@ -1,0 +1,59 @@
+name: winget-pr
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (for example v0.1.0)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  submit-pr:
+    if: ${{ vars.WINGET_MANIFEST_REPO != '' && vars.WINGET_UPSTREAM_REPO != '' && secrets.WINGET_REPO_TOKEN != '' }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      WINGET_MANIFEST_REPO: ${{ vars.WINGET_MANIFEST_REPO }}
+      WINGET_UPSTREAM_REPO: ${{ vars.WINGET_UPSTREAM_REPO }}
+      WINGET_REPO_TOKEN: ${{ secrets.WINGET_REPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download checksums
+        run: |
+          mkdir -p dist
+          gh release download "${{ inputs.tag }}" --pattern checksums.txt --dir dist
+
+      - name: Generate winget manifests
+        run: |
+          windows_sha=$(grep "kpanel_${{ inputs.tag }}_windows_amd64.zip" dist/checksums.txt | awk '{print $1}')
+          ./scripts/release/generate-winget-manifests.sh "${{ inputs.tag }}" "$windows_sha"
+
+      - name: Create PR in winget repository
+        run: |
+          owner="${WINGET_MANIFEST_REPO%%/*}"
+          version="${{ inputs.tag }}"
+          version="${version#v}"
+          branch="kpanel-${version}"
+
+          git clone "https://x-access-token:${WINGET_REPO_TOKEN}@github.com/${WINGET_MANIFEST_REPO}.git" winget
+          cp -R "packaging/winget/manifests/." "winget/manifests/"
+
+          cd winget
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "$branch"
+          git add manifests
+          git commit -m "Add kpanel ${version}"
+          git push -u origin "$branch"
+
+          gh pr create \
+            --repo "$WINGET_UPSTREAM_REPO" \
+            --head "${owner}:${branch}" \
+            --base master \
+            --title "Add kpanel ${version}" \
+            --body "Automated winget manifest update for kpanel ${version}."

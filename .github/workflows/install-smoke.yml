@@ -1,0 +1,106 @@
+name: install-smoke
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (for example v0.1.0)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  homebrew-smoke:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist
+          gh release download "${{ steps.tag.outputs.value }}" \
+            --pattern "checksums.txt" \
+            --dir dist
+
+      - name: Generate formula for this release
+        run: |
+          tag="${{ steps.tag.outputs.value }}"
+          checksums="dist/checksums.txt"
+
+          darwin_arm64_sha=$(grep "kpanel_${tag}_darwin_arm64.tar.gz" "$checksums" | awk '{print $1}')
+          darwin_amd64_sha=$(grep "kpanel_${tag}_darwin_amd64.tar.gz" "$checksums" | awk '{print $1}')
+          linux_arm64_sha=$(grep "kpanel_${tag}_linux_arm64.tar.gz" "$checksums" | awk '{print $1}')
+          linux_amd64_sha=$(grep "kpanel_${tag}_linux_amd64.tar.gz" "$checksums" | awk '{print $1}')
+
+          ./scripts/release/generate-homebrew-formula.sh \
+            "$tag" \
+            "$darwin_arm64_sha" \
+            "$darwin_amd64_sha" \
+            "$linux_arm64_sha" \
+            "$linux_amd64_sha"
+
+      - name: Homebrew install smoke test
+        run: |
+          brew install --formula ./packaging/homebrew/kpanel.rb
+          kpanel --version
+          brew uninstall kpanel
+
+  scoop-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          mkdir -p dist
+          gh release download "${{ steps.tag.outputs.value }}" \
+            --pattern "checksums.txt" \
+            --dir dist
+
+      - name: Generate Scoop manifest for this release
+        shell: bash
+        run: |
+          tag="${{ steps.tag.outputs.value }}"
+          checksums="dist/checksums.txt"
+          windows_sha=$(grep "kpanel_${tag}_windows_amd64.zip" "$checksums" | awk '{print $1}')
+          ./scripts/release/generate-scoop-manifest.sh "$tag" "$windows_sha"
+
+      - name: Install Scoop
+        shell: pwsh
+        run: |
+          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+          irm get.scoop.sh | iex
+
+      - name: Scoop install smoke test
+        shell: pwsh
+        run: |
+          scoop install "$env:GITHUB_WORKSPACE/packaging/scoop/kpanel.json"
+          kpanel --version
+          scoop uninstall kpanel

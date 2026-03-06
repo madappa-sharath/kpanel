@@ -1,0 +1,108 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+      - name: Unit tests
+        run: make test
+
+  release:
+    runs-on: ubuntu-latest
+    needs: test
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      COSIGN_YES: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: sigstore/cosign-installer@v3.10.0
+
+      - uses: anchore/sbom-action/download-syft@v0
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+
+      - name: Generate SBOMs
+        run: |
+          for file in dist/*; do
+            if [ -f "$file" ] && [[ ! "$file" =~ \.sig$ ]] && [[ ! "$file" =~ \.pem$ ]] && [[ ! "$file" =~ checksums.txt$ ]]; then
+              syft packages "$file" -o spdx-json="${file}.spdx.json"
+            fi
+          done
+
+      - name: Sign release artifacts (keyless)
+        run: |
+          for file in dist/*; do
+            if [ -f "$file" ] && [[ ! "$file" =~ \.sig$ ]] && [[ ! "$file" =~ \.pem$ ]]; then
+              cosign sign-blob \
+                --yes \
+                --output-signature "${file}.sig" \
+                --output-certificate "${file}.pem" \
+                "$file"
+            fi
+          done
+
+      - name: Generate Homebrew formula + Scoop manifest
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          checksums="dist/checksums.txt"
+
+          darwin_arm64_sha=$(grep "kpanel_${tag}_darwin_arm64.tar.gz" "$checksums" | awk '{print $1}')
+          darwin_amd64_sha=$(grep "kpanel_${tag}_darwin_amd64.tar.gz" "$checksums" | awk '{print $1}')
+          linux_arm64_sha=$(grep "kpanel_${tag}_linux_arm64.tar.gz" "$checksums" | awk '{print $1}')
+          linux_amd64_sha=$(grep "kpanel_${tag}_linux_amd64.tar.gz" "$checksums" | awk '{print $1}')
+          windows_amd64_sha=$(grep "kpanel_${tag}_windows_amd64.zip" "$checksums" | awk '{print $1}')
+
+          ./scripts/release/generate-homebrew-formula.sh \
+            "$tag" \
+            "$darwin_arm64_sha" \
+            "$darwin_amd64_sha" \
+            "$linux_arm64_sha" \
+            "$linux_amd64_sha"
+
+          ./scripts/release/generate-scoop-manifest.sh \
+            "$tag" \
+            "$windows_amd64_sha"
+
+          cp packaging/homebrew/kpanel.rb dist/homebrew-kpanel.rb
+          cp packaging/scoop/kpanel.json dist/scoop-kpanel.json
+
+      - name: Upload trust and packaging files to release
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" \
+            dist/*.sig dist/*.pem dist/*.spdx.json \
+            dist/homebrew-kpanel.rb dist/scoop-kpanel.json \
+            --clobber
+
+      - name: Create GitHub build provenance attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/*"

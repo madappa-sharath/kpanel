@@ -1,0 +1,64 @@
+name: linux-packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (for example v0.1.0)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+        format: [deb, rpm]
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download linux archive
+        run: |
+          mkdir -p dist/input
+          gh release download "${{ inputs.tag }}" \
+            --pattern "kpanel_${{ inputs.tag }}_linux_${{ matrix.arch }}.tar.gz" \
+            --dir dist/input
+
+      - name: Extract binary
+        run: |
+          mkdir -p dist/root/usr/local/bin
+          tar -xzf "dist/input/kpanel_${{ inputs.tag }}_linux_${{ matrix.arch }}.tar.gz" -C dist/root/usr/local/bin kpanel
+          chmod +x dist/root/usr/local/bin/kpanel
+
+      - uses: goreleaser/nfpm-action@v1
+        with:
+          version: latest
+
+      - name: Build package with nfpm
+        run: |
+          version="${{ inputs.tag }}"
+          version="${version#v}"
+          cat > nfpm.yaml <<NFP
+name: kpanel
+arch: ${{ matrix.arch }}
+platform: linux
+version: ${version}
+section: default
+priority: optional
+maintainer: kpanel maintainers <maintainers@kpanel.dev>
+description: Lightweight Kafka GUI
+license: MIT
+homepage: https://github.com/kpanel/kpanel
+contents:
+  - src: dist/root/usr/local/bin/kpanel
+    dst: /usr/local/bin/kpanel
+NFP
+          nfpm package --config nfpm.yaml --packager ${{ matrix.format }} --target "dist/kpanel_${{ inputs.tag }}_linux_${{ matrix.arch }}.${{ matrix.format }}"
+
+      - name: Upload linux package
+        run: gh release upload "${{ inputs.tag }}" "dist/kpanel_${{ inputs.tag }}_linux_${{ matrix.arch }}.${{ matrix.format }}" --clobber

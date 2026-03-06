@@ -1,0 +1,23 @@
+{
+  "version": "0.0.0",
+  "description": "Lightweight Kafka GUI",
+  "homepage": "https://github.com/kpanel/kpanel",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/kpanel/kpanel/releases/download/v0.0.0/kpanel_v0.0.0_windows_amd64.zip",
+      "hash": "4444444444444444444444444444444444444444444444444444444444444444"
+    }
+  },
+  "bin": "kpanel.exe",
+  "checkver": {
+    "github": "https://github.com/kpanel/kpanel"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/kpanel/kpanel/releases/download/v$version/kpanel_v$version_windows_amd64.zip"
+      }
+    }
+  }
+}

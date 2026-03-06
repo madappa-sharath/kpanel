@@ -1,0 +1,66 @@
+version: 2
+
+project_name: kpanel
+
+before:
+  hooks:
+    - bash -c 'cd web && bun install --frozen-lockfile'
+    - bash -c 'cd web && bun run build'
+    - rm -rf server/cmd/kpanel/public
+    - cp -R web/dist server/cmd/kpanel/public
+
+builds:
+  - id: kpanel
+    dir: server
+    main: ./cmd/kpanel
+    binary: kpanel
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - >-
+        -s -w
+        -X main.version={{ .Version }}
+        -X main.commit={{ .Commit }}
+        -X main.date={{ .Date }}
+
+archives:
+  - id: default
+    ids:
+      - kpanel
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+
+release:
+  draft: false
+  prerelease: auto

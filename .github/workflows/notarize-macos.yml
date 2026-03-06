@@ -1,0 +1,110 @@
+name: notarize-macos
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (for example v0.1.0)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  notarize:
+    runs-on: macos-14
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      APPLE_SIGNING_CERT_BASE64: ${{ secrets.APPLE_SIGNING_CERT_BASE64 }}
+      APPLE_SIGNING_CERT_PASSWORD: ${{ secrets.APPLE_SIGNING_CERT_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+      APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+      APPLE_NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate required secrets
+        run: |
+          test -n "$APPLE_SIGNING_CERT_BASE64"
+          test -n "$APPLE_SIGNING_CERT_PASSWORD"
+          test -n "$APPLE_SIGNING_IDENTITY"
+          test -n "$APPLE_NOTARY_APPLE_ID"
+          test -n "$APPLE_NOTARY_TEAM_ID"
+          test -n "$APPLE_NOTARY_APP_PASSWORD"
+
+      - name: Download darwin release archives
+        run: |
+          mkdir -p notarize-input
+          gh release download "${{ steps.tag.outputs.value }}" \
+            --pattern "kpanel_${{ steps.tag.outputs.value }}_darwin_*.tar.gz" \
+            --dir notarize-input
+
+      - name: Import Apple signing certificate
+        run: |
+          CERT_PATH="$RUNNER_TEMP/signing.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PASSWORD="temp-password"
+
+          echo "$APPLE_SIGNING_CERT_BASE64" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+
+          security import "$CERT_PATH" \
+            -k "$KEYCHAIN_PATH" \
+            -P "$APPLE_SIGNING_CERT_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+      - name: Sign and notarize darwin archives
+        run: |
+          mkdir -p notarize-output
+
+          for archive in notarize-input/*.tar.gz; do
+            base=$(basename "$archive" .tar.gz)
+            workdir="$RUNNER_TEMP/$base"
+            rm -rf "$workdir"
+            mkdir -p "$workdir"
+
+            tar -xzf "$archive" -C "$workdir"
+
+            codesign \
+              --force \
+              --timestamp \
+              --options runtime \
+              --sign "$APPLE_SIGNING_IDENTITY" \
+              "$workdir/kpanel"
+
+            spctl --assess --type execute --verbose "$workdir/kpanel"
+
+            signed_archive="notarize-output/${base}_notarized.tar.gz"
+            tar -czf "$signed_archive" -C "$workdir" kpanel
+
+            xcrun notarytool submit "$signed_archive" \
+              --apple-id "$APPLE_NOTARY_APPLE_ID" \
+              --team-id "$APPLE_NOTARY_TEAM_ID" \
+              --password "$APPLE_NOTARY_APP_PASSWORD" \
+              --wait
+          done
+
+          (cd notarize-output && shasum -a 256 *_notarized.tar.gz > notarized-checksums.txt)
+
+      - name: Upload notarized archives to release
+        run: |
+          gh release upload "${{ steps.tag.outputs.value }}" notarize-output/* --clobber

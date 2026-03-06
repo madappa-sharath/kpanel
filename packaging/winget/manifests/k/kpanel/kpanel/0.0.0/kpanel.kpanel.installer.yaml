@@ -1,0 +1,13 @@
+PackageIdentifier: kpanel.kpanel
+PackageVersion: 0.0.0
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+  - RelativeFilePath: kpanel.exe
+    PortableCommandAlias: kpanel
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/kpanel/kpanel/releases/download/v0.0.0/kpanel_v0.0.0_windows_amd64.zip
+    InstallerSha256: 4444444444444444444444444444444444444444444444444444444444444444
+ManifestType: installer
+ManifestVersion: 1.6.0
