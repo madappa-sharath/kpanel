@@ -43,3 +43,13 @@ export interface PeekRequest {
   start_offset?: number    // seek to specific offset
   start_timestamp?: string // ISO 8601 / RFC3339: seek to first offset at/after this time
 }
+
+export interface CreateTopicRequest {
+  name: string
+  partitions: number
+  replication_factor: number
+}
+
+export interface UpdateTopicPartitionsRequest {
+  partitions: number
+}

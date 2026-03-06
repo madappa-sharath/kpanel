@@ -8,6 +8,49 @@ import (
 	"testing"
 )
 
+// ── CreateTopic ──────────────────────────────────────────────────────────────
+
+func TestCreateTopic_Integration_CreatesTopicAndAppearsInList(t *testing.T) {
+	h, store := testServer(t)
+	addCluster(t, store, "ct-create")
+	const topicName = "test-ct-created-via-api"
+
+	w := do(t, h, http.MethodPost, "/api/connections/ct-create/topics", map[string]any{
+		"name":               topicName,
+		"partitions":         3,
+		"replication_factor": 1,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("create status %d: %s", w.Code, w.Body)
+	}
+	var result map[string]bool
+	decodeJSON(t, w, &result)
+	if !result["ok"] {
+		t.Error(`expected {"ok": true} response`)
+	}
+	t.Cleanup(func() { deleteTopic(t, topicName) })
+
+	w2 := do(t, h, http.MethodGet, "/api/connections/ct-create/topics", nil)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("list status %d: %s", w2.Code, w2.Body)
+	}
+	var topics []topicSummaryResp
+	decodeJSON(t, w2, &topics)
+
+	found := false
+	for _, topic := range topics {
+		if topic.Name == topicName {
+			found = true
+			if topic.Partitions != 3 {
+				t.Errorf("partitions: got %d, want 3", topic.Partitions)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("topic %q not found in list", topicName)
+	}
+}
+
 // ── ListTopics ────────────────────────────────────────────────────────────────
 
 // TestListTopics_Integration_Shape verifies the endpoint returns 200 with a
@@ -257,6 +300,37 @@ func TestGetTopic_Integration_ConfigShape(t *testing.T) {
 	}
 	if _, ok := resp.Config["retention.ms"]; !ok {
 		t.Error("config: retention.ms must be present for any topic")
+	}
+}
+
+// ── DeleteTopic ──────────────────────────────────────────────────────────────
+
+func TestDeleteTopic_Integration_RemovesTopicFromList(t *testing.T) {
+	h, store := testServer(t)
+	addCluster(t, store, "dt-delete")
+	const topicName = "test-dt-delete-via-api"
+	createTopic(t, topicName, 1)
+
+	w := do(t, h, http.MethodDelete, "/api/connections/dt-delete/topics/"+topicName, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("delete status %d: %s", w.Code, w.Body)
+	}
+	var result map[string]bool
+	decodeJSON(t, w, &result)
+	if !result["ok"] {
+		t.Error(`expected {"ok": true} response`)
+	}
+
+	w2 := do(t, h, http.MethodGet, "/api/connections/dt-delete/topics", nil)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("list status %d: %s", w2.Code, w2.Body)
+	}
+	var topics []topicSummaryResp
+	decodeJSON(t, w2, &topics)
+	for _, topic := range topics {
+		if topic.Name == topicName {
+			t.Fatalf("topic %q still present after delete", topicName)
+		}
 	}
 }
 
@@ -536,6 +610,51 @@ func TestPeekMessages_Integration_DefaultLimitApplied(t *testing.T) {
 	decodeJSON(t, w, &msgs)
 	if len(msgs) != 20 {
 		t.Errorf("default-limit: expected 20 messages, got %d", len(msgs))
+	}
+}
+
+// ── UpdateTopicPartitions ────────────────────────────────────────────────────
+
+func TestUpdateTopicPartitions_Integration_IncreasesPartitionCount(t *testing.T) {
+	h, store := testServer(t)
+	addCluster(t, store, "utp-increase")
+	const topicName = "test-utp-increase"
+	createTopic(t, topicName, 2)
+
+	w := do(t, h, http.MethodPut,
+		"/api/connections/utp-increase/topics/"+topicName+"/partitions",
+		map[string]any{"partitions": 4})
+	if w.Code != http.StatusOK {
+		t.Fatalf("update partitions status %d: %s", w.Code, w.Body)
+	}
+	var result map[string]bool
+	decodeJSON(t, w, &result)
+	if !result["ok"] {
+		t.Error(`expected {"ok": true} response`)
+	}
+
+	w2 := do(t, h, http.MethodGet, "/api/connections/utp-increase/topics/"+topicName, nil)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("get topic status %d: %s", w2.Code, w2.Body)
+	}
+	var detail topicDetailResp
+	decodeJSON(t, w2, &detail)
+	if len(detail.Partitions) != 4 {
+		t.Errorf("partitions: got %d, want 4", len(detail.Partitions))
+	}
+}
+
+func TestUpdateTopicPartitions_Integration_RejectsNonIncrease(t *testing.T) {
+	h, store := testServer(t)
+	addCluster(t, store, "utp-reject")
+	const topicName = "test-utp-reject"
+	createTopic(t, topicName, 2)
+
+	w := do(t, h, http.MethodPut,
+		"/api/connections/utp-reject/topics/"+topicName+"/partitions",
+		map[string]any{"partitions": 2})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status: got %d, want %d (%s)", w.Code, http.StatusBadRequest, w.Body.String())
 	}
 }
 

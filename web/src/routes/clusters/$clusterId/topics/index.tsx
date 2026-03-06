@@ -9,12 +9,14 @@ import { EmptyState } from '../../../../components/shared/EmptyState'
 import { MessageSquare } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { CreateTopicModal } from '../../../../components/topics/CreateTopicModal'
 
 export function TopicsPage() {
   const { clusterId } = useParams({ strict: false }) as { clusterId: string }
   const { data: topics, isLoading, error } = useTopics(clusterId)
   const [search, setSearch] = useState('')
   const [showInternal, setShowInternal] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
 
   const allTopics = topics ?? []
   const visibleTopics = allTopics.filter((t) => {
@@ -36,6 +38,7 @@ export function TopicsPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-48"
         />
+        <Button onClick={() => setCreateOpen(true)}>Create Topic</Button>
       </PageHeader>
 
       {/* Summary bar */}
@@ -74,6 +77,12 @@ export function TopicsPage() {
       {!isLoading && visibleTopics.length > 0 && (
         <TopicTable clusterId={clusterId} topics={visibleTopics} />
       )}
+
+      <CreateTopicModal
+        clusterId={clusterId}
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+      />
     </div>
   )
 }

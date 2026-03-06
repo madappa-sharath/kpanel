@@ -1,5 +1,12 @@
 import type { Cluster, SessionStatus, AddClusterRequest, UpdateClusterRequest } from '../types/cluster'
-import type { Topic, TopicDetail, Message, PeekRequest } from '../types/topic'
+import type {
+  Topic,
+  TopicDetail,
+  Message,
+  PeekRequest,
+  CreateTopicRequest,
+  UpdateTopicPartitionsRequest,
+} from '../types/topic'
 import type { ConsumerGroup, GroupDetail, LagSnapshot, ResetOffsetsRequest, ResetOffsetsResult } from '../types/consumer'
 import type { Broker, ClusterStatus, ClusterOverview } from '../types/broker'
 
@@ -41,8 +48,17 @@ export const api = {
   topics: {
     list: (clusterId: string) =>
       request<Topic[]>(`/connections/${clusterId}/topics`),
+    create: (clusterId: string, body: CreateTopicRequest) =>
+      request<{ ok: boolean }>(`/connections/${clusterId}/topics`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
     get: (clusterId: string, name: string) =>
       request<TopicDetail>(`/connections/${clusterId}/topics/${encodeURIComponent(name)}`),
+    delete: (clusterId: string, name: string) =>
+      request<{ ok: boolean }>(`/connections/${clusterId}/topics/${encodeURIComponent(name)}`, {
+        method: 'DELETE',
+      }),
     peek: (clusterId: string, name: string, opts: PeekRequest) =>
       request<Message[]>(`/connections/${clusterId}/topics/${encodeURIComponent(name)}/peek`, {
         method: 'POST',
@@ -52,6 +68,11 @@ export const api = {
       request<{ ok: boolean }>(`/connections/${clusterId}/topics/${encodeURIComponent(name)}/config`, {
         method: 'PUT',
         body: JSON.stringify({ configs }),
+      }),
+    updatePartitions: (clusterId: string, name: string, body: UpdateTopicPartitionsRequest) =>
+      request<{ ok: boolean }>(`/connections/${clusterId}/topics/${encodeURIComponent(name)}/partitions`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
       }),
   },
 

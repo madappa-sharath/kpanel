@@ -3,14 +3,18 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/twmb/franz-go/pkg/kadm"
-	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/kpanel/kpanel/internal/kafka"
+	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kerr"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 type topicSummary struct {
@@ -45,6 +49,28 @@ type messageResponse struct {
 	Value     string            `json:"value"`
 	Headers   map[string]string `json:"headers"`
 	Size      int               `json:"size"`
+}
+
+func topicAdminErrorStatus(err error) int {
+	switch {
+	case errors.Is(err, kerr.TopicAlreadyExists):
+		return http.StatusConflict
+	case errors.Is(err, kerr.UnknownTopicOrPartition):
+		return http.StatusNotFound
+	case errors.Is(err, kerr.InvalidRequest),
+		errors.Is(err, kerr.InvalidTopicException),
+		errors.Is(err, kerr.InvalidPartitions),
+		errors.Is(err, kerr.InvalidReplicationFactor),
+		errors.Is(err, kerr.PolicyViolation),
+		errors.Is(err, kerr.TopicDeletionDisabled):
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+func writeTopicAdminResponse(w http.ResponseWriter, err error) {
+	writeError(w, topicAdminErrorStatus(err), err.Error())
 }
 
 // fetchOffsets concurrently fetches start and end offsets for a topic.
@@ -120,6 +146,64 @@ func (h *Handlers) ListTopics(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(topics, func(i, j int) bool { return topics[i].Name < topics[j].Name })
 	writeJSON(w, http.StatusOK, topics)
+}
+
+// CreateTopic godoc
+// POST /api/connections/:id/topics
+func (h *Handlers) CreateTopic(w http.ResponseWriter, r *http.Request) {
+	cluster, ok := h.getClusterOrError(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		Name              string `json:"name"`
+		Partitions        int32  `json:"partitions"`
+		ReplicationFactor int16  `json:"replication_factor"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if req.Partitions < 1 {
+		writeError(w, http.StatusBadRequest, "partitions must be >= 1")
+		return
+	}
+	if req.ReplicationFactor < 1 {
+		writeError(w, http.StatusBadRequest, "replication_factor must be >= 1")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	admClient, err := kafka.NewClient(ctx, cluster)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer admClient.Close()
+
+	responses, err := admClient.CreateTopics(ctx, req.Partitions, req.ReplicationFactor, nil, req.Name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "create topic: "+err.Error())
+		return
+	}
+	resp, exists := responses[req.Name]
+	if !exists {
+		writeError(w, http.StatusInternalServerError, "create topic: missing response for topic")
+		return
+	}
+	if resp.Err != nil {
+		writeTopicAdminResponse(w, resp.Err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // GetTopic godoc
@@ -227,6 +311,46 @@ func (h *Handlers) GetTopic(w http.ResponseWriter, r *http.Request) {
 		Partitions: partitions,
 		Config:     configMap,
 	})
+}
+
+// DeleteTopic godoc
+// DELETE /api/connections/:id/topics/:name
+func (h *Handlers) DeleteTopic(w http.ResponseWriter, r *http.Request) {
+	cluster, ok := h.getClusterOrError(w, r)
+	if !ok {
+		return
+	}
+	name := chi.URLParam(r, "name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "topic name is required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	admClient, err := kafka.NewClient(ctx, cluster)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer admClient.Close()
+
+	responses, err := admClient.DeleteTopics(ctx, name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "delete topic: "+err.Error())
+		return
+	}
+	resp, exists := responses[name]
+	if !exists {
+		writeError(w, http.StatusInternalServerError, "delete topic: missing response for topic")
+		return
+	}
+	if resp.Err != nil {
+		writeTopicAdminResponse(w, resp.Err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // PeekMessages godoc
@@ -427,9 +551,74 @@ func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, msgs)
 }
 
+// UpdateTopicPartitions godoc
+// PUT /api/connections/:id/topics/:name/partitions
+func (h *Handlers) UpdateTopicPartitions(w http.ResponseWriter, r *http.Request) {
+	cluster, ok := h.getClusterOrError(w, r)
+	if !ok {
+		return
+	}
+	name := chi.URLParam(r, "name")
+
+	var req struct {
+		Partitions int `json:"partitions"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Partitions < 1 {
+		writeError(w, http.StatusBadRequest, "partitions must be >= 1")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	admClient, err := kafka.NewClient(ctx, cluster)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer admClient.Close()
+
+	details, err := admClient.ListTopics(ctx, name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "describe topic: "+err.Error())
+		return
+	}
+	detail, exists := details[name]
+	if !exists || detail.Err != nil {
+		writeError(w, http.StatusNotFound, "topic not found")
+		return
+	}
+	currentPartitions := len(detail.Partitions)
+	if req.Partitions <= currentPartitions {
+		writeError(w, http.StatusBadRequest,
+			fmt.Sprintf("partitions must be greater than current count (%d)", currentPartitions))
+		return
+	}
+
+	responses, err := admClient.UpdatePartitions(ctx, req.Partitions, name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "update partitions: "+err.Error())
+		return
+	}
+	resp, exists := responses[name]
+	if !exists {
+		writeError(w, http.StatusInternalServerError, "update partitions: missing response for topic")
+		return
+	}
+	if resp.Err != nil {
+		writeTopicAdminResponse(w, resp.Err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
 // UpdateTopicConfig godoc
 // PUT /api/connections/:id/topics/:name/config
-// Body: {"configs": {"retention.ms": "604800000"}}
 func (h *Handlers) UpdateTopicConfig(w http.ResponseWriter, r *http.Request) {
 	cluster, ok := h.getClusterOrError(w, r)
 	if !ok {
