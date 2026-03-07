@@ -1,6 +1,6 @@
 // Consumer Group layout — tab bar for Members, Offsets, Lag
 
-import { Link, Outlet, useParams, useRouter } from '@tanstack/react-router'
+import { Link, Outlet, useParams, useRouterState } from '@tanstack/react-router'
 import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { ResetOffsetsModal } from '../../../../../components/consumer-groups/ResetOffsetsModal'
@@ -22,8 +22,7 @@ export function GroupLayout() {
     clusterId: string
     groupId: string
   }
-  const router = useRouter()
-  const pathname = router.state.location.pathname
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
   const [showReset, setShowReset] = useState(false)
   const { data: group } = useConsumerGroup(clusterId, groupId)
 

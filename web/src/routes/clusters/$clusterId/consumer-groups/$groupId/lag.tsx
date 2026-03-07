@@ -37,43 +37,41 @@ export function GroupLagPage() {
           </p>
           <MetricsErrorBanner error={metricsError as Error | null} />
 
-          {/* SumOffsetLag per topic */}
-          {(metricsLoading || sumLagSeries.length > 0) && (
-            <div className="mb-4">
-              <p className="text-xs text-muted-foreground mb-2">Offset Lag per Topic</p>
-              <div className="rounded-md border bg-card p-4 grid grid-cols-2 gap-4">
-                {metricsLoading
-                  ? [0, 1].map((i) => (
-                      <MetricsChart key={i} series={null} isLoading />
-                    ))
-                  : sumLagSeries.slice(0, 8).map((s, i) => (
-                      <MetricsChart
-                        key={s.id}
-                        series={{ ...s, label: s.label || `Topic ${i + 1}` }}
-                      />
-                    ))}
+          <div className="grid grid-cols-2 gap-4">
+            {/* SumOffsetLag per topic */}
+            {(metricsLoading || sumLagSeries.length > 0) && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">Offset Lag per Topic</p>
+                <div className="rounded-md border bg-card p-4 flex flex-col gap-4">
+                  {metricsLoading
+                    ? [0].map((i) => <MetricsChart key={i} series={null} isLoading />)
+                    : sumLagSeries.slice(0, 4).map((s, i) => (
+                        <MetricsChart
+                          key={s.id}
+                          series={{ ...s, label: s.label || `Topic ${i + 1}` }}
+                        />
+                      ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* EstimatedMaxTimeLag per topic */}
-          {(metricsLoading || timeLagSeries.length > 0) && (
-            <div>
-              <p className="text-xs text-muted-foreground mb-2">Time Lag per Topic</p>
-              <div className="rounded-md border bg-card p-4 grid grid-cols-2 gap-4">
-                {metricsLoading
-                  ? [0, 1].map((i) => (
-                      <MetricsChart key={i} series={null} isLoading />
-                    ))
-                  : timeLagSeries.slice(0, 8).map((s, i) => (
-                      <MetricsChart
-                        key={s.id}
-                        series={{ ...s, label: s.label || `Topic ${i + 1}` }}
-                      />
-                    ))}
+            {/* EstimatedMaxTimeLag per topic */}
+            {(metricsLoading || timeLagSeries.length > 0) && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">Time Lag per Topic</p>
+                <div className="rounded-md border bg-card p-4 flex flex-col gap-4">
+                  {metricsLoading
+                    ? [0].map((i) => <MetricsChart key={i} series={null} isLoading />)
+                    : timeLagSeries.slice(0, 4).map((s, i) => (
+                        <MetricsChart
+                          key={s.id}
+                          series={{ ...s, label: s.label || `Topic ${i + 1}` }}
+                        />
+                      ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {!metricsLoading && sumLagSeries.length === 0 && timeLagSeries.length === 0 && (
             <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
