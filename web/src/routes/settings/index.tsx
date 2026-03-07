@@ -6,6 +6,7 @@ import { ArrowRight, Plus, Pencil, Trash2 } from 'lucide-react'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { ConfirmModal } from '../../components/shared/ConfirmModal'
 import { ClusterForm } from '../../components/clusters/ClusterForm'
+import { AWSContextCard } from '../../components/clusters/AWSContextCard'
 import { useClusters } from '../../hooks/useCluster'
 import { useDeleteCluster } from '../../hooks/useClusterConnection'
 import { useAppStore } from '../../stores/appStore'
@@ -30,6 +31,8 @@ export function SettingsPage() {
       <PageHeader title="Settings" description="App preferences and credential management" />
 
       <div className="flex flex-col gap-3">
+        <AWSContextCard defaultExpanded={!clusters || clusters.length === 0} />
+
         <Section title="Clusters">
           {isLoading && (
             <p className="text-sm text-muted-foreground">Loading…</p>

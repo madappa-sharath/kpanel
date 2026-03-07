@@ -40,6 +40,11 @@ func Mount(r chi.Router, store *config.Store) {
 		r.Get("/{id}/metrics", h.GetMetrics)
 	})
 
+	r.Route("/api/aws", func(r chi.Router) {
+		r.Use(middleware.SetHeader("Content-Type", "application/json"))
+		r.Get("/context", h.AWSContext)
+	})
+
 	r.Route("/api/msk", func(r chi.Router) {
 		r.Use(middleware.SetHeader("Content-Type", "application/json"))
 		r.Get("/clusters", h.DiscoverMSK)

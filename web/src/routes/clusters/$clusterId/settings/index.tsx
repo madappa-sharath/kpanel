@@ -16,7 +16,7 @@ export function ClusterSettingsPage() {
       <div className="p-6 space-y-3">
         <Skeleton className="h-6 w-48" />
         <Skeleton className="h-4 w-72" />
-        <Skeleton className="h-32 w-full max-w-lg mt-6" />
+        <Skeleton className="h-32 w-full mt-6" />
       </div>
     )
   }
@@ -30,12 +30,12 @@ export function ClusterSettingsPage() {
   }
 
   return (
-    <div className="p-6 max-w-lg">
+    <div className="p-6">
       <PageHeader
         title="Connection settings"
         description={`Edit the connection config for ${cluster.name}.`}
       />
-      <div className="mt-6 rounded-lg border bg-card p-5">
+      <div className="mt-6">
         <ClusterForm
           cluster={cluster}
           onSuccess={() => {}}

@@ -47,6 +47,24 @@ export interface SessionStatus {
   error?: string
 }
 
+export interface AWSContext {
+  profile: string
+  region: string
+  valid: boolean
+  account?: string
+  userArn?: string
+  error?: string
+  recovery?: string
+}
+
+export interface MSKCluster {
+  arn: string
+  name: string
+  brokers: string[]
+  state: string
+  region: string
+}
+
 // Request body for PUT /api/connections/:id (same shape, id omitted — locked server-side)
 export type UpdateClusterRequest = Omit<AddClusterRequest, 'id'>
 

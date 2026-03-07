@@ -6,6 +6,7 @@ import { useDeleteCluster } from '../hooks/useClusterConnection'
 import { useAppStore } from '../stores/appStore'
 import { ConfirmModal } from '../components/shared/ConfirmModal'
 import { ClusterForm } from '../components/clusters/ClusterForm'
+import { AWSContextCard } from '../components/clusters/AWSContextCard'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
@@ -33,6 +34,11 @@ export function WelcomePage() {
           </div>
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">kpanel</h1>
           <p className="mt-2 text-sm text-muted-foreground">kafka cluster manager</p>
+        </div>
+
+        {/* AWS context card — shown when credentials are available */}
+        <div className="mb-3">
+          <AWSContextCard defaultExpanded={!clusters || clusters.length === 0} />
         </div>
 
         {/* Card */}

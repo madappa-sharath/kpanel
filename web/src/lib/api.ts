@@ -1,4 +1,4 @@
-import type { Cluster, SessionStatus, AddClusterRequest, UpdateClusterRequest } from '../types/cluster'
+import type { Cluster, SessionStatus, AWSContext, MSKCluster, AddClusterRequest, UpdateClusterRequest } from '../types/cluster'
 import type { MetricsResponse } from '../types/metrics'
 import type {
   Topic,
@@ -96,8 +96,12 @@ export const api = {
       request<Broker[]>(`/connections/${clusterId}/brokers`),
   },
 
+  aws: {
+    context: () => request<AWSContext>('/aws/context'),
+  },
+
   msk: {
-    discover: () => request<unknown[]>('/msk/clusters'),
+    discover: () => request<MSKCluster[]>('/msk/clusters'),
     import: (arn: string) =>
       request<Cluster>(`/msk/clusters/${encodeURIComponent(arn)}/import`, { method: 'POST' }),
   },

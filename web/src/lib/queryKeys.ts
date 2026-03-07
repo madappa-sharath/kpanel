@@ -23,6 +23,10 @@ export const queryKeys = {
     all: (clusterId: string) => ['brokers', clusterId] as const,
   },
 
+  aws: {
+    context: () => ['aws', 'context'] as const,
+  },
+
   msk: {
     clusters: () => ['msk', 'clusters'] as const,
   },
