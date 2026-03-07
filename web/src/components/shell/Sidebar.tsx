@@ -2,7 +2,6 @@ import { Link, useParams } from '@tanstack/react-router'
 import {
   LayoutDashboard,
   Server,
-  BarChart2,
   MessageSquare,
   Users,
   Database,
@@ -17,7 +16,6 @@ import { useAppStore } from '../../stores/appStore'
 const NAV = [
   { label: 'Dashboard',       icon: LayoutDashboard, to: '/clusters/$clusterId'                as const, exact: true  },
   { label: 'Brokers',         icon: Server,           to: '/clusters/$clusterId/brokers'        as const, exact: false },
-  { label: 'Metrics',         icon: BarChart2,        to: '/clusters/$clusterId/metrics'        as const, exact: false },
   { label: 'Topics',          icon: MessageSquare,    to: '/clusters/$clusterId/topics'         as const, exact: false },
   { label: 'Consumer Groups', icon: Users,            to: '/clusters/$clusterId/consumer-groups' as const, exact: false },
   { label: 'Schemas',         icon: Database,         to: '/clusters/$clusterId/schemas'        as const, exact: false },

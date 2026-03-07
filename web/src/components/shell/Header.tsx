@@ -1,5 +1,5 @@
 import { useParams, Link } from '@tanstack/react-router'
-import { Moon, Sun, Monitor } from 'lucide-react'
+import { Moon, Sun, Monitor, BarChart2 } from 'lucide-react'
 import { useClusters, useConnectionStatus } from '../../hooks/useCluster'
 import { useAppStore } from '../../stores/appStore'
 import { ClusterSwitcher } from './ClusterSwitcher'
@@ -35,7 +35,7 @@ export function Header() {
 
   return (
     <header
-      className="bg-card border-b border-border flex items-center px-4 gap-4 flex-shrink-0"
+      className="bg-card border-b border-border flex items-center px-4 gap-3 flex-shrink-0"
       style={{ height: 'var(--header-h)' }}
     >
       {/* Cluster switcher */}
@@ -72,6 +72,27 @@ export function Header() {
             </>
           )}
         </div>
+      )}
+
+      {/* Metrics link — AWS MSK only */}
+      {cluster?.platform === 'aws' && clusterId && (
+        <Link
+          to="/clusters/$clusterId/metrics"
+          params={{ clusterId }}
+          className="no-underline"
+        >
+          {({ isActive }) => (
+            <div className={cn(
+              'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded transition-colors',
+              isActive
+                ? 'bg-accent text-foreground font-medium'
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+            )}>
+              <BarChart2 size={13} />
+              Metrics
+            </div>
+          )}
+        </Link>
       )}
 
       {/* Spacer */}

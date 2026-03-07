@@ -1,10 +1,12 @@
 import { useParams, Link } from '@tanstack/react-router'
 import { useState } from 'react'
+import { BarChart2 } from 'lucide-react'
 import { useClusters, useConnectionStatus, useClusterOverview } from '../../../hooks/useCluster'
 import { PageHeader } from '../../../components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { ClusterOverview } from '../../../types/broker'
 
@@ -198,6 +200,7 @@ export function DashboardPage() {
     }
   }
 
+  const isAWS = cluster?.platform === 'aws'
   const hasPartitionIssues = overview && (overview.offlinePartitions > 0 || overview.underReplicated > 0)
   const partitionSubtitle = overview
     ? overview.offlinePartitions > 0
@@ -421,6 +424,26 @@ export function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* ── CloudWatch Metrics (AWS only) ──────────────────────────── */}
+      {isAWS && (
+        <div className="mb-5">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <BarChart2 className="h-4 w-4" />
+                CloudWatch Metrics
+              </CardTitle>
+              <CardDescription>CPU, disk, throughput and lag from AWS CloudWatch</CardDescription>
+            </CardHeader>
+            <CardFooter>
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/clusters/$clusterId/metrics" params={{ clusterId }}>View Metrics</Link>
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      )}
 
       {/* ── Cluster Configuration ──────────────────────────────────── */}
       {(isLoading || (overview && Object.keys(overview.configs).length > 0)) && (
