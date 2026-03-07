@@ -14,12 +14,13 @@ import { cn } from '../../lib/utils'
 import { useAppStore } from '../../stores/appStore'
 
 const NAV = [
-  { label: 'Dashboard',       icon: LayoutDashboard, to: '/clusters/$clusterId'                as const, exact: true  },
-  { label: 'Brokers',         icon: Server,           to: '/clusters/$clusterId/brokers'        as const, exact: false },
-  { label: 'Topics',          icon: MessageSquare,    to: '/clusters/$clusterId/topics'         as const, exact: false },
-  { label: 'Consumer Groups', icon: Users,            to: '/clusters/$clusterId/consumer-groups' as const, exact: false },
-  { label: 'Schemas',         icon: Database,         to: '/clusters/$clusterId/schemas'        as const, exact: false },
-  { label: 'ACLs',            icon: ShieldCheck,      to: '/clusters/$clusterId/acls'           as const, exact: false },
+  { label: 'Dashboard',       icon: LayoutDashboard, to: '/clusters/$clusterId'                 as const, exact: true  },
+  { label: 'Brokers',         icon: Server,          to: '/clusters/$clusterId/brokers'         as const, exact: false },
+  { label: 'Topics',          icon: MessageSquare,   to: '/clusters/$clusterId/topics'          as const, exact: false },
+  { label: 'Consumer Groups', icon: Users,           to: '/clusters/$clusterId/consumer-groups' as const, exact: false },
+  { label: 'Schemas',         icon: Database,        to: '/clusters/$clusterId/schemas'         as const, exact: false },
+  { label: 'ACLs',            icon: ShieldCheck,     to: '/clusters/$clusterId/acls'            as const, exact: false },
+  { label: 'Connection',      icon: Settings,        to: '/clusters/$clusterId/settings'        as const, exact: false },
 ]
 
 const navItemClass = (isActive: boolean, collapsed: boolean) =>
@@ -104,35 +105,17 @@ export function Sidebar() {
 
       {/* Bottom: settings + collapse toggle */}
       <div className="p-1.5 border-t border-border flex flex-col gap-0.5">
-        {clusterId ? (
-          <Link
-            to="/clusters/$clusterId/settings"
-            params={{ clusterId }}
-            className="no-underline"
-          >
-            {({ isActive }) => (
-              <div
-                className={navItemClass(isActive, collapsed)}
-                title={collapsed ? 'Settings' : undefined}
-              >
-                <Settings size={15} className="flex-shrink-0" />
-                {!collapsed && <span>Settings</span>}
-              </div>
-            )}
-          </Link>
-        ) : (
-          <Link to="/settings" className="no-underline">
-            {({ isActive }) => (
-              <div
-                className={navItemClass(isActive, collapsed)}
-                title={collapsed ? 'Settings' : undefined}
-              >
-                <Settings size={15} className="flex-shrink-0" />
-                {!collapsed && <span>Settings</span>}
-              </div>
-            )}
-          </Link>
-        )}
+        <Link to="/settings" className="no-underline">
+          {({ isActive }) => (
+            <div
+              className={navItemClass(isActive, collapsed)}
+              title={collapsed ? 'Settings' : undefined}
+            >
+              <Settings size={15} className="flex-shrink-0" />
+              {!collapsed && <span>Settings</span>}
+            </div>
+          )}
+        </Link>
 
         <button
           onClick={toggleSidebar}
