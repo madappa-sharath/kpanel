@@ -38,11 +38,12 @@ func ClusterName(ctx context.Context, region, profile, arn string) (string, erro
 
 // ClusterInfo holds the discovered details of an MSK cluster.
 type ClusterInfo struct {
-	ARN     string   `json:"arn"`
-	Name    string   `json:"name"`
-	Brokers []string `json:"brokers"`
-	State   string   `json:"state"`
-	Region  string   `json:"region"`
+	ARN           string   `json:"arn"`
+	Name          string   `json:"name"`
+	Brokers       []string `json:"brokers"`        // private VPC (port 9098)
+	PublicBrokers []string `json:"publicBrokers"`  // public access (port 9198), nil if not enabled
+	State         string   `json:"state"`
+	Region        string   `json:"region"`
 }
 
 // DiscoverClusters lists MSK clusters in the given region using the caller's AWS credentials.
@@ -84,6 +85,7 @@ func DiscoverClusters(ctx context.Context, region string) ([]ClusterInfo, error)
 				continue
 			}
 
+			// Private brokers (VPC, port 9098)
 			var brokers []string
 			switch {
 			case brokersOut.BootstrapBrokerStringSaslIam != nil:
@@ -94,12 +96,21 @@ func DiscoverClusters(ctx context.Context, region string) ([]ClusterInfo, error)
 				brokers = splitBrokers(aws.ToString(brokersOut.BootstrapBrokerString))
 			}
 
+			// Public brokers (port 9198) — only present when public access is enabled
+			var publicBrokers []string
+			if brokersOut.BootstrapBrokerStringPublicSaslIam != nil {
+				publicBrokers = splitBrokers(aws.ToString(brokersOut.BootstrapBrokerStringPublicSaslIam))
+			} else if brokersOut.BootstrapBrokerStringPublicTls != nil {
+				publicBrokers = splitBrokers(aws.ToString(brokersOut.BootstrapBrokerStringPublicTls))
+			}
+
 			clusters = append(clusters, ClusterInfo{
-				ARN:     aws.ToString(c.ClusterArn),
-				Name:    aws.ToString(c.ClusterName),
-				Brokers: brokers,
-				State:   string(c.State),
-				Region:  region,
+				ARN:           aws.ToString(c.ClusterArn),
+				Name:          aws.ToString(c.ClusterName),
+				Brokers:       brokers,
+				PublicBrokers: publicBrokers,
+				State:         string(c.State),
+				Region:        region,
 			})
 		}
 

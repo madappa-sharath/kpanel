@@ -60,7 +60,8 @@ export interface AWSContext {
 export interface MSKCluster {
   arn: string
   name: string
-  brokers: string[]
+  brokers: string[]       // private VPC (port 9098)
+  publicBrokers: string[] // public access (port 9198), empty if not enabled
   state: string
   region: string
 }

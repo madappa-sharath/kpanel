@@ -102,8 +102,8 @@ export const api = {
 
   msk: {
     discover: () => request<MSKCluster[]>('/msk/clusters'),
-    import: (arn: string) =>
-      request<Cluster>(`/msk/clusters/${encodeURIComponent(arn)}/import`, { method: 'POST' }),
+    import: (arn: string, access: 'private' | 'public' = 'private') =>
+      request<Cluster>(`/msk/clusters/${encodeURIComponent(arn)}/import?access=${access}`, { method: 'POST' }),
   },
 
   metrics: {

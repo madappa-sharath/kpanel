@@ -68,6 +68,16 @@ func (h *Handlers) ImportMSKCluster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Choose private or public brokers based on ?access=public query param.
+	brokers := target.Brokers
+	if r.URL.Query().Get("access") == "public" {
+		if len(target.PublicBrokers) == 0 {
+			writeError(w, http.StatusBadRequest, "public access brokers not available for this cluster")
+			return
+		}
+		brokers = target.PublicBrokers
+	}
+
 	id := slugify(target.Name)
 	if _, exists := h.store.Get(id); exists {
 		writeError(w, http.StatusConflict, "cluster already imported (id: "+id+")")
@@ -79,7 +89,7 @@ func (h *Handlers) ImportMSKCluster(w http.ResponseWriter, r *http.Request) {
 		ID:       id,
 		Name:     target.Name,
 		Platform: "aws",
-		Brokers:  target.Brokers,
+		Brokers:  brokers,
 		Auth:     &config.ClusterAuth{Mechanism: "aws_iam"},
 		TLS:      &config.TLSConfig{Enabled: true},
 	}
