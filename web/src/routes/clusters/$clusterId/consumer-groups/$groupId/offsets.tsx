@@ -50,6 +50,20 @@ export function GroupOffsetsPage() {
     [group],
   )
 
+  const topicTotals = useMemo(() => {
+    const all = group?.offsets ?? []
+    const map = new Map<string, { partitions: number; maxLogEnd: number; lag: number }>()
+    for (const o of all) {
+      const existing = map.get(o.topic) ?? { partitions: 0, maxLogEnd: -1, lag: 0 }
+      map.set(o.topic, {
+        partitions: existing.partitions + 1,
+        maxLogEnd: Math.max(existing.maxLogEnd, o.log_end_offset),
+        lag: existing.lag + o.lag,
+      })
+    }
+    return map
+  }, [group])
+
   const memberMap = useMemo(() => {
     const m = new Map<string, string>()
     for (const mem of group?.members ?? []) {
@@ -92,6 +106,29 @@ export function GroupOffsetsPage() {
           Sort by lag
         </label>
       </div>
+      {/* Per-topic aggregate summary (shown when viewing all topics) */}
+      {!topicFilter && topicTotals.size > 0 && (
+        <div className="rounded-md border mb-3 overflow-hidden">
+          <div className="grid px-4 py-2 text-xs text-muted-foreground uppercase tracking-wide bg-muted/50" style={{ gridTemplateColumns: '1fr 80px 130px 100px' }}>
+            <span>Topic</span>
+            <span>Partitions</span>
+            <span>Max Log End</span>
+            <span className="text-right">Total Lag</span>
+          </div>
+          {Array.from(topicTotals.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([t, totals]) => (
+            <div key={t} className="grid px-4 py-2 border-t items-center text-sm" style={{ gridTemplateColumns: '1fr 80px 130px 100px' }}>
+              <span className="font-mono text-xs">{t}</span>
+              <span className="text-muted-foreground font-mono text-xs">{totals.partitions}</span>
+              <span className="text-muted-foreground font-mono text-xs">{formatNumber(totals.maxLogEnd)}</span>
+              <span className={cn('font-mono text-xs text-right', totals.lag > 10_000 ? 'text-destructive' : totals.lag > 1_000 ? 'text-amber-600' : '')}>
+                {formatNumber(totals.lag)}
+                {totals.lag > 10_000 && ' ⚠'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <DataTable
         columns={columns}
         data={rows}

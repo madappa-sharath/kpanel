@@ -172,6 +172,10 @@ func (h *Handlers) ResetOffsets(w http.ResponseWriter, r *http.Request) {
 					newAt = t.Offset
 				}
 			}
+			delta := newAt - old.At
+			if delta == 0 {
+				continue
+			}
 			newOffsets.Add(kadm.Offset{
 				Topic:     topic,
 				Partition: partID,
@@ -182,7 +186,7 @@ func (h *Handlers) ResetOffsets(w http.ResponseWriter, r *http.Request) {
 				Partition: partID,
 				OldOffset: old.At,
 				NewOffset: newAt,
-				Delta:     newAt - old.At,
+				Delta:     delta,
 			})
 		}
 	}

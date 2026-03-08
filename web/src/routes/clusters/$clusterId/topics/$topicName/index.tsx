@@ -45,6 +45,10 @@ export function TopicOverviewPage() {
     0,
   )
 
+  const endOffset = topic.partitions.length > 0
+    ? Math.max(...topic.partitions.map((p) => p.high_watermark))
+    : 0
+
   const retentionMs = topic.config['retention.ms']?.value
   const minISR = topic.config['min.insync.replicas']?.value ?? '—'
   const cleanupPolicy = topic.config['cleanup.policy']?.value ?? 'delete'
@@ -78,18 +82,20 @@ export function TopicOverviewPage() {
       )}
 
       {/* Stats cards */}
-      <div className="grid grid-cols-6 gap-3 mb-7">
+      <div className="grid grid-cols-7 gap-3 mb-7">
         {[
           { label: 'Partitions', value: topic.partitions.length },
           { label: 'Total Messages', value: totalMessages.toLocaleString() },
+          { label: 'End Offset', value: endOffset.toLocaleString(), sub: 'max across partitions' },
           { label: 'Replication', value: replicationFactor },
           { label: 'Min ISR', value: minISR },
           { label: 'Retention', value: formatRetention(retentionMs) },
           { label: 'Cleanup', value: cleanupPolicy },
-        ].map(({ label, value }) => (
+        ].map(({ label, value, sub }) => (
           <div key={label} className="border rounded-md p-3 bg-card">
             <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
             <p className="text-xl font-semibold font-mono">{value}</p>
+            {sub && <p className="text-xs text-muted-foreground/60 mt-0.5">{sub}</p>}
           </div>
         ))}
       </div>
