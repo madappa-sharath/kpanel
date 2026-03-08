@@ -4,7 +4,7 @@ import { Link, Outlet, useParams, useRouterState } from '@tanstack/react-router'
 import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { ResetOffsetsModal } from '../../../../../components/consumer-groups/ResetOffsetsModal'
-import { useConsumerGroup } from '../../../../../hooks/useConsumerGroups'
+import { useConsumerGroup, useLagHistory } from '../../../../../hooks/useConsumerGroups'
 import { StatusBadge, groupStateVariant } from '../../../../../components/shared/StatusBadge'
 import { formatNumber } from '../../../../../lib/utils'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -25,6 +25,8 @@ export function GroupLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const [showReset, setShowReset] = useState(false)
   const { data: group } = useConsumerGroup(clusterId, groupId)
+  // Keep lag polling alive on all tabs so history has no gaps.
+  useLagHistory(clusterId, groupId)
 
   const totalLag = group?.offsets.reduce((sum, o) => sum + o.lag, 0) ?? 0
 

@@ -73,7 +73,7 @@ export function LagChart({ clusterId, groupId }: LagChartProps) {
   if (!rows.length) {
     return (
       <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">
-        No lag history yet — data accumulates every 15 s as you view this page.
+        No lag history yet. Snapshots are collected every 15 s while this group is active.
       </div>
     )
   }
@@ -84,7 +84,7 @@ export function LagChart({ clusterId, groupId }: LagChartProps) {
   return (
     <div className="rounded-md border bg-card p-4">
       <p className="text-sm text-muted-foreground mb-3">
-        Lag over time · auto-refreshes every 15 s · last {rows.length} sample{rows.length !== 1 ? 's' : ''}
+        Live session history — sampled every 15 s · {rows.length} sample{rows.length !== 1 ? 's' : ''} · cleared on server restart
       </p>
       <ResponsiveContainer width="100%" height={260}>
         <LineChart data={rows} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>

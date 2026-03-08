@@ -39,22 +39,23 @@ func newLagRingBuffer(capacity int) *lagRingBuffer {
 	}
 }
 
-func (b *lagRingBuffer) append(s LagSnapshot) {
+// appendIfNew appends snap only if the buffer is empty or the last snapshot's
+// timestamp is at least minGapMs milliseconds before snap.Ts. Returns all
+// snapshots in chronological order under a single write lock.
+func (b *lagRingBuffer) appendIfNew(snap LagSnapshot, minGapMs int64) []LagSnapshot {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.snapshots[b.head] = s
-	b.head = (b.head + 1) % b.cap
-	if b.size < b.cap {
-		b.size++
+	shouldAppend := b.size == 0
+	if !shouldAppend {
+		last := b.snapshots[(b.head-1+b.cap)%b.cap]
+		shouldAppend = snap.Ts-last.Ts >= minGapMs
 	}
-}
-
-// getAll returns all snapshots in chronological order (oldest first).
-func (b *lagRingBuffer) getAll() []LagSnapshot {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	if b.size == 0 {
-		return nil
+	if shouldAppend {
+		b.snapshots[b.head] = snap
+		b.head = (b.head + 1) % b.cap
+		if b.size < b.cap {
+			b.size++
+		}
 	}
 	result := make([]LagSnapshot, b.size)
 	start := (b.head - b.size + b.cap) % b.cap
@@ -90,19 +91,8 @@ func (ls *LagStore) getOrCreate(connectionID, groupID string) *lagRingBuffer {
 	return b
 }
 
-func (ls *LagStore) appendSnapshot(connectionID, groupID string, snap LagSnapshot) {
-	ls.getOrCreate(connectionID, groupID).append(snap)
-}
-
-func (ls *LagStore) getHistory(connectionID, groupID string) []LagSnapshot {
-	k := ls.key(connectionID, groupID)
-	ls.mu.RLock()
-	b, ok := ls.buffers[k]
-	ls.mu.RUnlock()
-	if !ok {
-		return nil
-	}
-	return b.getAll()
+func (ls *LagStore) appendIfNew(connectionID, groupID string, snap LagSnapshot, minGapMs int64) []LagSnapshot {
+	return ls.getOrCreate(connectionID, groupID).appendIfNew(snap, minGapMs)
 }
 
 // GetLagHistory fetches the current lag for a consumer group, stores it in the
@@ -164,20 +154,8 @@ func (h *Handlers) GetLagHistory(w http.ResponseWriter, r *http.Request) {
 		ByTopic:  byTopic,
 	}
 
-	// Deduplicate: skip appending if the last snapshot was within half the poll interval.
-	history := h.lagStore.getHistory(cluster.ID, groupID)
-	shouldAppend := true
-	if len(history) > 0 {
-		lastTs := history[len(history)-1].Ts
-		if snap.Ts-lastTs < int64(lagPollInterval/2/time.Millisecond) {
-			shouldAppend = false
-		}
-	}
-	if shouldAppend {
-		h.lagStore.appendSnapshot(cluster.ID, groupID, snap)
-		history = h.lagStore.getHistory(cluster.ID, groupID)
-	}
-
+	minGapMs := int64(lagPollInterval / 2 / time.Millisecond)
+	history := h.lagStore.appendIfNew(cluster.ID, groupID, snap, minGapMs)
 	if history == nil {
 		history = []LagSnapshot{}
 	}
