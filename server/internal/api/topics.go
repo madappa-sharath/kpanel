@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kpanel/kpanel/internal/kafka"
@@ -42,13 +44,24 @@ type topicDetailResponse struct {
 }
 
 type messageResponse struct {
-	Partition int32             `json:"partition"`
-	Offset    int64             `json:"offset"`
-	Timestamp string            `json:"timestamp"`
-	Key       *string           `json:"key"`
-	Value     string            `json:"value"`
-	Headers   map[string]string `json:"headers"`
-	Size      int               `json:"size"`
+	Partition     int32             `json:"partition"`
+	Offset        int64             `json:"offset"`
+	Timestamp     string            `json:"timestamp"`
+	Key           *string           `json:"key"`
+	KeyEncoding   string            `json:"key_encoding,omitempty"`
+	Value         string            `json:"value"`
+	ValueEncoding string            `json:"value_encoding,omitempty"`
+	Headers       map[string]string `json:"headers"`
+	Size          int               `json:"size"`
+}
+
+// safeBytes returns the bytes as a UTF-8 string if valid, otherwise as base64.
+// Returns (value, encoding) where encoding is "" for UTF-8 or "base64" for binary.
+func safeBytes(b []byte) (string, string) {
+	if utf8.Valid(b) {
+		return string(b), ""
+	}
+	return base64.StdEncoding.EncodeToString(b), "base64"
 }
 
 func topicAdminErrorStatus(err error) int {
@@ -515,22 +528,28 @@ func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			var key *string
+			var keyEncoding string
 			if len(rec.Key) > 0 {
-				s := string(rec.Key)
+				s, enc := safeBytes(rec.Key)
 				key = &s
+				keyEncoding = enc
 			}
 			headers := map[string]string{}
 			for _, h := range rec.Headers {
-				headers[h.Key] = string(h.Value)
+				v, _ := safeBytes(h.Value)
+				headers[h.Key] = v
 			}
+			value, valueEncoding := safeBytes(rec.Value)
 			msgs = append(msgs, messageResponse{
-				Partition: rec.Partition,
-				Offset:    rec.Offset,
-				Timestamp: rec.Timestamp.UTC().Format(time.RFC3339),
-				Key:       key,
-				Value:     string(rec.Value),
-				Headers:   headers,
-				Size:      len(rec.Key) + len(rec.Value),
+				Partition:     rec.Partition,
+				Offset:        rec.Offset,
+				Timestamp:     rec.Timestamp.UTC().Format(time.RFC3339),
+				Key:           key,
+				KeyEncoding:   keyEncoding,
+				Value:         value,
+				ValueEncoding: valueEncoding,
+				Headers:       headers,
+				Size:          len(rec.Key) + len(rec.Value),
 			})
 			totalCollected++
 			if totalCollected >= totalWanted {

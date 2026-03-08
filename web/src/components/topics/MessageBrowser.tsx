@@ -72,7 +72,8 @@ export function MessageBrowser({
   const filteredMessages = filterText
     ? messages.filter((m) => {
         const q = filterText.toLowerCase()
-        return (m.key?.toLowerCase().includes(q) ?? false) || m.value.toLowerCase().includes(q)
+        return (m.key_encoding !== 'base64' && (m.key?.toLowerCase().includes(q) ?? false))
+            || (m.value_encoding !== 'base64' && m.value.toLowerCase().includes(q))
       })
     : messages
 
@@ -191,7 +192,11 @@ export function MessageBrowser({
                   {showAbsolute ? new Date(m.timestamp).toLocaleString() : relativeTime(m.timestamp)}
                 </span>
                 <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono">
-                  {m.key ?? <span className="text-muted-foreground">(null)</span>}
+                  {m.key == null
+                    ? <span className="text-muted-foreground">(null)</span>
+                    : m.key_encoding === 'base64'
+                      ? <span className="text-muted-foreground italic">[binary key]</span>
+                      : m.key}
                 </span>
                 <span className="text-muted-foreground flex-shrink-0">{formatBytes(m.size)}</span>
                 <span className="text-muted-foreground/40 w-4 text-right flex-shrink-0">
@@ -204,7 +209,11 @@ export function MessageBrowser({
                   {m.key && (
                     <div className="mb-2">
                       <p className="mt-2 mb-1 text-xs text-muted-foreground uppercase tracking-wide">Key</p>
-                      <pre className="text-xs bg-muted rounded px-3 py-2 m-0 font-mono overflow-x-auto">{m.key}</pre>
+                      <pre className="text-xs bg-muted rounded px-3 py-2 m-0 font-mono overflow-x-auto">
+                        {m.key_encoding === 'base64'
+                          ? <span className="text-muted-foreground italic">[binary — base64 encoded]</span>
+                          : m.key}
+                      </pre>
                     </div>
                   )}
 
@@ -230,9 +239,10 @@ export function MessageBrowser({
                     </div>
                   </div>
                   <pre className="text-xs bg-muted rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap m-0 font-mono">
-                    {(() => {
-                      try { return JSON.stringify(JSON.parse(m.value), null, 2) } catch { return m.value }
-                    })()}
+                    {m.value_encoding === 'base64'
+                      ? <span className="text-muted-foreground italic">[binary — base64 encoded]</span>
+                      : (() => { try { return JSON.stringify(JSON.parse(m.value), null, 2) } catch { return m.value } })()
+                    }
                   </pre>
 
                   {Object.keys(m.headers).length > 0 && (

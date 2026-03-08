@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -27,6 +28,7 @@ var (
 	drain   = flag.Bool("drain", false, "advance all groups to end offset, zeroing lag; implies --consume")
 	produce = flag.Bool("produce", false, "produce more messages to existing topics without re-seeding")
 	members = flag.Bool("members", false, "start real consumers for each group (shows members in UI); runs until Ctrl+C")
+	binary_ = flag.Bool("binary", false, "produce binary (non-UTF-8) messages to binary-test topic for UI testing")
 )
 
 type topicDef struct {
@@ -81,6 +83,12 @@ func main() {
 	defer cl.Close()
 
 	adm := kadm.NewClient(cl)
+
+	if *binary_ {
+		produceBinaryMessages(ctx, cl, adm)
+		log.Println("done")
+		return
+	}
 
 	if *drain {
 		*consume = true
@@ -383,3 +391,100 @@ func deadLetterMsg() []byte {
 }
 
 func ptr(s string) *string { return &s }
+
+// produceBinaryMessages creates the binary-test topic and produces a mix of
+// binary-encoded messages (Avro-style with magic byte + schema ID, raw bytes,
+// and protobuf-style length-delimited) alongside a few plain UTF-8 messages
+// so the UI can be verified to handle each case correctly.
+func produceBinaryMessages(ctx context.Context, cl *kgo.Client, adm *kadm.Client) {
+	const topic = "binary-test"
+
+	// Create topic (ignore already-exists).
+	resp, err := adm.CreateTopics(ctx, 1, 1, nil, topic)
+	if err != nil {
+		log.Fatalf("create topic %s: %v", topic, err)
+	}
+	for _, r := range resp {
+		if r.Err == kerr.TopicAlreadyExists {
+			log.Printf("  topic %s already exists", r.Topic)
+		} else if r.Err != nil {
+			log.Fatalf("  create topic %s: %v", r.Topic, r.Err)
+		} else {
+			log.Printf("  created topic %s", r.Topic)
+		}
+	}
+
+	n := *count
+	records := make([]*kgo.Record, 0, n)
+	for i := 0; i < n; i++ {
+		var key, value []byte
+		var hdrs []kgo.RecordHeader
+		switch i % 4 {
+		case 0:
+			// Avro: magic byte 0x00 + 4-byte schema ID (big-endian) + binary payload.
+			schemaID := uint32(rand.Intn(10) + 1)
+			payload := randomBytes(rand.Intn(40) + 20)
+			value = make([]byte, 5+len(payload))
+			value[0] = 0x00
+			binary.BigEndian.PutUint32(value[1:5], schemaID)
+			copy(value[5:], payload)
+			key = []byte(uuid.New().String()) // UTF-8 key, binary value
+			hdrs = []kgo.RecordHeader{
+				{Key: "content-type", Value: []byte("application/avro")},
+				{Key: "schema-id", Value: randomBytes(4)}, // binary header value
+			}
+		case 1:
+			// Protobuf-style: raw binary, no magic byte.
+			value = randomBytes(rand.Intn(60) + 10)
+			key = randomBytes(8) // binary key too
+			hdrs = []kgo.RecordHeader{
+				{Key: "content-type", Value: []byte("application/protobuf")},
+			}
+		case 2:
+			// Null bytes mixed with text — invalid UTF-8.
+			value = mixedBytes(fmt.Sprintf(`{"id":%d}`, i))
+			key = []byte(fmt.Sprintf("key-%d", i))
+		case 3:
+			// Plain UTF-8 for comparison — should render normally.
+			v, _ := json.Marshal(map[string]any{
+				"id":   i,
+				"note": "plain utf-8 message",
+				"ts":   time.Now().UnixMilli(),
+			})
+			value = v
+			key = []byte(fmt.Sprintf("utf8-key-%d", i))
+		}
+		records = append(records, &kgo.Record{
+			Topic:   topic,
+			Key:     key,
+			Value:   value,
+			Headers: hdrs,
+		})
+	}
+
+	if err := cl.ProduceSync(ctx, records...).FirstErr(); err != nil {
+		log.Fatalf("produce to %s: %v", topic, err)
+	}
+	log.Printf("  produced %d messages to %s (avro/protobuf/mixed-binary/utf8)", n, topic)
+}
+
+// randomBytes returns n random bytes that are unlikely to be valid UTF-8.
+func randomBytes(n int) []byte {
+	b := make([]byte, n)
+	for i := range b {
+		// Use the high byte range (0x80-0xFF) so the result is guaranteed non-UTF-8.
+		b[i] = byte(0x80 + rand.Intn(0x7F))
+	}
+	return b
+}
+
+// mixedBytes embeds null bytes into a string to produce invalid UTF-8.
+func mixedBytes(s string) []byte {
+	b := []byte(s)
+	// Sprinkle a null and a high byte in the middle.
+	if len(b) > 4 {
+		b[2] = 0x00
+		b[3] = 0xFF
+	}
+	return b
+}

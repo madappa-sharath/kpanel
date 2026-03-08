@@ -32,7 +32,9 @@ export interface Message {
   offset: number
   timestamp: string
   key: string | null
+  key_encoding?: 'base64'
   value: string
+  value_encoding?: 'base64'
   headers: Record<string, string>
   size: number
 }
