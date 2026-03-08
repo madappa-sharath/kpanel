@@ -2,11 +2,9 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
 import { AlertTriangle, ChevronRight, Cloud, Copy, RefreshCw } from 'lucide-react'
 import { api } from '../../lib/api'
 import { queryKeys } from '../../lib/queryKeys'
-import { useAppStore } from '../../stores/appStore'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
@@ -17,8 +15,6 @@ interface AWSContextCardProps {
 export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded)
   const queryClient = useQueryClient()
-  const navigate = useNavigate()
-  const setActive = useAppStore((s) => s.setActiveCluster)
 
   const { data: ctx, isLoading, isFetching: isChecking, refetch: recheck } = useQuery({
     queryKey: queryKeys.aws.context(),
@@ -43,13 +39,17 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
   const [accessMode, setAccessMode] = useState<Record<string, 'private' | 'public'>>({})
   function getAccess(arn: string) { return accessMode[arn] ?? 'private' }
 
+  const [importError, setImportError] = useState<string | null>(null)
+
   const { mutate: importCluster, isPending: isImporting, variables: importingArgs } = useMutation({
     mutationFn: ({ arn, access }: { arn: string; access: 'private' | 'public' }) =>
       api.msk.import(arn, access),
-    onSuccess: (cluster) => {
+    onSuccess: () => {
+      setImportError(null)
       queryClient.invalidateQueries({ queryKey: queryKeys.connections.all() })
-      setActive(cluster.id)
-      navigate({ to: '/clusters/$clusterId/settings', params: { clusterId: cluster.id } })
+    },
+    onError: (err: Error) => {
+      setImportError(err.message)
     },
   })
 
@@ -174,6 +174,10 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
       {/* Discovery results */}
       {hasDiscovered && !isDiscovering && mskClusters && mskClusters.length === 0 && (
         <p className="text-sm text-muted-foreground">No MSK clusters found in {ctx.region}.</p>
+      )}
+
+      {importError && (
+        <p className="text-xs text-destructive mb-3">{importError}</p>
       )}
 
       {mskClusters && mskClusters.length > 0 && (

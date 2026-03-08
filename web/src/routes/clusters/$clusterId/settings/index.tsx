@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from '@tanstack/react-router'
+import { useParams, useRouter } from '@tanstack/react-router'
 import { useClusters } from '../../../../hooks/useCluster'
 import { ClusterForm } from '../../../../components/clusters/ClusterForm'
 import { PageHeader } from '../../../../components/shared/PageHeader'
@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 export function ClusterSettingsPage() {
   const { clusterId } = useParams({ strict: false }) as { clusterId: string }
-  const navigate = useNavigate()
+  const router = useRouter()
   const { data: clusters, isLoading } = useClusters()
 
   const cluster = clusters?.find((c) => c.id === clusterId)
@@ -39,7 +39,7 @@ export function ClusterSettingsPage() {
         <ClusterForm
           cluster={cluster}
           onSuccess={() => {}}
-          onCancel={() => navigate({ to: '/clusters/$clusterId', params: { clusterId } })}
+          onCancel={() => router.history.back()}
         />
       </div>
     </div>

@@ -22,7 +22,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const body = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error((body as { error?: string }).error ?? res.statusText)
   }
-  return res.json() as Promise<T>
+  const text = await res.text()
+  return (text ? JSON.parse(text) : undefined) as T
 }
 
 export const api = {
