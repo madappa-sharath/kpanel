@@ -176,6 +176,7 @@ export function ResetOffsetsModal({ open, clusterId, groupId, onClose }: ResetOf
 
             {strategy === 'offset' && (
               <div className="flex flex-col gap-2">
+                <p className="text-xs text-muted-foreground">This offset is applied to every partition. Offset 200 on P0 is a different message than offset 200 on P1. Use <strong>timestamp</strong> to seek all partitions to the same point in time.</p>
                 <div>
                   <label className="text-xs text-muted-foreground mb-1.5 block">Exact offset</label>
                   <Input type="number" value={exactOffset} onChange={(e) => setExactOffset(e.target.value)} placeholder="e.g. 12345" />
