@@ -59,33 +59,34 @@ func main() {
 	// In dev mode this serves the .gitkeep placeholder (harmless — Bun handles frontend on :3000).
 	// In production this serves the full React app.
 	publicFS, err := fs.Sub(publicFiles, "public")
-	if err == nil {
-		static := http.FileServer(http.FS(publicFS))
-		r.Handle("/*", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			if strings.HasPrefix(req.URL.Path, "/api/") {
-				http.NotFound(w, req)
-				return
-			}
-
-			cleanPath := strings.TrimPrefix(path.Clean(req.URL.Path), "/")
-			if cleanPath == "." || cleanPath == "" {
-				cleanPath = "index.html"
-			}
-
-			if _, statErr := fs.Stat(publicFS, cleanPath); statErr == nil {
-				static.ServeHTTP(w, req)
-				return
-			}
-			if _, statErr := fs.Stat(publicFS, "index.html"); statErr != nil {
-				http.NotFound(w, req)
-				return
-			}
-
-			fallback := req.Clone(req.Context())
-			fallback.URL.Path = "/index.html"
-			static.ServeHTTP(w, fallback)
-		}))
+	if err != nil {
+		log.Fatalf("failed to open embedded public FS: %v", err)
 	}
+	static := http.FileServer(http.FS(publicFS))
+	r.Handle("/*", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if strings.HasPrefix(req.URL.Path, "/api/") {
+			http.NotFound(w, req)
+			return
+		}
+
+		cleanPath := strings.TrimPrefix(path.Clean(req.URL.Path), "/")
+		if cleanPath == "." || cleanPath == "" {
+			cleanPath = "index.html"
+		}
+
+		if _, statErr := fs.Stat(publicFS, cleanPath); statErr == nil {
+			static.ServeHTTP(w, req)
+			return
+		}
+		if _, statErr := fs.Stat(publicFS, "index.html"); statErr != nil {
+			http.NotFound(w, req)
+			return
+		}
+
+		fallback := req.Clone(req.Context())
+		fallback.URL.Path = "/index.html"
+		static.ServeHTTP(w, fallback)
+	}))
 
 	addr := fmt.Sprintf(":%s", port)
 	log.Printf("kpanel listening on http://localhost%s", addr)
