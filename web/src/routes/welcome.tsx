@@ -25,7 +25,7 @@ export function WelcomePage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-5 py-10">
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-md">
 
         {/* Wordmark */}
         <div className="text-center mb-12">
@@ -62,14 +62,16 @@ export function WelcomePage() {
                     >
                       <div className="size-1.5 rounded-full bg-muted-foreground/40 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-foreground">{c.name}</div>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-sm font-medium text-foreground truncate">{c.name}</span>
+                          {c.platform === 'aws' && (
+                            <Badge variant="outline" className="text-amber-600 border-amber-600/30 bg-amber-50 dark:bg-amber-950 dark:text-amber-400 flex-shrink-0 text-[10px] px-1.5 py-0">
+                              MSK
+                            </Badge>
+                          )}
+                        </div>
                         <div className="text-xs text-muted-foreground truncate">{c.brokers.join(', ')}</div>
                       </div>
-                      {c.platform === 'aws' && (
-                        <Badge variant="outline" className="text-amber-600 border-amber-600/30 bg-amber-50 dark:bg-amber-950 dark:text-amber-400 flex-shrink-0">
-                          MSK
-                        </Badge>
-                      )}
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <Button
                           variant="ghost"
