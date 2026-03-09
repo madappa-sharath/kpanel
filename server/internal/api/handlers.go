@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -39,7 +40,7 @@ type Handlers struct {
 func NewHandlers(store *config.Store) *Handlers {
 	return &Handlers{
 		store:    store,
-		certsDir: store.Dir() + "/certs",
+		certsDir: filepath.Join(store.Dir(), "certs"),
 		lagStore: NewLagStore(),
 	}
 }
@@ -52,6 +53,16 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// writeErrorWithFields writes a JSON error response that includes extra key/value
+// fields alongside the standard "error" key (e.g. active_members on a conflict).
+func writeErrorWithFields(w http.ResponseWriter, status int, msg string, extra map[string]any) {
+	body := map[string]any{"error": msg}
+	for k, v := range extra {
+		body[k] = v
+	}
+	writeJSON(w, status, body)
 }
 
 type configEntry struct {

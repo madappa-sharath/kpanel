@@ -23,19 +23,19 @@ type LagSnapshot struct {
 	ByTopic  map[string]int64 `json:"by_topic"`
 }
 
-// lagRingBuffer holds up to cap snapshots in insertion order.
+// lagRingBuffer holds up to capacity snapshots in insertion order.
 type lagRingBuffer struct {
 	mu        sync.RWMutex
 	snapshots []LagSnapshot
 	head      int // next write position
 	size      int // current number of stored entries
-	cap       int
+	capacity  int
 }
 
 func newLagRingBuffer(capacity int) *lagRingBuffer {
 	return &lagRingBuffer{
 		snapshots: make([]LagSnapshot, capacity),
-		cap:       capacity,
+		capacity:  capacity,
 	}
 }
 
@@ -47,20 +47,20 @@ func (b *lagRingBuffer) appendIfNew(snap LagSnapshot, minGapMs int64) []LagSnaps
 	defer b.mu.Unlock()
 	shouldAppend := b.size == 0
 	if !shouldAppend {
-		last := b.snapshots[(b.head-1+b.cap)%b.cap]
+		last := b.snapshots[(b.head-1+b.capacity)%b.capacity]
 		shouldAppend = snap.Ts-last.Ts >= minGapMs
 	}
 	if shouldAppend {
 		b.snapshots[b.head] = snap
-		b.head = (b.head + 1) % b.cap
-		if b.size < b.cap {
+		b.head = (b.head + 1) % b.capacity
+		if b.size < b.capacity {
 			b.size++
 		}
 	}
 	result := make([]LagSnapshot, b.size)
-	start := (b.head - b.size + b.cap) % b.cap
+	start := (b.head - b.size + b.capacity) % b.capacity
 	for i := 0; i < b.size; i++ {
-		result[i] = b.snapshots[(start+i)%b.cap]
+		result[i] = b.snapshots[(start+i)%b.capacity]
 	}
 	return result
 }

@@ -89,12 +89,10 @@ func (h *Handlers) ResetOffsets(w http.ResponseWriter, r *http.Request) {
 	}
 	activeMembers := len(dg.Members)
 	if activeMembers > 0 && !req.Force {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
-			"error":          fmt.Sprintf("group has %d active member(s); stop the consumer first or use force=true", activeMembers),
-			"active_members": activeMembers,
-		})
+		writeErrorWithFields(w, http.StatusConflict,
+			fmt.Sprintf("group has %d active member(s); stop the consumer first or use force=true", activeMembers),
+			map[string]any{"active_members": activeMembers},
+		)
 		return
 	}
 

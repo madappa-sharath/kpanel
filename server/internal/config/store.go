@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,7 +10,7 @@ import (
 )
 
 // ErrNotFound is returned when a cluster ID does not exist in the store.
-var ErrNotFound = fmt.Errorf("not found")
+var ErrNotFound = errors.New("not found")
 
 // Store provides thread-safe access to the kpanel config.
 type Store struct {
