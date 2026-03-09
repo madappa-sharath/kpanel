@@ -1,0 +1,29 @@
+version: 2
+
+before:
+  hooks:
+    - bash -c "cd web && bun install && bun build.ts"
+    - bash -c "rm -rf server/cmd/kpanel/public && cp -r web/dist server/cmd/kpanel/public"
+
+builds:
+  - id: kpanel
+    dir: server
+    main: ./cmd/kpanel
+    binary: kpanel
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - formats: [tar.gz]
+    name_template: "kpanel_{{.Version}}_{{.Os}}_{{.Arch}}"
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  draft: false
+  prerelease: auto

@@ -21,6 +21,8 @@ import (
 	"github.com/kpanel/kpanel/internal/config"
 )
 
+var version = "dev"
+
 // publicFiles embeds the built React frontend.
 // In dev (go run), this directory only has a .gitkeep placeholder — Bun
 // serves the frontend on :3000 instead. In production (make build), the
@@ -110,7 +112,7 @@ func main() {
 
 	prod := isProd(publicFS)
 	url := "http://localhost:" + port
-	printBanner(url, configDir, preferredPort, portChanged, prod)
+	printBanner(url, configDir, preferredPort, portChanged, prod, version)
 
 	if prod {
 		go func() {
@@ -164,10 +166,10 @@ func openBrowser(url string) {
 }
 
 // printBanner writes the startup banner to stderr.
-func printBanner(url, configDir, preferredPort string, portChanged, prod bool) {
+func printBanner(url, configDir, preferredPort string, portChanged, prod bool, version string) {
 	sep := "──────────────────────────────────────────"
 	if prod {
-		fmt.Fprintln(os.Stderr, "kpanel  ·  local kafka GUI")
+		fmt.Fprintf(os.Stderr, "kpanel  ·  local kafka GUI  ·  v%s\n", version)
 		fmt.Fprintln(os.Stderr, sep)
 		fmt.Fprintf(os.Stderr, "  URL     %s\n", url)
 		fmt.Fprintf(os.Stderr, "  Config  %s\n", configDir)
@@ -179,7 +181,7 @@ func printBanner(url, configDir, preferredPort string, portChanged, prod bool) {
 		fmt.Fprintln(os.Stderr, "Opening in browser...")
 		fmt.Fprintln(os.Stderr, "Press Ctrl+C to stop")
 	} else {
-		fmt.Fprintln(os.Stderr, "kpanel  ·  dev server")
+		fmt.Fprintf(os.Stderr, "kpanel  ·  dev server  ·  v%s\n", version)
 		fmt.Fprintln(os.Stderr, sep)
 		fmt.Fprintf(os.Stderr, "  API     %s\n", url)
 		fmt.Fprintf(os.Stderr, "  Config  %s\n", configDir)

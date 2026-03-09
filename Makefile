@@ -1,3 +1,6 @@
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS  = -ldflags "-s -w -X main.version=$(VERSION)"
+
 .PHONY: dev dev-server dev-web setup build build-web build-server build-linux build-darwin clean kafka-up kafka-down kafka-logs kafka-seed kafka-seed-reset kafka-produce kafka-consume kafka-consume-all kafka-members kafka-seed-binary dev-full test test-integration create-dev-msk destroy-dev-msk
 
 test:
@@ -38,17 +41,17 @@ build-web:
 	cp -r web/dist server/cmd/kpanel/public
 
 build-server: build-web
-	cd server && CGO_ENABLED=0 go build -o ../dist/kpanel ./cmd/kpanel
+	cd server && CGO_ENABLED=0 go build $(LDFLAGS) -o ../dist/kpanel ./cmd/kpanel
 
 build-linux:
 	cd web && bun install && bun build.ts
 	rm -rf server/cmd/kpanel/public && cp -r web/dist server/cmd/kpanel/public
-	cd server && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ../dist/kpanel-linux-amd64 ./cmd/kpanel
+	cd server && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o ../dist/kpanel-linux-amd64 ./cmd/kpanel
 
 build-darwin:
 	cd web && bun install && bun build.ts
 	rm -rf server/cmd/kpanel/public && cp -r web/dist server/cmd/kpanel/public
-	cd server && GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o ../dist/kpanel-darwin-arm64 ./cmd/kpanel
+	cd server && GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o ../dist/kpanel-darwin-arm64 ./cmd/kpanel
 
 clean:
 	rm -rf dist server/cmd/kpanel/public web/dist web/node_modules
