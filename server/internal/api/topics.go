@@ -506,6 +506,9 @@ func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
 	for _, cr := range consumeRanges {
 		totalWanted += cr.wantCount
 	}
+	if totalWanted > int64(req.Limit) {
+		totalWanted = int64(req.Limit)
+	}
 	var totalCollected int64
 
 	fetchCtx, fetchCancel := context.WithCancel(ctx)
