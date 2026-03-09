@@ -58,20 +58,19 @@ func main() {
 			"check that "+configDir+" is readable and not corrupted")
 	}
 
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-
-	api.Mount(r, store)
-
-	// Serve embedded frontend for all non-API routes.
-	// In dev mode this serves the .gitkeep placeholder (harmless — Bun handles frontend on :3000).
-	// In production this serves the full React app.
 	publicFS, err := fs.Sub(publicFiles, "public")
 	if err != nil {
 		fatal("failed to open embedded assets: " + err.Error())
 	}
 	static := http.FileServer(http.FS(publicFS))
+
+	r := chi.NewRouter()
+	if !isProd(publicFS) {
+		r.Use(middleware.Logger)
+	}
+	r.Use(middleware.Recoverer)
+
+	api.Mount(r, store)
 	r.Handle("/*", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if strings.HasPrefix(req.URL.Path, "/api/") {
 			http.NotFound(w, req)
