@@ -50,10 +50,17 @@ type ClusterInfo struct {
 // Returns an empty slice (not an error) if credentials are unavailable — the caller treats
 // this as "no MSK clusters found" rather than a failure.
 func DiscoverClusters(ctx context.Context, region string) ([]ClusterInfo, error) {
-	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+	var loadOpts []func(*config.LoadOptions) error
+	if region != "" {
+		loadOpts = append(loadOpts, config.WithRegion(region))
+	}
+	awsCfg, err := config.LoadDefaultConfig(ctx, loadOpts...)
 	if err != nil {
 		log.Printf("msk discovery: failed to load AWS config: %v", err)
 		return nil, nil
+	}
+	if region == "" {
+		region = awsCfg.Region
 	}
 
 	// Check credentials availability before making API calls.

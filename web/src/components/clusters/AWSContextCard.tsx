@@ -1,12 +1,13 @@
 // AWS context card — shows active profile, credential status, and MSK discovery.
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ChevronRight, Cloud, Copy, RefreshCw } from 'lucide-react'
 import { api } from '../../lib/api'
 import { queryKeys } from '../../lib/queryKeys'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 
 interface AWSContextCardProps {
   defaultExpanded?: boolean
@@ -14,6 +15,7 @@ interface AWSContextCardProps {
 
 export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded)
+  const [region, setRegion] = useState('')
   const queryClient = useQueryClient()
 
   const { data: ctx, isLoading, isFetching: isChecking, refetch: recheck } = useQuery({
@@ -23,14 +25,19 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
     staleTime: 60_000,
   })
 
+  // Default region to whatever AWS resolved once ctx loads
+  useEffect(() => {
+    if (ctx?.region && !region) setRegion(ctx.region)
+  }, [ctx?.region])
+
   const {
     data: mskClusters,
     isFetching: isDiscovering,
     refetch: discover,
     isFetched: hasDiscovered,
   } = useQuery({
-    queryKey: queryKeys.msk.clusters(),
-    queryFn: () => api.msk.discover(),
+    queryKey: queryKeys.msk.clusters(region),
+    queryFn: () => api.msk.discover(region),
     enabled: false,
     retry: false,
   })
@@ -149,23 +156,29 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
         </div>
       )}
 
-      {/* Valid session info + discover button */}
+      {/* Valid session info + region picker + discover button */}
       {ctx.valid && (
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <Badge variant="outline" className="font-mono text-xs">{ctx.profile}</Badge>
           {ctx.account && (
             <span className="text-xs text-muted-foreground">{ctx.account}</span>
           )}
+          <Input
+            value={region}
+            onChange={(e) => setRegion(e.target.value)}
+            placeholder="us-east-1"
+            className="ml-auto h-7 w-36 font-mono text-xs"
+          />
           <Button
             variant="outline"
             size="sm"
-            className="ml-auto h-7 gap-1.5"
+            className="h-7 gap-1.5"
             onClick={() => discover()}
-            disabled={isDiscovering}
+            disabled={isDiscovering || !region}
           >
             {isDiscovering
               ? <><RefreshCw size={12} className="animate-spin" /> Discovering…</>
-              : 'Discover MSK clusters'
+              : 'Discover'
             }
           </Button>
         </div>
@@ -173,7 +186,7 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
 
       {/* Discovery results */}
       {hasDiscovered && !isDiscovering && mskClusters && mskClusters.length === 0 && (
-        <p className="text-sm text-muted-foreground">No MSK clusters found in {ctx.region}.</p>
+        <p className="text-sm text-muted-foreground">No MSK clusters found in {region}.</p>
       )}
 
       {importError && (

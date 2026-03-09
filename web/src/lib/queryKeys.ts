@@ -28,7 +28,7 @@ export const queryKeys = {
   },
 
   msk: {
-    clusters: () => ['msk', 'clusters'] as const,
+    clusters: (region?: string) => ['msk', 'clusters', region] as const,
   },
 
   metrics: {

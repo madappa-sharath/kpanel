@@ -18,9 +18,7 @@ func (h *Handlers) DiscoverMSK(w http.ResponseWriter, r *http.Request) {
 	if region == "" {
 		region = os.Getenv("AWS_REGION")
 	}
-	if region == "" {
-		region = "us-east-1"
-	}
+	// If still empty, DiscoverClusters lets the AWS SDK resolve from profile/AWS_DEFAULT_REGION.
 	clusters, err := msk.DiscoverClusters(r.Context(), region)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
