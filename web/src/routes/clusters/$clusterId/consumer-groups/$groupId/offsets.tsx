@@ -109,14 +109,14 @@ export function GroupOffsetsPage() {
       {/* Per-topic aggregate summary (shown when viewing all topics) */}
       {!topicFilter && topicTotals.size > 0 && (
         <div className="rounded-md border mb-3 overflow-hidden">
-          <div className="grid px-4 py-2 text-xs text-muted-foreground uppercase tracking-wide bg-muted/50" style={{ gridTemplateColumns: '1fr 80px 130px 100px' }}>
+          <div className="grid px-4 py-2 text-xs text-muted-foreground uppercase tracking-wide bg-muted/50" style={{ gridTemplateColumns: '1fr 80px 150px 130px' }}>
             <span>Topic</span>
             <span>Partitions</span>
             <span>Max Log End</span>
             <span className="text-right">Total Lag</span>
           </div>
           {Array.from(topicTotals.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([t, totals]) => (
-            <div key={t} className="grid px-4 py-2 border-t items-center text-sm" style={{ gridTemplateColumns: '1fr 80px 130px 100px' }}>
+            <div key={t} className="grid px-4 py-2 border-t items-center text-sm" style={{ gridTemplateColumns: '1fr 80px 150px 130px' }}>
               <span className="font-mono text-xs">{t}</span>
               <span className="text-muted-foreground font-mono text-xs">{totals.partitions}</span>
               <span className="text-muted-foreground font-mono text-xs">{formatNumber(totals.maxLogEnd)}</span>

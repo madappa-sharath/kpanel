@@ -158,13 +158,19 @@ export function MessageBrowser({
         <div className="flex items-center gap-4 px-4">
           <span className="w-4 flex-shrink-0 text-xs text-muted-foreground uppercase tracking-wide">P</span>
           <span className="w-20 flex-shrink-0 text-xs text-muted-foreground uppercase tracking-wide">Offset</span>
-          <button
-            onClick={() => setShowAbsolute((v) => !v)}
-            className="w-28 flex-shrink-0 bg-transparent border-none p-0 cursor-pointer text-xs text-muted-foreground uppercase tracking-wide text-left hover:text-foreground transition-colors"
-            title="Toggle absolute / relative time"
-          >
-            Time {showAbsolute ? '(abs)' : '(rel)'}
-          </button>
+          <div className={cn('flex-shrink-0', showAbsolute ? 'w-44' : 'w-28')}>
+            <button
+              onClick={() => setShowAbsolute((v) => !v)}
+              className="flex items-center gap-1.5 cursor-pointer bg-transparent border-none p-0"
+              title="Toggle relative / absolute time"
+            >
+              <span className="text-xs text-muted-foreground uppercase tracking-wide">Time</span>
+              <span className="flex items-center rounded border border-border overflow-hidden">
+                <span className={cn('px-1.5 py-0.5 text-xs transition-colors', !showAbsolute ? 'bg-muted text-foreground' : 'text-muted-foreground')}>Rel</span>
+                <span className={cn('px-1.5 py-0.5 text-xs transition-colors', showAbsolute ? 'bg-muted text-foreground' : 'text-muted-foreground')}>Abs</span>
+              </span>
+            </button>
+          </div>
           <span className="flex-1 text-xs text-muted-foreground uppercase tracking-wide">Key</span>
           <span className="text-xs text-muted-foreground uppercase tracking-wide">Size</span>
           <span className="w-4" />
@@ -188,7 +194,7 @@ export function MessageBrowser({
               >
                 <span className="text-muted-foreground w-4 flex-shrink-0">{m.partition}</span>
                 <span className="text-muted-foreground w-20 flex-shrink-0 font-mono">{m.offset}</span>
-                <span className="text-muted-foreground w-28 flex-shrink-0">
+                <span className={cn('text-muted-foreground flex-shrink-0', showAbsolute ? 'w-44' : 'w-28')}>
                   {showAbsolute ? new Date(m.timestamp).toLocaleString() : relativeTime(m.timestamp)}
                 </span>
                 <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono">
