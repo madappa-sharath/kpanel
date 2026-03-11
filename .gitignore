@@ -13,6 +13,7 @@ web/dist/
 # Build output
 dist/
 server/kafkaseed
+server/kpanel
 
 # Config (don't commit local/private runtime data)
 .kpanel/
