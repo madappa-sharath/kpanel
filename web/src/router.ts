@@ -7,6 +7,7 @@ import { TopicLayout } from './routes/clusters/$clusterId/topics/$topicName/__la
 import { GroupLayout } from './routes/clusters/$clusterId/consumer-groups/$groupId/__layout'
 
 // Top-level pages
+import { NotFoundPage } from './routes/not-found'
 import { WelcomePage } from './routes/welcome'
 import { SettingsPage } from './routes/settings/index'
 
@@ -43,6 +44,13 @@ import { AclsPage } from './routes/clusters/$clusterId/acls/index'
 // ─── Root ────────────────────────────────────────────────────────────────────
 // Bare root: just renders <Outlet /> so welcome page can be full-screen.
 const rootRoute = createRootRoute({ component: Outlet })
+
+// ─── 404 catch-all ───────────────────────────────────────────────────────────
+const notFoundRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '$',
+  component: NotFoundPage,
+})
 
 // ─── Welcome (no shell) ──────────────────────────────────────────────────────
 const welcomeRoute = createRoute({
@@ -241,6 +249,7 @@ const routeTree = rootRoute.addChildren([
       clusterSettingsRoute,
     ]),
   ]),
+  notFoundRoute,
 ])
 
 export const router = createRouter({ routeTree })
