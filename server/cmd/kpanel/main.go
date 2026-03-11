@@ -86,13 +86,14 @@ func main() {
 			static.ServeHTTP(w, req)
 			return
 		}
+
+		// SPA fallback: rewrite all requests to "/" and allow tanstack router to kick in for it.
 		if _, statErr := fs.Stat(publicFS, "index.html"); statErr != nil {
 			http.NotFound(w, req)
 			return
 		}
-
 		fallback := req.Clone(req.Context())
-		fallback.URL.Path = "/index.html"
+		fallback.URL.Path = "/"
 		static.ServeHTTP(w, fallback)
 	}))
 
