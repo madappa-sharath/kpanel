@@ -1,107 +1,132 @@
 # kpanel
 
-> Lightweight Kafka GUI. Works with any cluster. First-class AWS MSK support.
+Local Kafka GUI for any cluster. Runs on your workstation, uses your credentials. Native AWS MSK and IAM auth support.
 
 ![Status](https://img.shields.io/badge/status-under%20development-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-**🚧 Under Development**
-
 ---
 
-## Why?
+## What it does
 
-Conduktor costs $50-60K/year. Most teams just need to browse topics, check consumer lag, and peek at messages. kpanel is a local app that runs on your machine and connects directly to your Kafka cluster using your existing credentials — no SaaS, no subscription, no data leaving your machine.
-
-Works with **any** Kafka cluster. AWS MSK clusters get bonus features: auto-discovery, IAM authentication, and CloudWatch metrics.
-
-## Features
-
-- **Any Kafka** — works with self-hosted Kafka, Confluent Cloud, Aiven, Redpanda, AWS MSK, or any Kafka-compatible broker
-- **MSK auto-discovery** — list your MSK clusters from AWS without copy-pasting broker URLs
-- **IAM auth** — MSK IAM authentication via your existing AWS credentials (no signer library required)
+- **Browse topics** — partition layout, replication state, ISR status, configuration
+- **Peek messages** — inspect the last N messages from any topic with offset display
 - **Consumer group lag** — per-partition lag for every consumer group
-- **Message peek** — inspect the last N messages from any topic
-- **Broker health** — partition status, ISR, replication
-- **CloudWatch metrics** — throughput, lag, and broker health charts (MSK connections only)
-- **⌘K search** — quickly jump to any topic or consumer group
-- **Single binary** — ships as a self-contained binary with embedded frontend
+- **Broker health** — broker metadata, partition assignments, leader/follower status
+- **Cluster overview** — active controller, under-replicated partitions, key cluster configs
+- **MSK auto-discovery** — enumerate MSK clusters in your AWS account without copy-pasting broker URLs
+- **CloudWatch metrics** — throughput, lag, and broker resource charts pulled from CloudWatch (MSK connections only)
+- **Any Kafka** — works with self-hosted Kafka, Confluent Cloud, Aiven, Redpanda, or any Kafka-compatible broker
+- **Single binary** — self-contained binary with embedded frontend; no runtime dependencies
 
-## Architecture
+## How it works
+
+Most Kafka GUIs — AKHQ, Kafka UI, Redpanda Console — are deployed as a central service. They run on a server, authenticate to Kafka with a shared service account, and expose their own web auth layer. Every team member accesses the same instance.
+
+kpanel is different: each user runs it locally on their workstation.
 
 ```
-React + shadcn/ui  ←──API──→  Go HTTP server
-(Bun native bundler)          (franz-go + chi)
+Your workstation
+┌────────────────────────────────────────────────────────┐
+│                                                        │
+│   kpanel binary                                        │
+│   ┌─────────────────────────────────────────────────┐ │
+│   │  React UI  ←──→  Go HTTP server                 │ │
+│   │                  │                              │ │
+│   │                  ├─ franz-go (Kafka client)     │ │
+│   │                  ├─ AWS SDK (MSK + CloudWatch)  │ │
+│   │                  └─ your local AWS credentials  │ │
+│   └─────────────────────────────────────────────────┘ │
+│                  │                                     │
+└──────────────────┼─────────────────────────────────────┘
+                   │  direct connection
+                   ▼
+            AWS MSK cluster
 ```
 
-In production: single Go binary with embedded frontend via `go:embed`. No Node, no JVM, no runtime dependencies.
+The binary listens on localhost. It reads your existing AWS credentials directly — `~/.aws/credentials`, environment variables, EC2 instance metadata, whatever the AWS SDK finds. No credential sharing between teammates, no token vending machine, no IAM role gymnastics to give a central service access to your clusters.
 
-## Prerequisites
+## AWS MSK
 
-**To run the binary:**
-- Nothing — it's a static binary
+kpanel is specifically designed so `aws sso login` + `./kpanel` just works.
 
-**For development:**
-- [Go 1.22+](https://go.dev/dl/)
-- [Bun](https://bun.sh)
+**Auto-discovery.** Click "Discover MSK Clusters" in the UI. kpanel calls the AWS Kafka API, lists your clusters, and imports their broker endpoints automatically. No broker URLs to look up.
 
-**To connect to Kafka:**
-- A Kafka cluster (local, Confluent, MSK, etc.)
-- For MSK: AWS credentials configured (`aws configure` or environment variables)
+**IAM authentication.** MSK connections authenticate via `AWS_MSK_IAM` SASL, implemented natively in franz-go. Your credentials (SSO, instance profile, environment variables — anything the AWS SDK resolves) are used directly. Credentials are refreshed automatically; no manual token rotation.
 
-## Quick Start — Development
+**CloudWatch metrics.** MSK connections surface a Metrics tab with CloudWatch charts: bytes in/out, messages per second, consumer lag, CPU, disk, memory. Pulled via the CloudWatch API using the same credentials.
+
+AWS features activate automatically when AWS credentials are present. The core Kafka functionality works without any AWS credentials.
+
+## Quick Start
+
+**Download the binary:**
 
 ```bash
-# Clone the repo
-git clone https://github.com/your-org/kpanel.git
-cd kpanel
-
-# First-time setup: download Go modules + install JS deps
-make setup
-
-# Start both servers
-make dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-The Go API server runs on [http://localhost:8080](http://localhost:8080). The Bun dev server proxies `/api` requests to it automatically.
-
-## Quick Start — Production Binary
-
-```bash
-# Download from releases page
-curl -L https://github.com/your-org/kpanel/releases/latest/download/kpanel-darwin-arm64 -o kpanel
-chmod +x kpanel
-
-# Run it
+# macOS — Apple Silicon (M1/M2/M3)
+curl -L https://github.com/madappa-sharath/kpanel/releases/latest/download/kpanel_darwin_arm64.tar.gz | tar xz
+xattr -d com.apple.quarantine kpanel   # remove Apple quarantine (see note below)
 ./kpanel
 
-# Open browser
-open http://localhost:8080
+# macOS — Intel
+curl -L https://github.com/madappa-sharath/kpanel/releases/latest/download/kpanel_darwin_amd64.tar.gz | tar xz
+xattr -d com.apple.quarantine kpanel
+./kpanel
+
+# Linux (amd64)
+curl -L https://github.com/madappa-sharath/kpanel/releases/latest/download/kpanel_linux_amd64.tar.gz | tar xz
+./kpanel
 ```
+
+> **macOS quarantine note:** macOS blocks unsigned binaries downloaded from the internet with "cannot be opened because the developer cannot be verified." The `xattr -d com.apple.quarantine` command removes that flag. kpanel is not Apple-notarized.
+
+**Run it:**
+
+```bash
+# For AWS MSK: make sure AWS credentials are configured first
+aws sso login   # or aws configure, or set AWS_PROFILE / AWS_ACCESS_KEY_ID
+
+./kpanel
+```
+
+**Open your browser:**
+
+```
+http://localhost:8080
+```
+
+From there: add a manual connection (enter broker addresses) or click "Discover MSK Clusters" to auto-import from your AWS account.
 
 ## Build from Source
 
+**Prerequisites:** [Go 1.22+](https://go.dev/dl/) and [Bun](https://bun.sh)
+
 ```bash
-# Full production build → ./dist/kpanel
+git clone https://github.com/madappa-sharath/kpanel.git
+cd kpanel
+
+# Install dependencies
+make setup
+
+# Development (Go on :8080, React dev server on :3000 with HMR)
+make dev
+
+# Production build → ./dist/kpanel
 make build
 
 # Cross-compile
-make build-linux   # Linux amd64
-make build-darwin  # macOS arm64
+make build-linux    # Linux amd64
+make build-darwin   # macOS arm64
 ```
+
+In development, open [http://localhost:3000](http://localhost:3000). The Bun dev server proxies `/api` requests to the Go server at `:8080`.
 
 ## Configuration
 
-Add connections via the UI:
-1. Click **Add Connection** and enter broker addresses (e.g. `localhost:9092`)
-2. Choose auth type: none, SASL/PLAIN, SASL/SCRAM, or AWS IAM
-3. For MSK: click **Discover MSK Clusters** to auto-import from your AWS account
-
-Connections are stored in `~/.kpanel/connections.json`.
+Connections are stored in `~/.kpanel/connections.json`. They can be added via the UI or pre-populated manually.
 
 **Environment variables:**
+
 | Variable | Default | Description |
 |---|---|---|
 | `KPANEL_PORT` | `8080` | HTTP port |
@@ -109,25 +134,38 @@ Connections are stored in `~/.kpanel/connections.json`.
 | `AWS_REGION` | — | Default region for MSK discovery |
 | `AWS_PROFILE` | — | AWS profile to use |
 
-## Tech Stack
+Standard AWS environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`) work as expected.
 
-| Layer | Technology |
+## Dependencies
+
+Direct dependencies:
+
+**Server (Go):**
+
+| Package | Role | Why |
+|---|---|---|
+| `twmb/franz-go` | Kafka client | Most complete Go Kafka client; actively maintained; built-in `AWS_MSK_IAM` SASL; production-proven at scale |
+| `twmb/franz-go/pkg/kadm` | Admin operations | Structured admin API on top of franz-go (topic/group management, offset operations) |
+| `twmb/franz-go/pkg/kmsg` | Kafka protocol types | Low-level protocol message types used alongside kadm |
+| `go-chi/chi/v5` | HTTP router | Lightweight, stdlib-compatible; no framework lock-in |
+| `aws/aws-sdk-go-v2` | AWS integration | Official AWS SDK; MSK cluster discovery, CloudWatch metrics |
+| `zalando/go-keyring` | Credential storage | OS keychain integration — macOS Keychain, Linux Secret Service, Windows Credential Manager |
+| `testcontainers-go/modules/kafka` | Integration tests | Spins up a real Kafka container for tests |
+
+**Frontend (JS — runtime deps only):**
+
+| Package | Role |
 |---|---|
-| Server | Go 1.22+ with `go-chi/chi` |
-| Kafka client | `franz-go` + `kadm` (no JVM, no native addons) |
-| MSK IAM auth | Built into franz-go (`pkg/sasl/aws`) |
-| AWS SDK | `aws-sdk-go-v2` (MSK discovery + CloudWatch) |
-| Frontend | React 18 + TypeScript + Tailwind CSS v4 |
-| UI components | shadcn/ui |
-| Charts | recharts |
-| Bundler | Bun native (`Bun.build()` + `bun-plugin-tailwind`) |
-| Dev server | Bun native (`Bun.serve()` with HMR) |
+| `react` + `react-dom` | UI framework |
+| `@tanstack/react-router` | Type-safe SPA routing |
+| `@tanstack/react-query` | Server state management and caching |
+| `zustand` | Lightweight client state (active cluster, sidebar, theme) |
+| `@radix-ui/*` | Accessible UI primitives (via shadcn/ui) |
+| `recharts` | Charts for CloudWatch metrics |
+| `lucide-react` | Icons |
+| `tailwindcss` | Styling |
 
-## Screenshot
-
-_Coming soon._
-
----
+**Frontend tooling (not bundled):** Bun handles dev server, bundling, and package management. No Vite, no webpack, no PostCSS pipeline.
 
 ## License
 

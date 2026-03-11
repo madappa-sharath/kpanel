@@ -19,7 +19,7 @@ builds:
 
 archives:
   - formats: [tar.gz]
-    name_template: "kpanel_{{.Version}}_{{.Os}}_{{.Arch}}"
+    name_template: "kpanel_{{ .Os }}_{{ .Arch }}"
 
 checksum:
   name_template: checksums.txt
@@ -27,3 +27,11 @@ checksum:
 release:
   draft: false
   prerelease: auto
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
