@@ -65,20 +65,16 @@ AWS features activate automatically when AWS credentials are present. The core K
 ```bash
 # macOS — Apple Silicon (M1/M2/M3)
 curl -L https://github.com/madappa-sharath/kpanel/releases/latest/download/kpanel_darwin_arm64.tar.gz | tar xz
-xattr -d com.apple.quarantine kpanel   # remove Apple quarantine (see note below)
 ./kpanel
 
 # macOS — Intel
 curl -L https://github.com/madappa-sharath/kpanel/releases/latest/download/kpanel_darwin_amd64.tar.gz | tar xz
-xattr -d com.apple.quarantine kpanel
 ./kpanel
 
 # Linux (amd64)
 curl -L https://github.com/madappa-sharath/kpanel/releases/latest/download/kpanel_linux_amd64.tar.gz | tar xz
 ./kpanel
 ```
-
-> **macOS quarantine note:** macOS blocks unsigned binaries downloaded from the internet with "cannot be opened because the developer cannot be verified." The `xattr -d com.apple.quarantine` command removes that flag. kpanel is not Apple-notarized.
 
 **Run it:**
 
