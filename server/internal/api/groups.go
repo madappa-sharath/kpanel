@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/twmb/franz-go/pkg/kadm"
-	"github.com/kpanel/kpanel/internal/kafka"
 )
 
 // consumerGroupSummary is the list-view payload for a consumer group.
@@ -77,12 +76,11 @@ func (h *Handlers) ListGroups(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	admClient, err := kafka.NewClient(ctx, cluster)
+	admClient, err := h.pool.get(cluster)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer admClient.Close()
 
 	groups, err := admClient.DescribeGroups(ctx)
 	if err != nil {
@@ -174,12 +172,11 @@ func (h *Handlers) GetGroup(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	admClient, err := kafka.NewClient(ctx, cluster)
+	admClient, err := h.pool.get(cluster)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer admClient.Close()
 
 	// Describe group and fetch committed offsets concurrently.
 	type descResult struct {

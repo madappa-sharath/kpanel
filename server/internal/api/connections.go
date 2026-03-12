@@ -13,7 +13,6 @@ import (
 	awssession "github.com/kpanel/kpanel/internal/aws"
 	"github.com/kpanel/kpanel/internal/config"
 	"github.com/kpanel/kpanel/internal/credentials"
-	"github.com/kpanel/kpanel/internal/kafka"
 )
 
 // addConnectionRequest is the shape accepted by POST /api/connections.
@@ -239,6 +238,7 @@ func (h *Handlers) UpdateConnection(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	h.pool.evict(existing.ID)
 	if err := h.store.Add(cluster); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -276,6 +276,7 @@ func (h *Handlers) DeleteConnection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.pool.evict(cluster.ID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -307,14 +308,13 @@ func (h *Handlers) ConnectionStatus(w http.ResponseWriter, r *http.Request) {
 		identityCh <- ""
 	}
 
-	admClient, err := kafka.NewClient(ctx, cluster)
+	admClient, err := h.pool.get(cluster)
 	identity := <-identityCh // STS result ready by now (Kafka is slower)
 
 	if err != nil {
 		writeJSON(w, http.StatusOK, statusResponse{Connected: false, Error: err.Error(), Identity: identity})
 		return
 	}
-	defer admClient.Close()
 
 	meta, err := admClient.BrokerMetadata(ctx)
 	if err != nil {

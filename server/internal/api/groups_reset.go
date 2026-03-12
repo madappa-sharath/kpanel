@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kpanel/kpanel/internal/kafka"
 	"github.com/twmb/franz-go/pkg/kadm"
 )
 
@@ -69,12 +68,11 @@ func (h *Handlers) ResetOffsets(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	admClient, err := kafka.NewClient(ctx, cluster)
+	admClient, err := h.pool.get(cluster)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer admClient.Close()
 
 	// Check active members.
 	described, err := admClient.DescribeGroups(ctx, groupID)

@@ -113,12 +113,11 @@ func (h *Handlers) ListTopics(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 
-	admClient, err := kafka.NewClient(ctx, cluster)
+	admClient, err := h.pool.get(cluster)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer admClient.Close()
 
 	details, err := admClient.ListTopics(ctx)
 	if err != nil {
@@ -195,12 +194,11 @@ func (h *Handlers) CreateTopic(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 
-	admClient, err := kafka.NewClient(ctx, cluster)
+	admClient, err := h.pool.get(cluster)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer admClient.Close()
 
 	responses, err := admClient.CreateTopics(ctx, req.Partitions, req.ReplicationFactor, nil, req.Name)
 	if err != nil {
@@ -231,12 +229,11 @@ func (h *Handlers) GetTopic(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 
-	admClient, err := kafka.NewClient(ctx, cluster)
+	admClient, err := h.pool.get(cluster)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer admClient.Close()
 
 	type detailRes struct {
 		details kadm.TopicDetails
@@ -342,12 +339,11 @@ func (h *Handlers) DeleteTopic(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 
-	admClient, err := kafka.NewClient(ctx, cluster)
+	admClient, err := h.pool.get(cluster)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer admClient.Close()
 
 	responses, err := admClient.DeleteTopics(ctx, name)
 	if err != nil {
@@ -392,12 +388,11 @@ func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	admClient, err := kafka.NewClient(ctx, cluster)
+	admClient, err := h.pool.get(cluster)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer admClient.Close()
 
 	// For timestamp-based seek, resolve start offsets before fetching end offsets.
 	var timestampOffsets kadm.ListedOffsets
@@ -597,12 +592,11 @@ func (h *Handlers) UpdateTopicPartitions(w http.ResponseWriter, r *http.Request)
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 
-	admClient, err := kafka.NewClient(ctx, cluster)
+	admClient, err := h.pool.get(cluster)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer admClient.Close()
 
 	details, err := admClient.ListTopics(ctx, name)
 	if err != nil {
@@ -663,12 +657,11 @@ func (h *Handlers) UpdateTopicConfig(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 
-	admClient, err := kafka.NewClient(ctx, cluster)
+	admClient, err := h.pool.get(cluster)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer admClient.Close()
 
 	configs := make([]kadm.AlterConfig, 0, len(req.Configs))
 	for k, v := range req.Configs {

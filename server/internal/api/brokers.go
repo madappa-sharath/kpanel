@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kadm"
-	"github.com/kpanel/kpanel/internal/kafka"
 )
 
 type brokerResponse struct {
@@ -32,12 +31,11 @@ func (h *Handlers) ListBrokers(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 
-	admClient, err := kafka.NewClient(ctx, cluster)
+	admClient, err := h.pool.get(cluster)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer admClient.Close()
 
 	meta, err := admClient.BrokerMetadata(ctx)
 	if err != nil {
