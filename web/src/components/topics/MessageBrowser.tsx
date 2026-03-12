@@ -6,6 +6,15 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
+const LIVE_INTERVALS = [
+  { label: '1s',  ms: 1_000 },
+  { label: '2s',  ms: 2_000 },
+  { label: '5s',  ms: 5_000 },
+  { label: '10s', ms: 10_000 },
+  { label: '30s', ms: 30_000 },
+  { label: '1m',  ms: 60_000 },
+]
+
 type Strategy = 'tail' | 'offset' | 'timestamp'
 
 interface MessageBrowserProps {
@@ -32,10 +41,10 @@ export function MessageBrowser({
   const [startOffset, setStartOffset] = useState('')
   const [startTimestamp, setStartTimestamp] = useState('')
   const [isLive, setIsLive] = useState(false)
+  const [liveIntervalMs, setLiveIntervalMs] = useState(5_000)
   const [showAbsolute, setShowAbsolute] = useState(false)
   const [filterText, setFilterText] = useState('')
   const [copied, setCopied] = useState<string | null>(null)
-  const liveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const liveCallbackRef = useRef<() => void>(() => {})
 
   const key = (m: Message) => `${m.partition}-${m.offset}`
@@ -52,16 +61,16 @@ export function MessageBrowser({
 
   function handleFetch() { onFetch(buildOpts()) }
 
-  liveCallbackRef.current = () => onFetch(buildOpts())
+  useEffect(() => {
+    liveCallbackRef.current = () => onFetch(buildOpts())
+  })
 
   useEffect(() => {
-    if (isLive) {
-      liveIntervalRef.current = setInterval(() => liveCallbackRef.current(), 5000)
-    } else {
-      if (liveIntervalRef.current) clearInterval(liveIntervalRef.current)
-    }
-    return () => { if (liveIntervalRef.current) clearInterval(liveIntervalRef.current) }
-  }, [isLive])
+    if (!isLive) return
+    liveCallbackRef.current()
+    const id = setInterval(() => liveCallbackRef.current(), liveIntervalMs)
+    return () => clearInterval(id)
+  }, [isLive, liveIntervalMs])
 
   async function copyToClipboard(text: string, label: string) {
     await navigator.clipboard.writeText(text)
@@ -131,10 +140,26 @@ export function MessageBrowser({
           size="sm"
           variant={isLive ? 'default' : 'outline'}
           className={cn(isLive && 'bg-green-600 hover:bg-green-700 text-white border-green-600')}
-          title={isLive ? 'Stop live tail' : 'Start live tail (refresh every 5s)'}
+          title={isLive ? 'Stop live tail' : 'Start live tail'}
         >
           ⟳ Live{isLive ? ' (on)' : ''}
         </Button>
+
+        {isLive && (
+          <Select
+            value={String(liveIntervalMs)}
+            onValueChange={(v) => setLiveIntervalMs(Number(v))}
+          >
+            <SelectTrigger className="h-8 w-20">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LIVE_INTERVALS.map(({ label, ms }) => (
+                <SelectItem key={ms} value={String(ms)}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         <div className="flex-1" />
 
