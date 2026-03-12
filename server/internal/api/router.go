@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/kpanel/kpanel/internal/config"
 )
 
@@ -17,36 +16,48 @@ func Mount(r chi.Router, store *config.Store) {
 	r.Get("/api/health", h.Health)
 
 	r.Route("/api/connections", func(r chi.Router) {
-		r.Use(middleware.SetHeader("Content-Type", "application/json"))
 		r.Get("/", h.ListConnections)
 		r.Post("/", h.AddConnection)
-		r.Put("/{id}", h.UpdateConnection)
-		r.Delete("/{id}", h.DeleteConnection)
-		r.Get("/{id}/status", h.ConnectionStatus)
-		r.Get("/{id}/session", h.ConnectionSession)
-		r.Get("/{id}/topics", h.ListTopics)
-		r.Post("/{id}/topics", h.CreateTopic)
-		r.Get("/{id}/topics/{name}", h.GetTopic)
-		r.Delete("/{id}/topics/{name}", h.DeleteTopic)
-		r.Post("/{id}/topics/{name}/peek", h.PeekMessages)
-		r.Put("/{id}/topics/{name}/config", h.UpdateTopicConfig)
-		r.Put("/{id}/topics/{name}/partitions", h.UpdateTopicPartitions)
-		r.Get("/{id}/groups", h.ListGroups)
-		r.Get("/{id}/groups/{name}", h.GetGroup)
-		r.Get("/{id}/groups/{name}/lag-history", h.GetLagHistory)
-		r.Post("/{id}/groups/{name}/reset-offsets", h.ResetOffsets)
-		r.Get("/{id}/overview", h.ClusterOverview)
-		r.Get("/{id}/brokers", h.ListBrokers)
-		r.Get("/{id}/metrics", h.GetMetrics)
+
+		r.Route("/{id}", func(r chi.Router) {
+			r.Put("/", h.UpdateConnection)
+			r.Delete("/", h.DeleteConnection)
+			r.Get("/status", h.ConnectionStatus)
+			r.Get("/session", h.ConnectionSession)
+			r.Get("/overview", h.ClusterOverview)
+			r.Get("/brokers", h.ListBrokers)
+			r.Get("/metrics", h.GetMetrics)
+
+			r.Route("/topics", func(r chi.Router) {
+				r.Get("/", h.ListTopics)
+				r.Post("/", h.CreateTopic)
+
+				r.Route("/{name}", func(r chi.Router) {
+					r.Get("/", h.GetTopic)
+					r.Delete("/", h.DeleteTopic)
+					r.Post("/peek", h.PeekMessages)
+					r.Put("/config", h.UpdateTopicConfig)
+					r.Put("/partitions", h.UpdateTopicPartitions)
+				})
+			})
+
+			r.Route("/groups", func(r chi.Router) {
+				r.Get("/", h.ListGroups)
+
+				r.Route("/{name}", func(r chi.Router) {
+					r.Get("/", h.GetGroup)
+					r.Get("/lag-history", h.GetLagHistory)
+					r.Post("/reset-offsets", h.ResetOffsets)
+				})
+			})
+		})
 	})
 
 	r.Route("/api/aws", func(r chi.Router) {
-		r.Use(middleware.SetHeader("Content-Type", "application/json"))
 		r.Get("/context", h.AWSContext)
 	})
 
 	r.Route("/api/msk", func(r chi.Router) {
-		r.Use(middleware.SetHeader("Content-Type", "application/json"))
 		r.Get("/clusters", h.DiscoverMSK)
 		r.Post("/clusters/{arn}/import", h.ImportMSKCluster)
 	})
