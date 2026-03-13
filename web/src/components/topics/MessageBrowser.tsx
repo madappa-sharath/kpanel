@@ -111,11 +111,6 @@ export function MessageBrowser({
     }
   }, [mode])
 
-  useEffect(() => {
-    if (selectedKey === null) return
-    if (!messages.some((m) => key(m) === selectedKey)) setSelectedKey(null)
-  }, [messages])
-
   const filteredMessages = filterText
     ? messages.filter((m) => {
         const q = filterText.toLowerCase()
@@ -127,6 +122,11 @@ export function MessageBrowser({
   const displayMessages = mode === 'search'
     ? (searchResult?.messages ?? [])
     : filteredMessages
+
+  useEffect(() => {
+    if (selectedKey === null) return
+    if (!displayMessages.some((m) => key(m) === selectedKey)) setSelectedKey(null)
+  }, [displayMessages])
 
   function handleListKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') {
@@ -165,7 +165,7 @@ export function MessageBrowser({
     : null
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 h-full">
       {/* Controls row */}
       <div className="flex items-center gap-2 flex-wrap">
         <Select value={partition || 'all'} onValueChange={(v) => setPartition(v === 'all' ? '' : v)} disabled={partitions.length === 0}>
@@ -334,8 +334,8 @@ export function MessageBrowser({
       )}
 
       {/* Column headers + list + detail panel side-by-side */}
-      <div className="flex gap-3 min-h-0">
-        <div className="flex flex-col gap-3 flex-1 min-w-0">
+      <div className="flex-1 flex gap-3 min-h-0">
+        <div className="flex flex-col gap-3 flex-1 min-w-0 min-h-0 overflow-hidden">
           {/* Column headers */}
           {displayMessages.length > 0 && (
             <div className="flex items-center gap-4 px-4">
@@ -374,7 +374,7 @@ export function MessageBrowser({
             <div
               role="listbox"
               aria-label="Messages"
-              className="rounded-md border overflow-hidden"
+              className="rounded-md border flex-1 overflow-y-auto"
               onKeyDown={handleListKeyDown}
             >
               {displayMessages.map((m, i) => (
@@ -388,10 +388,11 @@ export function MessageBrowser({
                     const k = key(m)
                     cursorRef.current = k
                     setSelectedKey(selectedKey === k ? null : k)
+                    rowRefs.current.get(k)?.scrollIntoView({ block: 'nearest' })
                   }}
                   className={cn(
-                    'flex items-center gap-4 px-4 py-2 text-xs w-full text-left bg-transparent border-none border-b last:border-b-0 cursor-pointer text-foreground transition-colors',
-                    selectedKey === key(m) ? 'bg-muted/60' : 'hover:bg-muted/40',
+                    'flex items-center gap-4 px-4 py-2 text-xs w-full text-left bg-transparent border-none border-b last:border-b-0 cursor-pointer text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
+                    selectedKey === key(m) ? 'bg-muted/60 border-l-2 border-primary' : 'hover:bg-muted/40 border-l-2 border-transparent',
                   )}
                 >
                   <span className="text-muted-foreground w-4 flex-shrink-0">{m.partition}</span>
@@ -440,7 +441,7 @@ function MessageDetailPanel({ message, onClose, copied, onCopy }: MessageDetailP
     : (() => { try { return JSON.stringify(JSON.parse(message.value), null, 2) } catch { return message.value } })()
 
   return (
-    <div className="w-[420px] flex-shrink-0 rounded-md border border-border bg-card flex flex-col overflow-hidden">
+    <div className="w-full md:w-[420px] flex-shrink-0 rounded-md border border-border bg-card flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
         <span className="text-xs font-medium">
@@ -448,7 +449,7 @@ function MessageDetailPanel({ message, onClose, copied, onCopy }: MessageDetailP
         </span>
         <button
           onClick={onClose}
-          className="text-muted-foreground hover:text-foreground transition-colors"
+          className="text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
           aria-label="Close"
         >
           ✕
@@ -472,16 +473,26 @@ function MessageDetailPanel({ message, onClose, copied, onCopy }: MessageDetailP
         <Separator />
 
         {/* Key */}
-        {message.key != null && (
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Key</p>
-            <pre className="text-xs bg-muted rounded px-3 py-2 m-0 font-mono whitespace-pre-wrap break-all">
-              {message.key_encoding === 'base64'
-                ? <span className="text-muted-foreground italic">[binary — base64 encoded]</span>
-                : message.key}
-            </pre>
-          </div>
-        )}
+        <div>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Key</p>
+          {message.key == null ? (
+            <p className="text-xs text-muted-foreground italic">(null)</p>
+          ) : (
+            <>
+              <pre className="text-xs bg-muted rounded px-3 py-2 m-0 font-mono whitespace-pre-wrap break-all">
+                {message.key_encoding === 'base64'
+                  ? <span className="text-muted-foreground italic">[binary — base64 encoded]</span>
+                  : message.key}
+              </pre>
+              {message.key_encoding !== 'base64' && (
+                <Button variant="outline" size="sm" className={cn('h-6 px-2 text-xs mt-1 self-start', copied === `key-${msgKey}` && 'text-green-600')}
+                  onClick={() => onCopy(message.key!, `key-${msgKey}`)}>
+                  {copied === `key-${msgKey}` ? 'Copied!' : 'Copy Key'}
+                </Button>
+              )}
+            </>
+          )}
+        </div>
 
         {/* Value */}
         <div>
@@ -523,7 +534,7 @@ function MessageDetailPanel({ message, onClose, copied, onCopy }: MessageDetailP
                 {Object.entries(message.headers).map(([k, v]) => (
                   <div key={k} className="flex gap-3 text-xs font-mono">
                     <span className="text-muted-foreground min-w-28">{k}</span>
-                    <span>{v}</span>
+                    <span className="break-all min-w-0 flex-1">{v}</span>
                   </div>
                 ))}
               </div>

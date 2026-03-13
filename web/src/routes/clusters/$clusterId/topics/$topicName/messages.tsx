@@ -39,18 +39,20 @@ export function TopicMessagesPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-6 h-full flex flex-col">
       {fetchError && (
         <p className="text-destructive text-sm mb-3">{fetchError}</p>
       )}
-      <MessageBrowser
-        messages={messages}
-        isLoading={isLoading}
-        partitions={partitions}
-        initialPartition={initialPartition}
-        onFetch={handleFetch}
-        onSearch={handleSearch}
-      />
+      <div className="flex-1 min-h-0">
+        <MessageBrowser
+          messages={messages}
+          isLoading={isLoading}
+          partitions={partitions}
+          initialPartition={initialPartition}
+          onFetch={handleFetch}
+          onSearch={handleSearch}
+        />
+      </div>
     </div>
   )
 }
