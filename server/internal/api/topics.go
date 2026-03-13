@@ -64,6 +64,42 @@ func safeBytes(b []byte) (string, string) {
 	return base64.StdEncoding.EncodeToString(b), "base64"
 }
 
+// buildMessageResponse converts a raw Kafka record to a messageResponse.
+func buildMessageResponse(rec *kgo.Record) messageResponse {
+	var key *string
+	var keyEncoding string
+	if len(rec.Key) > 0 {
+		s, enc := safeBytes(rec.Key)
+		key = &s
+		keyEncoding = enc
+	}
+	headers := map[string]string{}
+	for _, h := range rec.Headers {
+		v, _ := safeBytes(h.Value)
+		headers[h.Key] = v
+	}
+	value, valueEncoding := safeBytes(rec.Value)
+	return messageResponse{
+		Partition:     rec.Partition,
+		Offset:        rec.Offset,
+		Timestamp:     rec.Timestamp.UTC().Format(time.RFC3339),
+		Key:           key,
+		KeyEncoding:   keyEncoding,
+		Value:         value,
+		ValueEncoding: valueEncoding,
+		Headers:       headers,
+		Size:          len(rec.Key) + len(rec.Value),
+	}
+}
+
+type searchResponse struct {
+	Messages   []messageResponse `json:"messages"`
+	Scanned    int64             `json:"scanned"`
+	Matched    int64             `json:"matched"`
+	Truncated  bool              `json:"truncated"`
+	DurationMs int64             `json:"duration_ms"`
+}
+
 func topicAdminErrorStatus(err error) int {
 	switch {
 	case errors.Is(err, kerr.TopicAlreadyExists):
@@ -459,9 +495,12 @@ func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
 			// Seek to first offset at/after timestamp
 			startAt = logStart
 			if tOff, ok2 := timestampOffsets[name]; ok2 {
-				if pOff, ok2 := tOff[partID]; ok2 && pOff.Err == nil {
+				if pOff, ok2 := tOff[partID]; ok2 && pOff.Err == nil && pOff.Offset >= 0 {
 					startAt = pOff.Offset
 				}
+			}
+			if startAt < logStart {
+				startAt = logStart
 			}
 		default:
 			// Default: tail — last N messages
@@ -525,30 +564,7 @@ func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
 			if rec.Offset < cr.startAt || rec.Offset >= cr.startAt+cr.wantCount {
 				return
 			}
-			var key *string
-			var keyEncoding string
-			if len(rec.Key) > 0 {
-				s, enc := safeBytes(rec.Key)
-				key = &s
-				keyEncoding = enc
-			}
-			headers := map[string]string{}
-			for _, h := range rec.Headers {
-				v, _ := safeBytes(h.Value)
-				headers[h.Key] = v
-			}
-			value, valueEncoding := safeBytes(rec.Value)
-			msgs = append(msgs, messageResponse{
-				Partition:     rec.Partition,
-				Offset:        rec.Offset,
-				Timestamp:     rec.Timestamp.UTC().Format(time.RFC3339),
-				Key:           key,
-				KeyEncoding:   keyEncoding,
-				Value:         value,
-				ValueEncoding: valueEncoding,
-				Headers:       headers,
-				Size:          len(rec.Key) + len(rec.Value),
-			})
+			msgs = append(msgs, buildMessageResponse(rec))
 			totalCollected++
 			if totalCollected >= totalWanted {
 				fetchCancel()
@@ -686,4 +702,244 @@ func (h *Handlers) UpdateTopicConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// SearchMessages godoc
+// POST /api/connections/:id/topics/:name/search
+func (h *Handlers) SearchMessages(w http.ResponseWriter, r *http.Request) {
+	cluster, ok := h.getClusterOrError(w, r)
+	if !ok {
+		return
+	}
+	name := chi.URLParam(r, "name")
+
+	var req struct {
+		Query          string `json:"query"`
+		Limit          int    `json:"limit"`
+		ScanLimit      int    `json:"scan_limit"`
+		Partition      *int32 `json:"partition"`
+		StartOffset    *int64 `json:"start_offset"`
+		StartTimestamp string `json:"start_timestamp"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.Query = strings.TrimSpace(req.Query)
+	if req.Query == "" {
+		writeError(w, http.StatusBadRequest, "query is required")
+		return
+	}
+	if req.Limit <= 0 || req.Limit > 500 {
+		req.Limit = 20
+	}
+	if req.ScanLimit <= 0 || req.ScanLimit > 10000 {
+		req.ScanLimit = 1000
+	}
+
+	pq, err := parseQuery(req.Query)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+
+	admClient, err := h.pool.get(cluster)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	var timestampOffsets kadm.ListedOffsets
+	if req.StartTimestamp != "" {
+		ts, tsErr := time.Parse(time.RFC3339, req.StartTimestamp)
+		if tsErr != nil {
+			writeError(w, http.StatusBadRequest, "invalid start_timestamp: "+tsErr.Error())
+			return
+		}
+		timestampOffsets, err = admClient.ListOffsetsAfterMilli(ctx, ts.UnixMilli(), name)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "list offsets by timestamp: "+err.Error())
+			return
+		}
+	}
+
+	startOffsets, endOffsets, startErr, endErr := fetchOffsets(ctx, admClient, name)
+	if startErr != nil {
+		writeError(w, http.StatusInternalServerError, "list start offsets: "+startErr.Error())
+		return
+	}
+	if endErr != nil {
+		writeError(w, http.StatusInternalServerError, "list end offsets: "+endErr.Error())
+		return
+	}
+
+	topicEndOffsets := endOffsets[name]
+	if len(topicEndOffsets) == 0 {
+		writeJSON(w, http.StatusOK, searchResponse{Messages: []messageResponse{}})
+		return
+	}
+	topicStartOffsets := startOffsets[name]
+
+	type consumeRange struct {
+		startAt   int64
+		wantCount int64
+	}
+	consumeRanges := map[int32]consumeRange{}
+	partitionOffsets := map[int32]kgo.Offset{}
+
+	numActivePartitions := 0
+	for partID, endOff := range topicEndOffsets {
+		if req.Partition != nil && partID != *req.Partition {
+			continue
+		}
+		if endOff.Err != nil || endOff.Offset <= 0 {
+			continue
+		}
+		numActivePartitions++
+	}
+	if numActivePartitions == 0 {
+		writeJSON(w, http.StatusOK, searchResponse{Messages: []messageResponse{}})
+		return
+	}
+
+	perPartScan := int64(req.ScanLimit) / int64(numActivePartitions)
+	if perPartScan < 1 {
+		perPartScan = 1
+	}
+
+	for partID, endOff := range topicEndOffsets {
+		if req.Partition != nil && partID != *req.Partition {
+			continue
+		}
+		if endOff.Err != nil || endOff.Offset <= 0 {
+			continue
+		}
+		logStart := int64(0)
+		if startOff, ok2 := topicStartOffsets[partID]; ok2 && startOff.Err == nil {
+			logStart = startOff.Offset
+		}
+
+		var startAt int64
+		switch {
+		case req.StartOffset != nil:
+			startAt = *req.StartOffset
+			if startAt < logStart {
+				startAt = logStart
+			}
+		case timestampOffsets != nil:
+			startAt = logStart
+			if tOff, ok2 := timestampOffsets[name]; ok2 {
+				if pOff, ok2 := tOff[partID]; ok2 && pOff.Err == nil && pOff.Offset >= 0 {
+					startAt = pOff.Offset
+				}
+			}
+			if startAt < logStart {
+				startAt = logStart
+			}
+		default:
+			startAt = endOff.Offset - perPartScan
+			if startAt < logStart {
+				startAt = logStart
+			}
+		}
+
+		wantCount := endOff.Offset - startAt
+		if wantCount <= 0 {
+			continue
+		}
+		consumeRanges[partID] = consumeRange{startAt: startAt, wantCount: wantCount}
+		partitionOffsets[partID] = kgo.NewOffset().At(startAt)
+	}
+
+	if len(consumeRanges) == 0 {
+		writeJSON(w, http.StatusOK, searchResponse{Messages: []messageResponse{}})
+		return
+	}
+
+	// Total messages available across all partitions — stop consuming when exhausted
+	// so PollFetches doesn't block indefinitely at the end of the topic.
+	var totalAvailable int64
+	for _, cr := range consumeRanges {
+		totalAvailable += cr.wantCount
+	}
+	scanCap := int64(req.ScanLimit)
+	if totalAvailable < scanCap {
+		scanCap = totalAvailable
+	}
+
+	consumeMap := map[string]map[int32]kgo.Offset{name: partitionOffsets}
+	consumerClient, err := kafka.NewRawClient(ctx, cluster, kgo.ConsumePartitions(consumeMap))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer consumerClient.Close()
+
+	var matches []messageResponse
+	var totalScanned, totalMatched int64
+	var truncated bool
+	scanStart := time.Now()
+
+	fetchCtx, fetchCancel := context.WithCancel(ctx)
+	defer fetchCancel()
+
+	for totalScanned < scanCap {
+		fetches := consumerClient.PollFetches(fetchCtx)
+		if fetchCtx.Err() != nil {
+			break
+		}
+		fetches.EachRecord(func(rec *kgo.Record) {
+			if rec.Topic != name {
+				return
+			}
+			cr, ok2 := consumeRanges[rec.Partition]
+			if !ok2 {
+				return
+			}
+			if rec.Offset < cr.startAt || rec.Offset >= cr.startAt+cr.wantCount {
+				return
+			}
+			totalScanned++
+			if matchRecord(rec, pq) {
+				totalMatched++
+				matches = append(matches, buildMessageResponse(rec))
+				if totalMatched >= int64(req.Limit) {
+					truncated = true
+					fetchCancel()
+					return
+				}
+			}
+			if totalScanned >= scanCap {
+				if int64(req.ScanLimit) < totalAvailable {
+					truncated = true
+				}
+				fetchCancel()
+			}
+		})
+	}
+	durationMs := time.Since(scanStart).Milliseconds()
+
+	sort.Slice(matches, func(i, j int) bool {
+		if matches[i].Timestamp != matches[j].Timestamp {
+			return matches[i].Timestamp > matches[j].Timestamp
+		}
+		if matches[i].Partition != matches[j].Partition {
+			return matches[i].Partition < matches[j].Partition
+		}
+		return matches[i].Offset > matches[j].Offset
+	})
+
+	if matches == nil {
+		matches = []messageResponse{}
+	}
+	writeJSON(w, http.StatusOK, searchResponse{
+		Messages:   matches,
+		Scanned:    totalScanned,
+		Matched:    totalMatched,
+		Truncated:  truncated,
+		DurationMs: durationMs,
+	})
 }

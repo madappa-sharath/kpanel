@@ -36,6 +36,7 @@ func Mount(r chi.Router, store *config.Store) {
 					r.Get("/", h.GetTopic)
 					r.Delete("/", h.DeleteTopic)
 					r.Post("/peek", h.PeekMessages)
+				r.Post("/search", h.SearchMessages)
 					r.Put("/config", h.UpdateTopicConfig)
 					r.Put("/partitions", h.UpdateTopicPartitions)
 				})

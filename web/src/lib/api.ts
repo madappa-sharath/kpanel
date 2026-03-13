@@ -7,6 +7,8 @@ import type {
   PeekRequest,
   CreateTopicRequest,
   UpdateTopicPartitionsRequest,
+  SearchRequest,
+  SearchResponse,
 } from '../types/topic'
 import type { ConsumerGroup, GroupDetail, LagSnapshot, ResetOffsetsRequest, ResetOffsetsResult } from '../types/consumer'
 import type { Broker, ClusterStatus, ClusterOverview } from '../types/broker'
@@ -76,6 +78,11 @@ export const api = {
         method: 'PUT',
         body: JSON.stringify(body),
       }),
+    search: (clusterId: string, name: string, opts: SearchRequest) =>
+      request<SearchResponse>(
+        `/connections/${clusterId}/topics/${encodeURIComponent(name)}/search`,
+        { method: 'POST', body: JSON.stringify(opts) },
+      ),
   },
 
   groups: {

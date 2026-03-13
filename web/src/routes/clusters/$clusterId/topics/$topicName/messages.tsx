@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useParams, useSearch } from '@tanstack/react-router'
 import { MessageBrowser } from '../../../../../components/topics/MessageBrowser'
 import { useTopic } from '../../../../../hooks/useTopics'
-import type { Message, PeekRequest } from '../../../../../types/topic'
+import type { Message, PeekRequest, SearchRequest, SearchResponse } from '../../../../../types/topic'
 import { api } from '../../../../../lib/api'
 
 export function TopicMessagesPage() {
@@ -34,6 +34,10 @@ export function TopicMessagesPage() {
     }
   }
 
+  async function handleSearch(opts: SearchRequest): Promise<SearchResponse> {
+    return api.topics.search(clusterId, topicName, opts)
+  }
+
   return (
     <div className="p-6">
       {fetchError && (
@@ -45,6 +49,7 @@ export function TopicMessagesPage() {
         partitions={partitions}
         initialPartition={initialPartition}
         onFetch={handleFetch}
+        onSearch={handleSearch}
       />
     </div>
   )

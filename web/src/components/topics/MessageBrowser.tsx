@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import type { Message, PeekRequest } from '../../types/topic'
+import type { Message, PeekRequest, SearchRequest, SearchResponse } from '../../types/topic'
 import { formatBytes, relativeTime } from '../../lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,6 +24,7 @@ interface MessageBrowserProps {
   partitions: number[]
   initialPartition?: number
   onFetch: (opts: PeekRequest) => void
+  onSearch: (opts: SearchRequest) => Promise<SearchResponse>
 }
 
 export function MessageBrowser({
@@ -32,6 +33,7 @@ export function MessageBrowser({
   partitions,
   initialPartition,
   onFetch,
+  onSearch,
 }: MessageBrowserProps) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [limit, setLimit] = useState(20)
@@ -48,8 +50,15 @@ export function MessageBrowser({
   const [copied, setCopied] = useState<string | null>(null)
   const liveCallbackRef = useRef<() => void>(() => {})
   const rowRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
-  // Remembers cursor position after Escape so arrow nav resumes from there
   const cursorRef = useRef<string | null>(null)
+
+  // Search mode state
+  const [mode, setMode] = useState<'filter' | 'search'>('filter')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchScanLimit, setSearchScanLimit] = useState(1000)
+  const [searchResult, setSearchResult] = useState<SearchResponse | null>(null)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [isSearching, setIsSearching] = useState(false)
 
   const key = (m: Message) => `${m.partition}-${m.offset}`
 
@@ -65,6 +74,25 @@ export function MessageBrowser({
 
   function handleFetch() { onFetch(buildOpts()) }
 
+  async function handleSearch() {
+    if (!searchQuery.trim()) return
+    setIsSearching(true)
+    setSearchError(null)
+    setSearchResult(null)
+    try {
+      const opts: SearchRequest = { query: searchQuery.trim(), limit, scan_limit: searchScanLimit }
+      if (partition !== '') opts.partition = Number(partition)
+      if (strategy === 'offset' && startOffset !== '') opts.start_offset = Number(startOffset)
+      if (strategy === 'timestamp' && startTimestamp !== '') opts.start_timestamp = new Date(startTimestamp).toISOString()
+      const result = await onSearch(opts)
+      setSearchResult(result)
+    } catch (err) {
+      setSearchError((err as Error).message)
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
   useEffect(() => {
     liveCallbackRef.current = () => onFetch(buildOpts())
   })
@@ -75,6 +103,13 @@ export function MessageBrowser({
     const id = setInterval(() => liveCallbackRef.current(), liveIntervalMs)
     return () => clearInterval(id)
   }, [isLive, liveIntervalMs])
+
+  // Stop live mode when switching to search
+  useEffect(() => {
+    if (mode === 'search' && isLive) {
+      setIsLive(false)
+    }
+  }, [mode])
 
   useEffect(() => {
     if (selectedKey === null) return
@@ -89,25 +124,29 @@ export function MessageBrowser({
       })
     : messages
 
+  const displayMessages = mode === 'search'
+    ? (searchResult?.messages ?? [])
+    : filteredMessages
+
   function handleListKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') {
       if (selectedKey !== null) { e.preventDefault(); setSelectedKey(null) }
       return
     }
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
-    if (filteredMessages.length === 0) return
+    if (displayMessages.length === 0) return
     e.preventDefault()
     const cursor = selectedKey ?? cursorRef.current
-    const idx = filteredMessages.findIndex((m) => key(m) === cursor)
+    const idx = displayMessages.findIndex((m) => key(m) === cursor)
     let next: number
     if (idx === -1) {
-      next = e.key === 'ArrowDown' ? 0 : filteredMessages.length - 1
+      next = e.key === 'ArrowDown' ? 0 : displayMessages.length - 1
     } else {
       next = e.key === 'ArrowDown'
-        ? Math.min(idx + 1, filteredMessages.length - 1)
+        ? Math.min(idx + 1, displayMessages.length - 1)
         : Math.max(idx - 1, 0)
     }
-    const nextKey = key(filteredMessages[next])
+    const nextKey = key(displayMessages[next])
     cursorRef.current = nextKey
     setSelectedKey(nextKey)
     const btn = rowRefs.current.get(nextKey)
@@ -122,7 +161,7 @@ export function MessageBrowser({
   }
 
   const selectedMessage = selectedKey
-    ? (messages.find((m) => key(m) === selectedKey) ?? null)
+    ? (messages.find((m) => key(m) === selectedKey) ?? searchResult?.messages.find((m) => key(m) === selectedKey) ?? null)
     : null
 
   return (
@@ -170,58 +209,135 @@ export function MessageBrowser({
           </SelectContent>
         </Select>
 
-        <Button onClick={handleFetch} disabled={isLoading} size="sm">
-          {isLoading ? 'Loading…' : 'Fetch'}
-        </Button>
+        {mode === 'filter' && (
+          <>
+            <Button onClick={handleFetch} disabled={isLoading} size="sm">
+              {isLoading ? 'Loading…' : 'Fetch'}
+            </Button>
 
-        <Button
-          onClick={() => setIsLive((v) => !v)}
-          size="sm"
-          variant={isLive ? 'default' : 'outline'}
-          className={cn(isLive && 'bg-green-600 hover:bg-green-700 text-white border-green-600')}
-          title={isLive ? 'Stop live tail' : 'Start live tail'}
-        >
-          ⟳ Live{isLive ? ' (on)' : ''}
-        </Button>
+            <Button
+              onClick={() => setIsLive((v) => !v)}
+              size="sm"
+              variant={isLive ? 'default' : 'outline'}
+              className={cn(isLive && 'bg-green-600 hover:bg-green-700 text-white border-green-600')}
+              title={isLive ? 'Stop live tail' : 'Start live tail'}
+            >
+              ⟳ Live{isLive ? ' (on)' : ''}
+            </Button>
 
-        {isLive && (
-          <Select
-            value={String(liveIntervalMs)}
-            onValueChange={(v) => setLiveIntervalMs(Number(v))}
-          >
-            <SelectTrigger className="h-8 w-20">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {LIVE_INTERVALS.map(({ label, ms }) => (
-                <SelectItem key={ms} value={String(ms)}>{label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {isLive && (
+              <Select
+                value={String(liveIntervalMs)}
+                onValueChange={(v) => setLiveIntervalMs(Number(v))}
+              >
+                <SelectTrigger className="h-8 w-20">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LIVE_INTERVALS.map(({ label, ms }) => (
+                    <SelectItem key={ms} value={String(ms)}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </>
         )}
 
         <div className="flex-1" />
 
-        <Input
-          type="text"
-          placeholder="Filter key / value…"
-          value={filterText}
-          onChange={(e) => setFilterText(e.target.value)}
-          className="w-44"
-        />
+        {/* Mode toggle */}
+        <div className="flex items-center rounded-md border border-border text-xs overflow-hidden shrink-0">
+          <button
+            onClick={() => setMode('filter')}
+            className={cn(
+              'px-3 py-1.5 transition-colors',
+              mode === 'filter' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            Filter
+          </button>
+          <button
+            onClick={() => setMode('search')}
+            className={cn(
+              'px-3 py-1.5 border-l border-border transition-colors',
+              mode === 'search' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            Search
+          </button>
+        </div>
 
-        {messages.length > 0 && (
-          <span className="text-sm text-muted-foreground flex-shrink-0">
-            {filterText ? `${filteredMessages.length} / ` : ''}{messages.length} msg{messages.length !== 1 ? 's' : ''}
-          </span>
+        {/* Filter mode input */}
+        {mode === 'filter' && (
+          <>
+            <Input
+              type="text"
+              placeholder="Filter key / value…"
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              className="w-44 h-8"
+            />
+            {messages.length > 0 && (
+              <span className="text-sm text-muted-foreground flex-shrink-0">
+                {filterText ? `${filteredMessages.length} / ` : ''}{messages.length} msg{messages.length !== 1 ? 's' : ''}
+              </span>
+            )}
+          </>
+        )}
+
+        {/* Search mode inputs */}
+        {mode === 'search' && (
+          <>
+            <Input
+              placeholder='user.id == "abc"  ·  latency > 100  ·  user.premium (exists)  ·  plain text'
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              className="flex-1 min-w-48 h-8 font-mono text-xs"
+            />
+            <Select value={String(searchScanLimit)} onValueChange={(v) => setSearchScanLimit(Number(v))}>
+              <SelectTrigger className="w-32 h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[500, 1000, 2000, 5000].map((n) => (
+                  <SelectItem key={n} value={String(n)} className="text-xs">Scan {n.toLocaleString()}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button onClick={handleSearch} disabled={isSearching || !searchQuery.trim()} size="sm" className="h-8">
+              {isSearching ? 'Searching…' : 'Search'}
+            </Button>
+          </>
         )}
       </div>
+
+      {/* Search results summary / error */}
+      {mode === 'search' && searchResult && (
+        <div className="text-xs text-muted-foreground">
+          Found <span className="text-foreground font-medium">{searchResult.matched}</span> match
+          {searchResult.matched !== 1 ? 'es' : ''} in{' '}
+          <span className="text-foreground font-medium">{searchResult.scanned.toLocaleString()}</span> scanned
+          {' '}·{' '}
+          <span className="text-foreground font-medium">
+            {searchResult.duration_ms < 1000
+              ? `${searchResult.duration_ms}ms`
+              : `${(searchResult.duration_ms / 1000).toFixed(1)}s`}
+          </span>
+          {searchResult.truncated && searchResult.scanned >= searchScanLimit && (
+            <span className="text-amber-600 dark:text-amber-400"> · scan limit reached</span>
+          )}
+        </div>
+      )}
+      {mode === 'search' && searchError && (
+        <p className="text-xs text-destructive">{searchError}</p>
+      )}
 
       {/* Column headers + list + detail panel side-by-side */}
       <div className="flex gap-3 min-h-0">
         <div className="flex flex-col gap-3 flex-1 min-w-0">
           {/* Column headers */}
-          {filteredMessages.length > 0 && (
+          {displayMessages.length > 0 && (
             <div className="flex items-center gap-4 px-4">
               <span className="w-4 flex-shrink-0 text-xs text-muted-foreground uppercase tracking-wide">P</span>
               <span className="w-20 flex-shrink-0 text-xs text-muted-foreground uppercase tracking-wide">Offset</span>
@@ -244,9 +360,13 @@ export function MessageBrowser({
           )}
 
           {/* Message list */}
-          {filteredMessages.length === 0 ? (
+          {displayMessages.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">
-              {messages.length > 0
+              {mode === 'search' && !searchResult
+                ? 'Enter a query and click Search'
+                : mode === 'search' && searchResult
+                ? 'No messages matched the query'
+                : messages.length > 0
                 ? 'No messages match the filter'
                 : 'No messages fetched yet — click Fetch to load'}
             </p>
@@ -257,7 +377,7 @@ export function MessageBrowser({
               className="rounded-md border overflow-hidden"
               onKeyDown={handleListKeyDown}
             >
-              {filteredMessages.map((m, i) => (
+              {displayMessages.map((m, i) => (
                 <button
                   key={key(m)}
                   role="option"

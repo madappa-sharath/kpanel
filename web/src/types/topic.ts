@@ -55,3 +55,20 @@ export interface CreateTopicRequest {
 export interface UpdateTopicPartitionsRequest {
   partitions: number
 }
+
+export interface SearchRequest {
+  query: string
+  limit?: number
+  scan_limit?: number
+  partition?: number
+  start_offset?: number
+  start_timestamp?: string
+}
+
+export interface SearchResponse {
+  messages: Message[]
+  scanned: number
+  matched: number
+  truncated: boolean
+  duration_ms: number
+}
