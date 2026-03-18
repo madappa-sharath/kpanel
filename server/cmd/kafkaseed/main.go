@@ -43,6 +43,31 @@ var topics = []topicDef{
 	{name: "inventory", partitions: 2},
 	{name: "notifications", partitions: 1},
 	{name: "dead-letter", partitions: 1},
+	{name: "payments", partitions: 3, configs: map[string]*string{"retention.ms": ptr("604800000")}},
+	{name: "shipments", partitions: 2},
+	{name: "returns", partitions: 2},
+	{name: "reviews", partitions: 4},
+	{name: "search-queries", partitions: 6},
+	{name: "user-sessions", partitions: 4},
+	{name: "auth-events", partitions: 3, configs: map[string]*string{"retention.ms": ptr("2592000000")}},
+	{name: "audit-log", partitions: 2, configs: map[string]*string{"retention.ms": ptr("2592000000")}},
+	{name: "product-catalog", partitions: 2},
+	{name: "price-updates", partitions: 3},
+	{name: "promotions", partitions: 1},
+	{name: "recommendations", partitions: 4},
+	{name: "email-queue", partitions: 2},
+	{name: "sms-queue", partitions: 1},
+	{name: "push-notifications", partitions: 2},
+	{name: "fraud-signals", partitions: 3, configs: map[string]*string{"retention.ms": ptr("604800000")}},
+	{name: "analytics-raw", partitions: 6},
+	{name: "analytics-aggregated", partitions: 3},
+	{name: "data-pipeline-errors", partitions: 1},
+	{name: "config-changes", partitions: 1},
+	{name: "feature-flags", partitions: 1},
+	{name: "metrics-ingest", partitions: 6},
+	{name: "logs-aggregated", partitions: 4},
+	{name: "cdc-users", partitions: 3},
+	{name: "cdc-products", partitions: 3},
 }
 
 type groupDef struct {
@@ -52,11 +77,46 @@ type groupDef struct {
 	members int
 }
 
+var allTopicNames = []string{
+	"orders", "events", "inventory", "notifications", "dead-letter",
+	"payments", "shipments", "returns", "reviews", "search-queries",
+	"user-sessions", "auth-events", "audit-log", "product-catalog", "price-updates",
+	"promotions", "recommendations", "email-queue", "sms-queue", "push-notifications",
+	"fraud-signals", "analytics-raw", "analytics-aggregated", "data-pipeline-errors", "config-changes",
+	"feature-flags", "metrics-ingest", "logs-aggregated", "cdc-users", "cdc-products",
+}
+
 var groups = []groupDef{
 	{name: "orders-processor", topics: []string{"orders"}, lag: 1, members: 2},
-	{name: "analytics-pipeline", topics: []string{"orders", "events", "inventory"}, lag: 15, members: 3},
-	{name: "notification-service", topics: []string{"notifications", "orders"}, lag: 3, members: 1},
+	{name: "analytics-pipeline", topics: []string{"orders", "events", "inventory", "analytics-raw"}, lag: 15, members: 3},
+	{name: "notification-service", topics: []string{"notifications", "orders", "email-queue", "sms-queue", "push-notifications"}, lag: 3, members: 1},
 	{name: "reporting-etl", topics: []string{"orders", "events", "inventory", "notifications", "dead-letter"}, lag: 30, members: 2},
+	{name: "payments-processor", topics: []string{"payments", "orders"}, lag: 2, members: 2},
+	{name: "fraud-detection", topics: []string{"fraud-signals", "payments", "orders", "auth-events"}, lag: 5, members: 3},
+	{name: "shipping-service", topics: []string{"shipments", "orders", "inventory"}, lag: 4, members: 2},
+	{name: "returns-processor", topics: []string{"returns", "orders", "payments"}, lag: 8, members: 1},
+	{name: "review-aggregator", topics: []string{"reviews", "product-catalog"}, lag: 12, members: 2},
+	{name: "search-indexer", topics: []string{"search-queries", "product-catalog", "price-updates"}, lag: 0, members: 3},
+	{name: "session-tracker", topics: []string{"user-sessions", "auth-events", "events"}, lag: 7, members: 2},
+	{name: "audit-service", topics: []string{"audit-log", "auth-events", "config-changes"}, lag: 0, members: 1},
+	{name: "catalog-sync", topics: []string{"product-catalog", "price-updates", "promotions", "cdc-products"}, lag: 3, members: 2},
+	{name: "promo-engine", topics: []string{"promotions", "recommendations", "events"}, lag: 20, members: 1},
+	{name: "recommendation-engine", topics: []string{"recommendations", "user-sessions", "search-queries", "reviews"}, lag: 10, members: 3},
+	{name: "email-sender", topics: []string{"email-queue", "notifications"}, lag: 1, members: 2},
+	{name: "sms-sender", topics: []string{"sms-queue", "notifications"}, lag: 2, members: 1},
+	{name: "push-sender", topics: []string{"push-notifications", "notifications"}, lag: 0, members: 2},
+	{name: "fraud-analyst", topics: []string{"fraud-signals", "payments", "orders", "returns"}, lag: 25, members: 1},
+	{name: "analytics-consumer", topics: []string{"analytics-raw", "analytics-aggregated", "events"}, lag: 18, members: 4},
+	{name: "data-pipeline", topics: []string{"data-pipeline-errors", "dead-letter"}, lag: 6, members: 1},
+	{name: "config-watcher", topics: []string{"config-changes", "feature-flags"}, lag: 0, members: 1},
+	{name: "metrics-collector", topics: []string{"metrics-ingest", "logs-aggregated"}, lag: 9, members: 3},
+	{name: "cdc-processor", topics: []string{"cdc-users", "cdc-products", "product-catalog", "inventory"}, lag: 4, members: 2},
+	{name: "inventory-sync", topics: []string{"inventory", "cdc-products", "price-updates"}, lag: 11, members: 2},
+	{name: "customer-360", topics: []string{"user-sessions", "orders", "reviews", "recommendations"}, lag: 14, members: 3},
+	{name: "compliance-monitor", topics: []string{"audit-log", "auth-events", "payments", "fraud-signals"}, lag: 0, members: 1},
+	{name: "ops-dashboard", topics: []string{"metrics-ingest", "logs-aggregated", "data-pipeline-errors"}, lag: 2, members: 2},
+	{name: "event-archiver", topics: []string{"events", "orders", "payments", "shipments", "returns"}, lag: 35, members: 2},
+	{name: "global-consumer", topics: allTopicNames, lag: 50, members: 5},
 }
 
 func main() {
@@ -219,6 +279,10 @@ func produceMessages(ctx context.Context, cl *kgo.Client) {
 
 	for _, td := range topics {
 		gen := generators[td.name]
+		if gen == nil {
+			name := td.name
+			gen = func() []byte { return genericMsg(name) }
+		}
 		records := make([]*kgo.Record, *count)
 		for i := range records {
 			records[i] = &kgo.Record{
@@ -386,6 +450,16 @@ func deadLetterMsg() []byte {
 		"originalTopic": orig,
 		"reason":        deadLetterReasons[rand.Intn(len(deadLetterReasons))],
 		"payload":       string(payload),
+	})
+	return v
+}
+
+func genericMsg(topic string) []byte {
+	v, _ := json.Marshal(map[string]any{
+		"id":    uuid.New().String(),
+		"topic": topic,
+		"ts":    time.Now().UnixMilli(),
+		"seq":   rand.Intn(100000),
 	})
 	return v
 }
