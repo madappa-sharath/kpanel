@@ -76,6 +76,62 @@ src/
 - Pathless layout route `id: 'shell'` wraps all cluster routes (provides AppShell)
 - **Reactive location:** use `useRouterState({ select: s => s.location.pathname })` to get the current pathname reactively. Do NOT use `useRouter().state.location.pathname` — `useRouter()` does not subscribe to navigation and will give stale values.
 
+## useEffect guidelines
+
+Effects are an escape hatch for synchronizing with **external systems** (timers, DOM APIs, network subscriptions). Most state/prop-driven logic does NOT need an effect. See [You Might Not Need an Effect](https://react.dev/learn/you-might-not-need-an-effect).
+
+### When useEffect is correct
+- Setting up intervals, timers, or subscriptions (with cleanup)
+- Synchronizing with browser APIs (IntersectionObserver, ResizeObserver, etc.)
+- Integrating with non-React libraries (D3, map widgets, etc.)
+
+### Anti-patterns — do NOT use useEffect for these
+
+**1. Adjusting state when props/state change → derive during render**
+```tsx
+// BAD: effect to clear stale selection
+useEffect(() => {
+  if (!items.some(i => i.id === selectedId)) setSelectedId(null)
+}, [items])
+
+// GOOD: derive during render
+const effectiveSelectedId = items.some(i => i.id === selectedId) ? selectedId : null
+```
+
+**2. Syncing state from async data → nullable override pattern**
+```tsx
+// BAD: effect to default state from query
+useEffect(() => {
+  if (data?.value && !localValue) setLocalValue(data.value)
+}, [data?.value])
+
+// GOOD: null = not yet overridden by user, derive effective value
+const [override, setOverride] = useState<string | null>(null)
+const effectiveValue = override ?? data?.value ?? ''
+```
+
+**3. Reacting to user interactions → put logic in the event handler**
+```tsx
+// BAD: effect that reacts to mode change
+useEffect(() => {
+  if (mode === 'search') setIsLive(false)
+}, [mode])
+
+// GOOD: handle in the click handler that changes mode
+<button onClick={() => { setMode('search'); setIsLive(false) }}>Search</button>
+```
+
+**4. Updating a ref with the latest closure → assign during render**
+```tsx
+// BAD: effect on every render just to update a ref
+useEffect(() => { callbackRef.current = () => doSomething() })
+
+// GOOD: refs are safe to assign during render
+callbackRef.current = () => doSomething()
+```
+
+**5. Chains of effects** — multiple effects where one sets state that triggers another. Flatten the logic into event handlers or derive values during render.
+
 ## UI conventions
 
 ### Never use

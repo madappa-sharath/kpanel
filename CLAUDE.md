@@ -331,4 +331,5 @@ Environment variables:
 - API responses: JSON, errors use `{"error": "message"}` format
 - Connection IDs: URL-safe slugs (lowercase alphanumeric + hyphens)
 - Frontend: TypeScript strict mode, shadcn/ui conventions
+- Frontend: avoid `useEffect` for derived state, state-to-state sync, or user interaction logic — see `web/CLAUDE.md` for detailed guidelines
 - No over-engineering: build features incrementally
