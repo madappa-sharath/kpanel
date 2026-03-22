@@ -1,6 +1,6 @@
 // AWS context card — shows active profile, credential status, and MSK discovery.
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ChevronRight, Cloud, Copy, RefreshCw } from 'lucide-react'
 import { api } from '../../lib/api'
@@ -15,7 +15,8 @@ interface AWSContextCardProps {
 
 export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded)
-  const [region, setRegion] = useState('')
+  // null = user hasn't typed yet, use AWS-resolved region; string = user override
+  const [regionOverride, setRegionOverride] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
   const { data: ctx, isLoading, isFetching: isChecking, refetch: recheck } = useQuery({
@@ -25,10 +26,8 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
     staleTime: 60_000,
   })
 
-  // Default region to whatever AWS resolved once ctx loads
-  useEffect(() => {
-    if (ctx?.region && !region) setRegion(ctx.region)
-  }, [ctx?.region])
+  // Derive region: user override takes precedence, otherwise use AWS-resolved value
+  const region = regionOverride ?? ctx?.region ?? ''
 
   const {
     data: mskClusters,
@@ -165,7 +164,7 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
           )}
           <Input
             value={region}
-            onChange={(e) => setRegion(e.target.value)}
+            onChange={(e) => setRegionOverride(e.target.value)}
             placeholder="us-east-1"
             className="ml-auto h-7 w-36 font-mono text-xs"
           />

@@ -93,9 +93,8 @@ export function MessageBrowser({
     }
   }
 
-  useEffect(() => {
-    liveCallbackRef.current = () => onFetch(buildOpts())
-  })
+  // Keep ref in sync with latest closure — no effect needed, refs are safe to assign during render
+  liveCallbackRef.current = () => onFetch(buildOpts())
 
   useEffect(() => {
     if (!isLive) return
@@ -103,13 +102,6 @@ export function MessageBrowser({
     const id = setInterval(() => liveCallbackRef.current(), liveIntervalMs)
     return () => clearInterval(id)
   }, [isLive, liveIntervalMs])
-
-  // Stop live mode when switching to search
-  useEffect(() => {
-    if (mode === 'search' && isLive) {
-      setIsLive(false)
-    }
-  }, [mode])
 
   const filteredMessages = filterText
     ? messages.filter((m) => {
@@ -123,20 +115,20 @@ export function MessageBrowser({
     ? (searchResult?.messages ?? [])
     : filteredMessages
 
-  useEffect(() => {
-    if (selectedKey === null) return
-    if (!displayMessages.some((m) => key(m) === selectedKey)) setSelectedKey(null)
-  }, [displayMessages])
+  // Derive effective selection during render — no effect needed to clear stale selection
+  const effectiveSelectedKey = (selectedKey !== null && displayMessages.some((m) => key(m) === selectedKey))
+    ? selectedKey
+    : null
 
   function handleListKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') {
-      if (selectedKey !== null) { e.preventDefault(); setSelectedKey(null) }
+      if (effectiveSelectedKey !== null) { e.preventDefault(); setSelectedKey(null) }
       return
     }
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
     if (displayMessages.length === 0) return
     e.preventDefault()
-    const cursor = selectedKey ?? cursorRef.current
+    const cursor = effectiveSelectedKey ?? cursorRef.current
     const idx = displayMessages.findIndex((m) => key(m) === cursor)
     let next: number
     if (idx === -1) {
@@ -160,8 +152,8 @@ export function MessageBrowser({
     setTimeout(() => setCopied(null), 1500)
   }
 
-  const selectedMessage = selectedKey
-    ? (messages.find((m) => key(m) === selectedKey) ?? searchResult?.messages.find((m) => key(m) === selectedKey) ?? null)
+  const selectedMessage = effectiveSelectedKey
+    ? (messages.find((m) => key(m) === effectiveSelectedKey) ?? searchResult?.messages.find((m) => key(m) === effectiveSelectedKey) ?? null)
     : null
 
   return (
@@ -257,7 +249,7 @@ export function MessageBrowser({
             Filter
           </button>
           <button
-            onClick={() => setMode('search')}
+            onClick={() => { setMode('search'); setIsLive(false) }}
             className={cn(
               'px-3 py-1.5 border-l border-border transition-colors',
               mode === 'search' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
@@ -381,18 +373,18 @@ export function MessageBrowser({
                 <button
                   key={key(m)}
                   role="option"
-                  aria-selected={selectedKey === key(m)}
-                  tabIndex={selectedKey === key(m) || (selectedKey === null && i === 0) ? 0 : -1}
+                  aria-selected={effectiveSelectedKey === key(m)}
+                  tabIndex={effectiveSelectedKey === key(m) || (effectiveSelectedKey === null && i === 0) ? 0 : -1}
                   ref={(el) => { if (el) rowRefs.current.set(key(m), el); else rowRefs.current.delete(key(m)) }}
                   onClick={() => {
                     const k = key(m)
                     cursorRef.current = k
-                    setSelectedKey(selectedKey === k ? null : k)
+                    setSelectedKey(effectiveSelectedKey === k ? null : k)
                     rowRefs.current.get(k)?.scrollIntoView({ block: 'nearest' })
                   }}
                   className={cn(
                     'flex items-center gap-4 px-4 py-2 text-xs w-full text-left bg-transparent border-none border-b last:border-b-0 cursor-pointer text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
-                    selectedKey === key(m) ? 'bg-muted/60 border-l-2 border-primary' : 'hover:bg-muted/40 border-l-2 border-transparent',
+                    effectiveSelectedKey === key(m) ? 'bg-muted/60 border-l-2 border-primary' : 'hover:bg-muted/40 border-l-2 border-transparent',
                   )}
                 >
                   <span className="text-muted-foreground w-4 flex-shrink-0">{m.partition}</span>
