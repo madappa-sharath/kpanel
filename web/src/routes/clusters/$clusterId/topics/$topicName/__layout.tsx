@@ -1,13 +1,17 @@
 // Topic layout — tab bar shared by Overview, Partitions, Configuration, Messages
 
 import { useState } from 'react'
-import { Link, Outlet, useNavigate, useParams, useRouterState } from '@tanstack/react-router'
+import { Link, Outlet, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router'
 import { ChevronRight } from 'lucide-react'
 import { useTopic } from '../../../../../hooks/useTopics'
 import { IncreasePartitionsModal } from '../../../../../components/topics/IncreasePartitionsModal'
 import { DeleteTopicModal } from '../../../../../components/topics/DeleteTopicModal'
+import { MessageBrowser } from '../../../../../components/topics/MessageBrowser'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import type { Message, PeekRequest, SearchRequest, SearchResponse } from '../../../../../types/topic'
+import { api } from '../../../../../lib/api'
 
 const TABS = [
   { label: 'Overview',      value: 'overview',      to: '/clusters/$clusterId/topics/$topicName' as const,               exact: true  },
@@ -27,6 +31,11 @@ export function TopicLayout() {
   const [showIncrease, setShowIncrease] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
 
+  const [messages, setMessages] = useState<Message[]>([])
+  const [isLoading, setLoading] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const { partition: initialPartition } = useSearch({ strict: false }) as { partition?: number }
+
   const activeTab = pathname.endsWith('/partitions')
     ? 'partitions'
     : pathname.endsWith('/config')
@@ -34,6 +43,25 @@ export function TopicLayout() {
     : pathname.endsWith('/messages')
     ? 'messages'
     : 'overview'
+
+  const partitions = (topic?.partitions ?? []).map((p) => p.partition)
+
+  async function handleFetch(opts: PeekRequest) {
+    setLoading(true)
+    setFetchError(null)
+    try {
+      const data = await api.topics.peek(clusterId, topicName, opts)
+      setMessages(data)
+    } catch (err) {
+      setFetchError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleSearch(opts: SearchRequest): Promise<SearchResponse> {
+    return api.topics.search(clusterId, topicName, opts)
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -90,7 +118,26 @@ export function TopicLayout() {
       </div>
 
       <div className="flex-1 overflow-auto">
-        <Outlet />
+        {/* Non-messages tabs */}
+        <div className={cn(activeTab === 'messages' && 'hidden')}>
+          <Outlet />
+        </div>
+
+        {/* Messages tab — always mounted, hidden when inactive */}
+        <div className={cn('p-6 h-full flex flex-col', activeTab !== 'messages' && 'hidden')}>
+          {fetchError && <p className="text-destructive text-sm mb-3">{fetchError}</p>}
+          <div className="flex-1 min-h-0">
+            <MessageBrowser
+              messages={messages}
+              isLoading={isLoading}
+              partitions={partitions}
+              initialPartition={initialPartition}
+              isVisible={activeTab === 'messages'}
+              onFetch={handleFetch}
+              onSearch={handleSearch}
+            />
+          </div>
+        </div>
       </div>
 
       {topic && (

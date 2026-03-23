@@ -23,6 +23,7 @@ interface MessageBrowserProps {
   isLoading: boolean
   partitions: number[]
   initialPartition?: number
+  isVisible?: boolean
   onFetch: (opts: PeekRequest) => void
   onSearch: (opts: SearchRequest) => Promise<SearchResponse>
 }
@@ -32,6 +33,7 @@ export function MessageBrowser({
   isLoading,
   partitions,
   initialPartition,
+  isVisible = true,
   onFetch,
   onSearch,
 }: MessageBrowserProps) {
@@ -97,11 +99,11 @@ export function MessageBrowser({
   liveCallbackRef.current = () => onFetch(buildOpts())
 
   useEffect(() => {
-    if (!isLive) return
+    if (!isLive || !isVisible) return
     liveCallbackRef.current()
     const id = setInterval(() => liveCallbackRef.current(), liveIntervalMs)
     return () => clearInterval(id)
-  }, [isLive, liveIntervalMs])
+  }, [isLive, liveIntervalMs, isVisible])
 
   const filteredMessages = filterText
     ? messages.filter((m) => {
