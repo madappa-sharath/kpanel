@@ -1,6 +1,6 @@
 // Screen-4: Topic Overview
 
-import { useParams } from '@tanstack/react-router'
+import { useParams, Link } from '@tanstack/react-router'
 import { useTopic } from '../../../../../hooks/useTopics'
 import { useConsumerGroups } from '../../../../../hooks/useConsumerGroups'
 import { useClusters } from '../../../../../hooks/useCluster'
@@ -132,7 +132,11 @@ export function TopicOverviewPage() {
           </div>
           {activeGroups.map((g) => (
             <div key={g.id} className="grid gap-3 px-4 py-2.5 border-t items-center" style={{ gridTemplateColumns: '1fr 120px 100px' }}>
-              <span className="text-sm font-mono">{g.id}</span>
+              <Link
+                to="/clusters/$clusterId/consumer-groups/$groupId"
+                params={{ clusterId, groupId: g.id }}
+                className="text-sm font-mono hover:underline"
+              >{g.id}</Link>
               <span><StatusBadge variant={g.state === 'Stable' ? 'ok' : 'warn'} label={g.state} /></span>
               <span className="text-sm font-mono text-right">{g.total_lag.toLocaleString()}</span>
             </div>
