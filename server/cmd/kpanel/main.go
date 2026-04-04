@@ -167,9 +167,39 @@ func openBrowser(url string) {
 
 // printBanner writes the startup banner to stderr.
 func printBanner(url, configDir, preferredPort string, portChanged, prod bool, version string) {
+	const (
+		amber = "\033[38;5;214m"
+		reset = "\033[0m"
+		dim   = "\033[2m"
+	)
+
+	// figlet standard font — "k" in amber, "panel" in default.
+	kParts := []string{
+		` _    `,
+		`| | __`,
+		`| |/ /`,
+		`|   <`,
+		`|_|\_\`,
+		`      `,
+	}
+	panelParts := []string{
+		`                        _ `,
+		`_ __   __ _ _ __   ___| |`,
+		` '_ \ / _` + "`" + ` | '_ \ / _ \ |`,
+		`| |_) | (_| | | | |  __/ |`,
+		` .__/ \__,_|_| |_|\___|_|`,
+		`|_|                       `,
+	}
+	fmt.Fprintln(os.Stderr)
+	for i := range kParts {
+		fmt.Fprintf(os.Stderr, "  %s%s%s%s\n", amber, kParts[i], reset, panelParts[i])
+	}
+	fmt.Fprintln(os.Stderr)
+
+	ver := strings.TrimPrefix(version, "v")
 	sep := "──────────────────────────────────────────"
 	if prod {
-		fmt.Fprintf(os.Stderr, "kpanel  ·  local kafka GUI  ·  v%s\n", version)
+		fmt.Fprintf(os.Stderr, "  %slocal kafka GUI%s  ·  v%s\n", dim, reset, ver)
 		fmt.Fprintln(os.Stderr, sep)
 		fmt.Fprintf(os.Stderr, "  URL     %s\n", url)
 		fmt.Fprintf(os.Stderr, "  Config  %s\n", configDir)
@@ -181,7 +211,7 @@ func printBanner(url, configDir, preferredPort string, portChanged, prod bool, v
 		fmt.Fprintln(os.Stderr, "Opening in browser...")
 		fmt.Fprintln(os.Stderr, "Press Ctrl+C to stop")
 	} else {
-		fmt.Fprintf(os.Stderr, "kpanel  ·  dev server  ·  v%s\n", version)
+		fmt.Fprintf(os.Stderr, "  %sdev server%s  ·  v%s\n", dim, reset, ver)
 		fmt.Fprintln(os.Stderr, sep)
 		fmt.Fprintf(os.Stderr, "  API     %s\n", url)
 		fmt.Fprintf(os.Stderr, "  Config  %s\n", configDir)
