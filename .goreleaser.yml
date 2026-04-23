@@ -27,6 +27,8 @@ checksum:
 release:
   draft: false
   prerelease: auto
+  extra_files:
+    - glob: scripts/install.sh
 
 changelog:
   sort: asc

@@ -32,6 +32,11 @@ var version = "dev"
 var publicFiles embed.FS
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--version" {
+		fmt.Println(version)
+		os.Exit(0)
+	}
+
 	preferredPort := os.Getenv("KPANEL_PORT")
 	if preferredPort == "" {
 		preferredPort = "8080"

@@ -24,6 +24,24 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
+      # Build the frontend and bundle it into a source tarball so that the
+      # Homebrew formula can build kpanel with only Go (no Bun in the sandbox).
+      - name: Build frontend
+        run: cd web && bun install && bun build.ts
+
+      - name: Create source tarball with pre-built frontend
+        run: |
+          mkdir -p server/cmd/kpanel/public
+          cp -r web/dist/. server/cmd/kpanel/public/
+          TAG=${GITHUB_REF_NAME}
+          TARBALL="/tmp/kpanel-src-${TAG}.tar.gz"
+          tar czf "$TARBALL" \
+            --transform "s|^|kpanel-${TAG}/|" \
+            server/
+          echo "SRC_TARBALL=$TARBALL" >> $GITHUB_ENV
+
+      # GoReleaser rebuilds the frontend via its own before hooks (harmless),
+      # creates the binary archives, and publishes the GitHub Release.
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
@@ -31,3 +49,9 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Attach the source tarball to the release GoReleaser just created.
+      - name: Upload source tarball to release
+        run: gh release upload ${{ github.ref_name }} ${{ env.SRC_TARBALL }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
