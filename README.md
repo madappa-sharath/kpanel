@@ -1,29 +1,31 @@
 # kpanel
 
-Local Kafka GUI for any cluster. Runs on your workstation, uses your credentials. Native AWS MSK and IAM auth support.
+A Kafka GUI built for AWS MSK. It runs on your workstation and authenticates via IAM using your own AWS credentials — `aws sso login` and you're in. Works with any Kafka cluster too, but MSK with IAM auth is what it was designed for.
 
 ![Status](https://img.shields.io/badge/status-under%20development-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ---
 
-## What it does
+## Overview
 
-- **Browse topics** — partition layout, replication state, ISR status, configuration
-- **Peek messages** — inspect the last N messages from any topic with offset display
-- **Consumer group lag** — per-partition lag for every consumer group
-- **Broker health** — broker metadata, partition assignments, leader/follower status
-- **Cluster overview** — active controller, under-replicated partitions, key cluster configs
-- **MSK auto-discovery** — enumerate MSK clusters in your AWS account without copy-pasting broker URLs
-- **CloudWatch metrics** — throughput, lag, and broker resource charts pulled from CloudWatch (MSK connections only)
-- **Any Kafka** — works with self-hosted Kafka, Confluent Cloud, Aiven, Redpanda, or any Kafka-compatible broker
-- **Single binary** — self-contained binary with embedded frontend; no runtime dependencies
+Most Kafka GUIs run as a shared service: one deployment, one set of Kafka credentials, everyone logs into the same web UI. That model breaks down with MSK and IAM — you can't hand a central service your personal IAM credentials, and vending a shared service account means everyone gets the same access level.
+
+kpanel runs locally instead. It reads your AWS credentials directly from the standard SDK chain (SSO, environment variables, `~/.aws/credentials`, instance profile) and authenticates to MSK as you. Each person on the team runs their own instance with their own IAM identity. Auto-discovery, IAM auth, and CloudWatch metrics all work out of the box.
+
+The binary embeds the React frontend, so there's nothing to install separately. Run it, open a browser, add a connection.
+
+**What you can do:**
+
+- Browse topics — partition layout, replication state, ISR status, configs
+- Inspect messages — peek the last N messages from any topic with offset display
+- Consumer group lag — per-partition lag across every group
+- Broker metadata — partition assignments, leader/follower status
+- Cluster overview — active controller, under-replicated partitions, key configs
+- MSK auto-discovery — list clusters from your AWS account without copy-pasting broker URLs
+- CloudWatch metrics — throughput, lag, and broker resource charts for MSK connections
 
 ## How it works
-
-Most Kafka GUIs — AKHQ, Kafka UI, Redpanda Console — are deployed as a central service. They run on a server, authenticate to Kafka with a shared service account, and expose their own web auth layer. Every team member accesses the same instance.
-
-kpanel is different: each user runs it locally on their workstation.
 
 ```
 Your workstation
@@ -44,46 +46,46 @@ Your workstation
             AWS MSK cluster
 ```
 
-The binary listens on localhost. It reads your existing AWS credentials directly — `~/.aws/credentials`, environment variables, EC2 instance metadata, whatever the AWS SDK finds. No credential sharing between teammates, no token vending machine, no IAM role gymnastics to give a central service access to your clusters.
+The server listens on localhost. It reads your existing credentials directly — no credential sharing between teammates, no token vending machines, no IAM gymnastics to give a central service access to your clusters.
 
 ## AWS MSK
 
-kpanel is specifically designed so `aws sso login` + `./kpanel` just works.
+If you have AWS credentials configured, kpanel will automatically surface MSK features.
 
-**Auto-discovery.** Click "Discover MSK Clusters" in the UI. kpanel calls the AWS Kafka API, lists your clusters, and imports their broker endpoints automatically. No broker URLs to look up.
+**Discovery.** The UI has a "Discover MSK Clusters" button that calls the AWS Kafka API, lists your clusters, and imports their broker endpoints. No broker URLs to look up manually.
 
-**IAM authentication.** MSK connections authenticate via `AWS_MSK_IAM` SASL, implemented natively in franz-go. Your credentials (SSO, instance profile, environment variables — anything the AWS SDK resolves) are used directly. Credentials are refreshed automatically; no manual token rotation.
+**IAM auth.** MSK connections authenticate via `AWS_MSK_IAM` SASL, implemented natively in franz-go. Credentials — SSO, instance profile, environment variables — are resolved by the standard AWS SDK chain and refreshed automatically.
 
-**CloudWatch metrics.** MSK connections surface a Metrics tab with CloudWatch charts: bytes in/out, messages per second, consumer lag, CPU, disk, memory. Pulled via the CloudWatch API using the same credentials.
+**Metrics.** MSK connections get a Metrics tab with CloudWatch charts: bytes in/out, messages per second, consumer lag, CPU, disk, memory. Same credentials, no extra config.
 
-AWS features activate automatically when AWS credentials are present. The core Kafka functionality works without any AWS credentials.
+If no AWS credentials are present, these features are simply hidden. The core Kafka functionality works without them.
 
 ## Quick Start
 
-**macOS and Linux — one-line install:**
+**macOS / Linux:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/madappa-sharath/kpanel/main/scripts/install.sh | sh
 ```
 
-Installs to `~/.local/bin/kpanel`. No root or sudo required. See [Security](#security) below if you want to inspect it first or verify the download.
+Installs to `~/.local/bin/kpanel`. No sudo required.
 
-**Windows — one-line install (PowerShell):**
+**Windows (PowerShell):**
 
 ```powershell
 irm https://raw.githubusercontent.com/madappa-sharath/kpanel/main/scripts/install.ps1 | iex
 ```
 
-Installs to `%LOCALAPPDATA%\kpanel\kpanel.exe` and adds it to your user PATH. No admin rights required. See [Security](#security) to inspect the script before running.
+Installs to `%LOCALAPPDATA%\kpanel\kpanel.exe` and adds it to your user PATH. No admin rights required.
 
-**Or download the binary directly:**
+**Or download directly:**
 
 ```bash
-# macOS — Apple Silicon (M1/M2/M3)
+# macOS (Apple Silicon)
 curl -fLO https://github.com/madappa-sharath/kpanel/releases/latest/download/kpanel_darwin_arm64.tar.gz
 tar xzf kpanel_darwin_arm64.tar.gz && ./kpanel
 
-# macOS — Intel
+# macOS (Intel)
 curl -fLO https://github.com/madappa-sharath/kpanel/releases/latest/download/kpanel_darwin_amd64.tar.gz
 tar xzf kpanel_darwin_amd64.tar.gz && ./kpanel
 
@@ -93,87 +95,53 @@ tar xzf kpanel_linux_amd64.tar.gz && ./kpanel
 ```
 
 ```powershell
-# Windows (x64) — PowerShell
+# Windows (PowerShell)
 Invoke-WebRequest -Uri https://github.com/madappa-sharath/kpanel/releases/latest/download/kpanel_windows_amd64.zip -OutFile kpanel.zip
 Expand-Archive kpanel.zip -DestinationPath .; .\kpanel.exe
 ```
 
-**Run it:**
+For MSK, log in first:
 
 ```bash
-# For AWS MSK: make sure AWS credentials are configured first
 aws sso login   # or aws configure, or set AWS_PROFILE / AWS_ACCESS_KEY_ID
-
 ./kpanel
 ```
 
-**Open your browser:**
-
-```
-http://localhost:8080
-```
-
-From there: add a manual connection (enter broker addresses) or click "Discover MSK Clusters" to auto-import from your AWS account.
+Then open `http://localhost:8080`. Add a manual connection (enter broker addresses) or click "Discover MSK Clusters" to import from your AWS account.
 
 ## Security
 
-**No root required.** The install script writes only to `~/.local/bin` (or `$KPANEL_INSTALL_DIR`). It never uses `sudo`.
+The install script writes only to `~/.local/bin` (or `$KPANEL_INSTALL_DIR`) and never uses sudo. Both scripts are in this repo — [`scripts/install.sh`](./scripts/install.sh) and [`scripts/install.ps1`](./scripts/install.ps1) — if you want to read them before running.
 
-**Read it before running.** Both install scripts are in this repo — [`scripts/install.sh`](./scripts/install.sh) (macOS/Linux) and [`scripts/install.ps1`](./scripts/install.ps1) (Windows). To inspect without executing:
-
-```bash
-# macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/madappa-sharath/kpanel/main/scripts/install.sh | less
-```
-
-```powershell
-# Windows
-irm https://raw.githubusercontent.com/madappa-sharath/kpanel/main/scripts/install.ps1 | more
-```
-
-**Checksum verification.** Every release includes a `checksums.txt` generated by GoReleaser. The install script downloads and verifies the SHA-256 checksum before extracting the binary. To verify manually:
+Every release includes a `checksums.txt` with SHA-256 hashes. The install script verifies the checksum before extracting. To verify manually:
 
 ```bash
-VERSION=v0.1.0   # substitute the version you downloaded
+VERSION=v0.1.0
 curl -fLO https://github.com/madappa-sharath/kpanel/releases/download/$VERSION/checksums.txt
 grep kpanel_darwin_arm64.tar.gz checksums.txt | sha256sum --check
 ```
 
-**No telemetry. No outbound calls.** kpanel is a local process. The only network connections it makes are the ones you configure — directly to your Kafka brokers and (optionally) the AWS APIs. It does not phone home, collect usage data, or transmit anything to external servers.
-
-**What it stores locally.** Connection configs (broker addresses, SASL usernames) are written to `~/.kpanel/connections.json`. Credentials marked as sensitive (passwords, secret keys) are stored in your OS keychain via `go-keyring` — macOS Keychain, Linux Secret Service, or Windows Credential Manager — not in the JSON file.
-
-**Open source.** The full source is in this repo. `go build` from source is always an option if you prefer not to run a pre-built binary.
+kpanel makes no outbound connections except the ones you configure: directly to your Kafka brokers and optionally to AWS APIs. Connection configs are written to `~/.kpanel/connections.json`. Passwords and secret keys are stored in your OS keychain (macOS Keychain, Linux Secret Service, Windows Credential Manager) via `go-keyring`, not in the JSON file.
 
 ## Build from Source
 
-**Prerequisites:** [Go 1.22+](https://go.dev/dl/) and [Bun](https://bun.sh)
+Requires [Go 1.22+](https://go.dev/dl/) and [Bun](https://bun.sh).
 
 ```bash
 git clone https://github.com/madappa-sharath/kpanel.git
 cd kpanel
-
-# Install dependencies
-make setup
-
-# Development (Go on :8080, React dev server on :3000 with HMR)
-make dev
-
-# Production build → ./dist/kpanel
-make build
-
-# Cross-compile
-make build-linux    # Linux amd64
-make build-darwin   # macOS arm64
+make setup        # go mod tidy + bun install
+make dev          # Go on :8080, React dev server on :3000 with HMR
+make build        # production build → ./dist/kpanel
+make build-linux  # cross-compile for Linux amd64
+make build-darwin # cross-compile for macOS arm64
 ```
 
-In development, open [http://localhost:3000](http://localhost:3000). The Bun dev server proxies `/api` requests to the Go server at `:8080`.
+In development, open `http://localhost:3000`. The Bun dev server proxies `/api` to the Go server at `:8080`.
 
 ## Configuration
 
-Connections are stored in `~/.kpanel/connections.json`. They can be added via the UI or pre-populated manually.
-
-**Environment variables:**
+Connections are stored in `~/.kpanel/connections.json` and can be added via the UI or edited directly.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -186,34 +154,31 @@ Standard AWS environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
 
 ## Dependencies
 
-Direct dependencies:
-
 **Server (Go):**
 
-| Package | Role | Why |
-|---|---|---|
-| `twmb/franz-go` | Kafka client | Most complete Go Kafka client; actively maintained; built-in `AWS_MSK_IAM` SASL; production-proven at scale |
-| `twmb/franz-go/pkg/kadm` | Admin operations | Structured admin API on top of franz-go (topic/group management, offset operations) |
-| `twmb/franz-go/pkg/kmsg` | Kafka protocol types | Low-level protocol message types used alongside kadm |
-| `go-chi/chi/v5` | HTTP router | Lightweight, stdlib-compatible; no framework lock-in |
-| `aws/aws-sdk-go-v2` | AWS integration | Official AWS SDK; MSK cluster discovery, CloudWatch metrics |
-| `zalando/go-keyring` | Credential storage | OS keychain integration — macOS Keychain, Linux Secret Service, Windows Credential Manager |
-| `testcontainers-go/modules/kafka` | Integration tests | Spins up a real Kafka container for tests |
+| Package | Role |
+|---|---|
+| `twmb/franz-go` | Kafka client — built-in `AWS_MSK_IAM` SASL, actively maintained |
+| `twmb/franz-go/pkg/kadm` | Admin API — topic/group management, offset operations |
+| `go-chi/chi/v5` | HTTP router |
+| `aws/aws-sdk-go-v2` | MSK cluster discovery and CloudWatch metrics |
+| `zalando/go-keyring` | OS keychain integration for credential storage |
+| `testcontainers-go/modules/kafka` | Integration tests against a real Kafka container |
 
-**Frontend (JS — runtime deps only):**
+**Frontend (JS):**
 
 | Package | Role |
 |---|---|
 | `react` + `react-dom` | UI framework |
 | `@tanstack/react-router` | Type-safe SPA routing |
-| `@tanstack/react-query` | Server state management and caching |
-| `zustand` | Lightweight client state (active cluster, sidebar, theme) |
+| `@tanstack/react-query` | Server state and caching |
+| `zustand` | Client state (active cluster, sidebar, theme) |
 | `@radix-ui/*` | Accessible UI primitives (via shadcn/ui) |
-| `recharts` | Charts for CloudWatch metrics |
+| `recharts` | CloudWatch metrics charts |
 | `lucide-react` | Icons |
 | `tailwindcss` | Styling |
 
-**Frontend tooling (not bundled):** Bun handles dev server, bundling, and package management. No Vite, no webpack, no PostCSS pipeline.
+Bun handles the dev server, bundler, and package management — no Vite, no webpack, no PostCSS config.
 
 ## License
 
