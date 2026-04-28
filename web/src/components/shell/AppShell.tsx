@@ -1,6 +1,7 @@
 import { Outlet } from '@tanstack/react-router'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
+import { UpdateBanner } from './UpdateBanner'
 
 export function AppShell() {
   return (
@@ -23,7 +24,8 @@ export function AppShell() {
       <Header />
 
       {/* Main content */}
-      <main className="overflow-auto bg-background">
+      <main className="overflow-auto bg-background flex flex-col">
+        <UpdateBanner />
         <Outlet />
       </main>
     </div>

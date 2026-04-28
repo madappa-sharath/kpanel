@@ -35,15 +35,17 @@ type Handlers struct {
 	certsDir string // ~/.kpanel/certs/ — managed CA cert files live here
 	lagStore *LagStore
 	pool     *clientPool
+	updater  *updateChecker
 }
 
 // NewHandlers creates a Handlers instance.
-func NewHandlers(store *config.Store) *Handlers {
+func NewHandlers(store *config.Store, version string) *Handlers {
 	return &Handlers{
 		store:    store,
 		certsDir: filepath.Join(store.Dir(), "certs"),
 		lagStore: NewLagStore(),
 		pool:     newClientPool(),
+		updater:  newUpdateChecker(version),
 	}
 }
 

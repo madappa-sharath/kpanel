@@ -1,7 +1,7 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS  = -ldflags "-s -w -X main.version=$(VERSION)"
 
-.PHONY: dev dev-server dev-web setup build build-web build-server build-linux build-darwin clean kafka-up kafka-down kafka-logs kafka-seed kafka-seed-reset kafka-produce kafka-consume kafka-consume-all kafka-members kafka-seed-binary dev-full test test-integration create-dev-msk destroy-dev-msk
+.PHONY: dev dev-server dev-simulate-v01 dev-web setup build build-web build-server build-linux build-darwin clean kafka-up kafka-down kafka-logs kafka-seed kafka-seed-reset kafka-produce kafka-consume kafka-consume-all kafka-members kafka-seed-binary dev-full test test-integration create-dev-msk destroy-dev-msk
 
 test:
 	cd server && go test ./...
@@ -29,6 +29,9 @@ dev:
 
 dev-server:
 	cd server && go run ./cmd/kpanel
+
+dev-simulate-v01:
+	cd server && go run -ldflags "-X main.version=v0.0.1" ./cmd/kpanel
 
 dev-web:
 	cd web && bun run dev

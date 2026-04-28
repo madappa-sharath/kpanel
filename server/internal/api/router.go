@@ -8,12 +8,13 @@ import (
 )
 
 // Mount registers all API routes on the provided router.
-func Mount(r chi.Router, store *config.Store) {
-	h := NewHandlers(store)
+func Mount(r chi.Router, store *config.Store, version string) {
+	h := NewHandlers(store, version)
 
 	r.Use(corsMiddleware)
 
 	r.Get("/api/health", h.Health)
+	r.Get("/api/version", h.GetVersion)
 
 	r.Route("/api/connections", func(r chi.Router) {
 		r.Get("/", h.ListConnections)

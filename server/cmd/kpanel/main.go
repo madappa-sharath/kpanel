@@ -75,7 +75,7 @@ func main() {
 	}
 	r.Use(middleware.Recoverer)
 
-	api.Mount(r, store)
+	api.Mount(r, store, version)
 	r.Handle("/*", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if strings.HasPrefix(req.URL.Path, "/api/") {
 			http.NotFound(w, req)

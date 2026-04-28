@@ -1,3 +1,4 @@
+import type { VersionInfo } from '../types/version'
 import type { Cluster, SessionStatus, AWSContext, MSKCluster, AddClusterRequest, UpdateClusterRequest } from '../types/cluster'
 import type { MetricsResponse } from '../types/metrics'
 import type {
@@ -120,5 +121,9 @@ export const api = {
       request<MetricsResponse>(
         `/connections/${encodeURIComponent(clusterId)}/metrics?${new URLSearchParams(params)}`,
       ),
+  },
+
+  version: {
+    get: () => request<VersionInfo>('/version'),
   },
 } as const
