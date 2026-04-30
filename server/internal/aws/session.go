@@ -65,6 +65,7 @@ func CheckSession(ctx context.Context, profile, region string) SessionStatus {
 	if identity.Arn != nil {
 		status.UserARN = *identity.Arn
 	}
+
 	return status
 }
 

@@ -1,5 +1,6 @@
 // Screen-4: Topic Overview
 
+import { useState } from 'react'
 import { useParams, Link } from '@tanstack/react-router'
 import { useTopic } from '../../../../../hooks/useTopics'
 import { useConsumerGroups } from '../../../../../hooks/useConsumerGroups'
@@ -7,6 +8,7 @@ import { useClusters } from '../../../../../hooks/useCluster'
 import { useTopicMetrics } from '../../../../../hooks/useMetrics'
 import { MetricsChart } from '../../../../../components/metrics/MetricsChart'
 import { MetricsErrorBanner } from '../../../../../components/metrics/MetricsErrorBanner'
+import { TimeRangePicker, type TimeRange } from '../../../../../components/metrics/TimeRangePicker'
 import { formatRetention } from '../../../../../lib/utils'
 import { StatusBadge } from '../../../../../components/shared/StatusBadge'
 import { cn } from '@/lib/utils'
@@ -19,11 +21,14 @@ export function TopicOverviewPage() {
   const { data: topic, isLoading, error } = useTopic(clusterId, topicName)
   const { data: allGroups } = useConsumerGroups(clusterId)
   const { data: clusters } = useClusters()
-  const isAWS = clusters?.find((c) => c.id === clusterId)?.platform === 'aws'
+  const cluster = clusters?.find((c) => c.id === clusterId)
+  const isAWS = cluster?.platform === 'aws'
+  const [range, setRange] = useState<TimeRange>('3h')
   const { data: metricsData, isLoading: metricsLoading, error: metricsError } = useTopicMetrics(
     clusterId,
     topicName,
     isAWS,
+    range,
   )
 
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>
@@ -147,9 +152,12 @@ export function TopicOverviewPage() {
       {/* CloudWatch Metrics (AWS MSK only) */}
       {isAWS && (
         <div className="mt-7">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">
-            CloudWatch Metrics · last 3 hours
-          </p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">
+              CloudWatch Metrics
+            </p>
+            <TimeRangePicker value={range} onChange={setRange} />
+          </div>
           <MetricsErrorBanner error={metricsError as Error | null} />
           <div className="grid grid-cols-2 gap-4">
             {[

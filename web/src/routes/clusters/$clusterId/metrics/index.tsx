@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { useClusters } from '../../../../hooks/useCluster'
 import { useClusterMetrics } from '../../../../hooks/useMetrics'
 import { MetricsChart } from '../../../../components/metrics/MetricsChart'
 import { MetricsErrorBanner } from '../../../../components/metrics/MetricsErrorBanner'
+import { TimeRangePicker, type TimeRange } from '../../../../components/metrics/TimeRangePicker'
 import { PageHeader } from '../../../../components/shared/PageHeader'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Info } from 'lucide-react'
@@ -12,11 +14,12 @@ export function MetricsPage() {
   const { data: clusters } = useClusters()
   const cluster = clusters?.find((c) => c.id === clusterId)
   const isAWS = cluster?.platform === 'aws'
-  const { data: metricsData, isLoading: metricsLoading, error } = useClusterMetrics(clusterId, isAWS)
+  const [range, setRange] = useState<TimeRange>('3h')
+  const { data: metricsData, isLoading: metricsLoading, error } = useClusterMetrics(clusterId, isAWS, range)
 
   return (
     <div className="p-6">
-      <PageHeader title="Metrics" description="CloudWatch · last 3 hours · 5-min resolution" />
+      <PageHeader title="Metrics" description="CloudWatch · AWS/Kafka namespace" />
 
       {!isAWS ? (
         <Alert className="border-border">
@@ -28,6 +31,9 @@ export function MetricsPage() {
         </Alert>
       ) : (
         <>
+          <div className="mb-4">
+            <TimeRangePicker value={range} onChange={setRange} />
+          </div>
           <MetricsErrorBanner error={error as Error | null} />
           <div className="grid grid-cols-2 gap-4">
             {[

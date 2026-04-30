@@ -16,9 +16,24 @@ interface MetricsChartProps {
   height?: number
 }
 
-function fmtTime(ts: number) {
+function fmtTick(ts: number, multiDay: boolean): string {
   const d = new Date(ts)
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  if (!multiDay) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return (
+    d.toLocaleDateString([], { weekday: 'short' }) +
+    ' ' +
+    d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  )
+}
+
+function fmtLabel(ts: number, multiDay: boolean): string {
+  const d = new Date(ts)
+  if (!multiDay) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return (
+    d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) +
+    ', ' +
+    d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  )
 }
 
 function fmtValue(v: number, unit: string): string {
@@ -55,6 +70,9 @@ export function MetricsChart({ series, isLoading = false, height = 160 }: Metric
   }
 
   const unit = series.unit
+  const pts = series.datapoints
+  const multiDay =
+    pts.length > 1 && pts[pts.length - 1].ts - pts[0].ts > 20 * 60 * 60 * 1000
 
   return (
     <div>
@@ -64,9 +82,9 @@ export function MetricsChart({ series, isLoading = false, height = 160 }: Metric
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis
             dataKey="ts"
-            tickFormatter={fmtTime}
+            tickFormatter={(ts) => fmtTick(ts as number, multiDay)}
             tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
-            minTickGap={50}
+            minTickGap={multiDay ? 80 : 50}
           />
           <YAxis
             tickFormatter={(v) => fmtValue(v as number, unit)}
@@ -77,7 +95,7 @@ export function MetricsChart({ series, isLoading = false, height = 160 }: Metric
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             formatter={((v: any) => [fmtValue(v as number, unit), series.label]) as any}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            labelFormatter={((ts: any) => fmtTime(ts as number)) as any}
+            labelFormatter={((ts: any) => fmtLabel(ts as number, multiDay)) as any}
             contentStyle={{
               background: 'var(--card)',
               border: '1px solid var(--border)',

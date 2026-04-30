@@ -32,8 +32,8 @@ export const queryKeys = {
   },
 
   metrics: {
-    byScope: (clusterId: string, scope: string, extra?: string) =>
-      ['metrics', clusterId, scope, extra] as const,
+    byScope: (clusterId: string, scope: string, extra?: string, range?: string) =>
+      ['metrics', clusterId, scope, extra, range] as const,
   },
 
   version: {

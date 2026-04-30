@@ -14,7 +14,20 @@ import (
 	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 )
 
-const cwPeriod int32 = 300 // 5-minute period
+type cwRange struct {
+	duration time.Duration
+	period   int32
+}
+
+var cwRanges = map[string]cwRange{
+	"1h":  {1 * time.Hour, 60},
+	"3h":  {3 * time.Hour, 300},
+	"6h":  {6 * time.Hour, 600},
+	"12h": {12 * time.Hour, 900},
+	"1d":  {24 * time.Hour, 1800},
+	"3d":  {72 * time.Hour, 3600},
+	"7d":  {168 * time.Hour, 7200},
+}
 
 type metricsWindow struct {
 	Start         string `json:"start"`
@@ -82,37 +95,48 @@ func (h *Handlers) GetMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	rangeParam := r.URL.Query().Get("range")
+	if rangeParam == "" {
+		rangeParam = "3h"
+	}
+	rng, ok := cwRanges[rangeParam]
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid range: must be one of 1h, 3h, 6h, 12h, 1d, 3d, 7d")
+		return
+	}
+
 	cwClient := cloudwatch.NewFromConfig(sdkCfg)
 	end := time.Now()
-	start := end.Add(-3 * time.Hour)
+	start := end.Add(-rng.duration)
+	period := rng.period
 
 	var queries []cwtypes.MetricDataQuery
 	unitMap := map[string]string{}
 
 	switch scope {
 	case "cluster":
-		queries, unitMap = buildClusterQueries(clusterName)
+		queries, unitMap = buildClusterQueries(clusterName, period)
 	case "broker":
 		brokerID := r.URL.Query().Get("broker_id")
 		if brokerID == "" {
 			writeError(w, http.StatusBadRequest, "broker_id required for scope=broker")
 			return
 		}
-		queries, unitMap = buildBrokerQueries(clusterName, brokerID)
+		queries, unitMap = buildBrokerQueries(clusterName, brokerID, period)
 	case "topic":
 		topicName := r.URL.Query().Get("topic")
 		if topicName == "" {
 			writeError(w, http.StatusBadRequest, "topic required for scope=topic")
 			return
 		}
-		queries, unitMap = buildTopicQueries(clusterName, topicName)
+		queries, unitMap = buildTopicQueries(clusterName, topicName, period)
 	case "consumer":
 		groupID := r.URL.Query().Get("group")
 		if groupID == "" {
 			writeError(w, http.StatusBadRequest, "group required for scope=consumer")
 			return
 		}
-		queries, unitMap = buildConsumerQueries(clusterName, groupID)
+		queries, unitMap = buildConsumerQueries(clusterName, groupID, period)
 	default:
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown scope %q", scope))
 		return
@@ -128,7 +152,7 @@ func (h *Handlers) GetMetrics(w http.ResponseWriter, r *http.Request) {
 		Window: metricsWindow{
 			Start:         start.UTC().Format(time.RFC3339),
 			End:           end.UTC().Format(time.RFC3339),
-			PeriodSeconds: cwPeriod,
+			PeriodSeconds: period,
 		},
 		Series: series,
 	})
@@ -213,15 +237,15 @@ func resolveUnit(id string, unitMap map[string]string) string {
 }
 
 // searchBrokerExpr builds a SEARCH expression for broker-level MSK metrics.
-func searchBrokerExpr(clusterName, metricName, stat string) string {
+func searchBrokerExpr(clusterName, metricName, stat string, period int32) string {
 	return fmt.Sprintf(
 		`SEARCH('{AWS/Kafka,"Broker ID","Cluster Name"} MetricName="%s" "Cluster Name"="%s"', '%s', %d)`,
-		metricName, clusterName, stat, cwPeriod,
+		metricName, clusterName, stat, period,
 	)
 }
 
 // buildClusterQueries returns SEARCH+math queries to aggregate all brokers to cluster level.
-func buildClusterQueries(clusterName string) ([]cwtypes.MetricDataQuery, map[string]string) {
+func buildClusterQueries(clusterName string, period int32) ([]cwtypes.MetricDataQuery, map[string]string) {
 	unitMap := map[string]string{
 		"cpu_user":  "Percent",
 		"disk_used": "Percent",
@@ -230,23 +254,23 @@ func buildClusterQueries(clusterName string) ([]cwtypes.MetricDataQuery, map[str
 	}
 	queries := []cwtypes.MetricDataQuery{
 		// CpuUser — average across all brokers
-		{Id: aws.String("srch_cpu"), Expression: aws.String(searchBrokerExpr(clusterName, "CpuUser", "Average")), ReturnData: aws.Bool(false)},
+		{Id: aws.String("srch_cpu"), Expression: aws.String(searchBrokerExpr(clusterName, "CpuUser", "Average", period)), ReturnData: aws.Bool(false)},
 		{Id: aws.String("cpu_user"), Label: aws.String("CPU User %"), Expression: aws.String("AVG(srch_cpu)"), ReturnData: aws.Bool(true)},
 		// Disk used — average across all brokers
-		{Id: aws.String("srch_disk"), Expression: aws.String(searchBrokerExpr(clusterName, "KafkaDataLogsDiskUsed", "Average")), ReturnData: aws.Bool(false)},
+		{Id: aws.String("srch_disk"), Expression: aws.String(searchBrokerExpr(clusterName, "KafkaDataLogsDiskUsed", "Average", period)), ReturnData: aws.Bool(false)},
 		{Id: aws.String("disk_used"), Label: aws.String("Disk Used %"), Expression: aws.String("AVG(srch_disk)"), ReturnData: aws.Bool(true)},
 		// Bytes in — sum across all brokers
-		{Id: aws.String("srch_bin"), Expression: aws.String(searchBrokerExpr(clusterName, "BytesInPerSec", "Sum")), ReturnData: aws.Bool(false)},
+		{Id: aws.String("srch_bin"), Expression: aws.String(searchBrokerExpr(clusterName, "BytesInPerSec", "Sum", period)), ReturnData: aws.Bool(false)},
 		{Id: aws.String("bytes_in"), Label: aws.String("Bytes In/sec"), Expression: aws.String("SUM(srch_bin)"), ReturnData: aws.Bool(true)},
 		// Bytes out — sum across all brokers
-		{Id: aws.String("srch_bout"), Expression: aws.String(searchBrokerExpr(clusterName, "BytesOutPerSec", "Sum")), ReturnData: aws.Bool(false)},
+		{Id: aws.String("srch_bout"), Expression: aws.String(searchBrokerExpr(clusterName, "BytesOutPerSec", "Sum", period)), ReturnData: aws.Bool(false)},
 		{Id: aws.String("bytes_out"), Label: aws.String("Bytes Out/sec"), Expression: aws.String("SUM(srch_bout)"), ReturnData: aws.Bool(true)},
 	}
 	return queries, unitMap
 }
 
 // buildBrokerQueries returns direct MetricStat queries for a specific broker.
-func buildBrokerQueries(clusterName, brokerID string) ([]cwtypes.MetricDataQuery, map[string]string) {
+func buildBrokerQueries(clusterName, brokerID string, period int32) ([]cwtypes.MetricDataQuery, map[string]string) {
 	dims := []cwtypes.Dimension{
 		{Name: aws.String("Cluster Name"), Value: aws.String(clusterName)},
 		{Name: aws.String("Broker ID"), Value: aws.String(brokerID)},
@@ -268,7 +292,7 @@ func buildBrokerQueries(clusterName, brokerID string) ([]cwtypes.MetricDataQuery
 					MetricName: aws.String(name),
 					Dimensions: dims,
 				},
-				Period: aws.Int32(cwPeriod),
+				Period: aws.Int32(period),
 				Stat:   aws.String(statStr),
 			},
 			ReturnData: aws.Bool(true),
@@ -285,7 +309,7 @@ func buildBrokerQueries(clusterName, brokerID string) ([]cwtypes.MetricDataQuery
 }
 
 // buildTopicQueries returns SEARCH+SUM queries for a topic across all brokers.
-func buildTopicQueries(clusterName, topicName string) ([]cwtypes.MetricDataQuery, map[string]string) {
+func buildTopicQueries(clusterName, topicName string, period int32) ([]cwtypes.MetricDataQuery, map[string]string) {
 	unitMap := map[string]string{
 		"bytes_in":  "Bytes/Second",
 		"bytes_out": "Bytes/Second",
@@ -293,7 +317,7 @@ func buildTopicQueries(clusterName, topicName string) ([]cwtypes.MetricDataQuery
 	expr := func(metricName, stat string) string {
 		return fmt.Sprintf(
 			`SEARCH('{AWS/Kafka,"Broker ID","Cluster Name",Topic} MetricName="%s" "Cluster Name"="%s" Topic="%s"', '%s', %d)`,
-			metricName, clusterName, topicName, stat, cwPeriod,
+			metricName, clusterName, topicName, stat, period,
 		)
 	}
 	queries := []cwtypes.MetricDataQuery{
@@ -307,7 +331,7 @@ func buildTopicQueries(clusterName, topicName string) ([]cwtypes.MetricDataQuery
 
 // buildConsumerQueries returns SEARCH queries for consumer group lag per topic.
 // SEARCH returns one MetricDataResult per matching topic, so multiple series are returned.
-func buildConsumerQueries(clusterName, groupID string) ([]cwtypes.MetricDataQuery, map[string]string) {
+func buildConsumerQueries(clusterName, groupID string, period int32) ([]cwtypes.MetricDataQuery, map[string]string) {
 	unitMap := map[string]string{
 		"sum_lag":  "Count",
 		"time_lag": "Seconds",
@@ -315,7 +339,7 @@ func buildConsumerQueries(clusterName, groupID string) ([]cwtypes.MetricDataQuer
 	expr := func(metricName, stat string) string {
 		return fmt.Sprintf(
 			`SEARCH('{AWS/Kafka,"Consumer Group","Cluster Name",Topic} MetricName="%s" "Cluster Name"="%s" "Consumer Group"="%s"', '%s', %d)`,
-			metricName, clusterName, groupID, stat, cwPeriod,
+			metricName, clusterName, groupID, stat, period,
 		)
 	}
 	queries := []cwtypes.MetricDataQuery{

@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { useClusters, useClusterOverview } from '../../../../hooks/useCluster'
 import { useBrokerMetrics } from '../../../../hooks/useMetrics'
 import { MetricsChart } from '../../../../components/metrics/MetricsChart'
 import { MetricsErrorBanner } from '../../../../components/metrics/MetricsErrorBanner'
+import { TimeRangePicker, type TimeRange } from '../../../../components/metrics/TimeRangePicker'
 import { PageHeader } from '../../../../components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -16,10 +18,12 @@ export function BrokerDetailPage() {
   const { data: overview, isLoading: overviewLoading } = useClusterOverview(clusterId)
   const cluster = clusters?.find((c) => c.id === clusterId)
   const isAWS = cluster?.platform === 'aws'
+  const [range, setRange] = useState<TimeRange>('3h')
   const { data: metricsData, isLoading: metricsLoading, error: metricsError } = useBrokerMetrics(
     clusterId,
     brokerId,
     isAWS,
+    range,
   )
 
   const broker = overview?.brokers.find((b) => String(b.nodeId) === brokerId)
@@ -83,8 +87,11 @@ export function BrokerDetailPage() {
       {/* CloudWatch Metrics */}
       {isAWS ? (
         <div>
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-            CloudWatch Metrics · last 3 hours
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              CloudWatch Metrics
+            </div>
+            <TimeRangePicker value={range} onChange={setRange} />
           </div>
           <MetricsErrorBanner error={metricsError as Error | null} />
           <div className="grid grid-cols-2 gap-4">

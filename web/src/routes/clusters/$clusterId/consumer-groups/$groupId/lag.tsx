@@ -1,11 +1,13 @@
 // Screen-8c: Consumer Group Lag chart
 
+import { useState } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { LagChart } from '../../../../../components/consumer-groups/LagChart'
 import { useClusters } from '../../../../../hooks/useCluster'
 import { useConsumerMetrics } from '../../../../../hooks/useMetrics'
 import { MetricsChart } from '../../../../../components/metrics/MetricsChart'
 import { MetricsErrorBanner } from '../../../../../components/metrics/MetricsErrorBanner'
+import { TimeRangePicker, type TimeRange } from '../../../../../components/metrics/TimeRangePicker'
 
 export function GroupLagPage() {
   const { clusterId, groupId } = useParams({ strict: false }) as {
@@ -13,11 +15,14 @@ export function GroupLagPage() {
     groupId: string
   }
   const { data: clusters } = useClusters()
-  const isAWS = clusters?.find((c) => c.id === clusterId)?.platform === 'aws'
+  const cluster = clusters?.find((c) => c.id === clusterId)
+  const isAWS = cluster?.platform === 'aws'
+  const [range, setRange] = useState<TimeRange>('3h')
   const { data: metricsData, isLoading: metricsLoading, error: metricsError } = useConsumerMetrics(
     clusterId,
     groupId,
     isAWS,
+    range,
   )
 
   // Partition consumer metric series by metric type (sum_lag vs time_lag prefix)
@@ -32,9 +37,12 @@ export function GroupLagPage() {
       {/* CloudWatch lag (AWS MSK only) */}
       {isAWS && (
         <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-            CloudWatch Lag · last 3 hours
-          </p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              CloudWatch Lag
+            </p>
+            <TimeRangePicker value={range} onChange={setRange} />
+          </div>
           <MetricsErrorBanner error={metricsError as Error | null} />
 
           <div className="grid grid-cols-2 gap-4">

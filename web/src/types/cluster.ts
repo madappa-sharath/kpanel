@@ -44,8 +44,11 @@ export interface Cluster {
 
 export interface SessionStatus {
   valid: boolean
-  identity?: string // AWS ARN for aws clusters
+  profile?: string
+  account?: string
+  userArn?: string
   error?: string
+  recovery?: string
 }
 
 export interface AWSContext {
