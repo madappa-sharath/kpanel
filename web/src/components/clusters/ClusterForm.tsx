@@ -60,7 +60,7 @@ export function ClusterForm({ onSuccess, onCancel, cluster }: ClusterFormProps) 
       name:           cluster.name,
       brokers:        cluster.brokers.join(', '),
       mechanism:      cluster.platform === 'aws' ? 'aws_iam' : (cluster.auth?.mechanism ?? 'none'),
-      username:       '',
+      username:       cluster.auth?.credentialUsername ?? '',
       password:       '',
       awsProfile:     awsCfg?.profile     ?? 'default',
       awsRegion:      awsCfg?.region      ?? 'us-east-1',

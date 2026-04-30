@@ -22,8 +22,9 @@ type Cluster struct {
 
 // ClusterAuth describes how kpanel authenticates to the cluster.
 type ClusterAuth struct {
-	Mechanism     string `json:"mechanism"`               // "sasl_plain" | "sasl_scram_sha256" | "sasl_scram_sha512" | "aws_iam"
-	CredentialRef string `json:"credentialRef,omitempty"` // keychain lookup key; omitted for aws_iam
+	Mechanism          string `json:"mechanism"`                    // "sasl_plain" | "sasl_scram_sha256" | "sasl_scram_sha512" | "aws_iam"
+	CredentialRef      string `json:"credentialRef,omitempty"`      // keychain lookup key; omitted for aws_iam
+	CredentialUsername string `json:"credentialUsername,omitempty"` // resolved at API layer; never written to disk
 }
 
 // TLSConfig holds TLS settings for a cluster.

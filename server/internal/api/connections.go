@@ -43,10 +43,33 @@ type statusResponse struct {
 	Error        string `json:"error,omitempty"`
 }
 
+// withCredentialUsername resolves the stored username from keychain and injects
+// it into the Auth field so the frontend can pre-populate the edit form.
+// The field is never persisted to config.json (it's omitempty and not set on
+// writes), so this is safe to call on any cluster before marshalling to JSON.
+func withCredentialUsername(c config.Cluster) config.Cluster {
+	if c.Auth == nil || c.Auth.CredentialRef == "" {
+		return c
+	}
+	cred, err := credentials.Get(c.Auth.CredentialRef)
+	if err != nil || cred.Username == "" {
+		return c
+	}
+	auth := *c.Auth
+	auth.CredentialUsername = cred.Username
+	c.Auth = &auth
+	return c
+}
+
 // ListConnections godoc
 // GET /api/connections
 func (h *Handlers) ListConnections(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, h.store.List())
+	clusters := h.store.List()
+	out := make([]config.Cluster, len(clusters))
+	for i, c := range clusters {
+		out[i] = withCredentialUsername(c)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // AddConnection godoc
@@ -142,7 +165,7 @@ func (h *Handlers) AddConnection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusCreated, cluster)
+	writeJSON(w, http.StatusCreated, withCredentialUsername(cluster))
 }
 
 // UpdateConnection godoc
@@ -206,15 +229,33 @@ func (h *Handlers) UpdateConnection(w http.ResponseWriter, r *http.Request) {
 		if existing.Auth != nil {
 			credRef = existing.Auth.CredentialRef
 		}
-		if mechanism != "aws_iam" && req.Auth.Password != "" {
-			// New credentials provided — upsert
-			credRef = existing.ID
-			if err := credentials.Set(credRef, credentials.Credential{
-				Username: req.Auth.Username,
-				Password: req.Auth.Password,
-			}); err != nil {
-				writeError(w, http.StatusInternalServerError, "store credential: "+err.Error())
-				return
+		if mechanism != "aws_iam" {
+			if req.Auth.Password != "" {
+				// Password provided → full credential upsert.
+				credRef = existing.ID
+				if err := credentials.Set(credRef, credentials.Credential{
+					Username: req.Auth.Username,
+					Password: req.Auth.Password,
+				}); err != nil {
+					writeError(w, http.StatusInternalServerError, "store credential: "+err.Error())
+					return
+				}
+			} else if req.Auth.Username != "" && credRef != "" {
+				// Only the username changed — fetch existing password and re-store.
+				existing_cred, err := credentials.Get(credRef)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "get credential: "+err.Error())
+					return
+				}
+				if req.Auth.Username != existing_cred.Username {
+					if err := credentials.Set(credRef, credentials.Credential{
+						Username: req.Auth.Username,
+						Password: existing_cred.Password,
+					}); err != nil {
+						writeError(w, http.StatusInternalServerError, "store credential: "+err.Error())
+						return
+					}
+				}
 			}
 		}
 		cluster.Auth = &config.ClusterAuth{
@@ -243,7 +284,7 @@ func (h *Handlers) UpdateConnection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, cluster)
+	writeJSON(w, http.StatusOK, withCredentialUsername(cluster))
 }
 
 // DeleteConnection godoc

@@ -11,7 +11,8 @@ export type AuthMechanism =
 
 export interface ClusterAuth {
   mechanism: AuthMechanism
-  credentialRef?: string // keyring key, omitted when no creds stored
+  credentialRef?: string        // keyring key, omitted when no creds stored
+  credentialUsername?: string   // resolved at API layer; read-only, never sent back
 }
 
 export interface TLSConfig {

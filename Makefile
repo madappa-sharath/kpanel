@@ -1,7 +1,7 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS  = -ldflags "-s -w -X main.version=$(VERSION)"
 
-.PHONY: dev dev-server dev-simulate-v01 dev-web setup build build-web build-server build-linux build-darwin clean kafka-up kafka-down kafka-logs kafka-seed kafka-seed-reset kafka-produce kafka-consume kafka-consume-all kafka-members kafka-seed-binary dev-full test test-integration create-dev-msk destroy-dev-msk
+.PHONY: dev dev-server dev-simulate-v01 dev-web setup build build-web build-server build-linux build-darwin clean kafka-up kafka-down kafka-logs kafka-seed kafka-seed-reset kafka-produce kafka-consume kafka-consume-all kafka-members kafka-seed-binary dev-full test test-integration create-dev-msk destroy-dev-msk kafka-sasl-up kafka-sasl-down kafka-sasl-logs
 
 test:
 	cd server && go test ./...
@@ -98,3 +98,41 @@ create-dev-msk:
 
 destroy-dev-msk:
 	bash .private/msk-test/destroy-msk.sh
+
+# SASL test environment — starts Kafka requiring auth on localhost:9092.
+# Supports PLAIN (static) and SCRAM-SHA-256/512 (seeded on startup).
+# Credentials: admin/admin-secret  and  alice/alice-secret
+kafka-sasl-up:
+	docker compose -f docker-compose.sasl.yml up -d --wait
+	@echo "Seeding SCRAM users..."
+	docker exec kpanel-kafka-sasl /opt/kafka/bin/kafka-configs.sh \
+		--bootstrap-server localhost:9092 \
+		--command-config /etc/kafka/client.properties \
+		--alter --add-config 'SCRAM-SHA-256=[password=admin-secret]' \
+		--entity-type users --entity-name admin
+	docker exec kpanel-kafka-sasl /opt/kafka/bin/kafka-configs.sh \
+		--bootstrap-server localhost:9092 \
+		--command-config /etc/kafka/client.properties \
+		--alter --add-config 'SCRAM-SHA-512=[password=admin-secret]' \
+		--entity-type users --entity-name admin
+	docker exec kpanel-kafka-sasl /opt/kafka/bin/kafka-configs.sh \
+		--bootstrap-server localhost:9092 \
+		--command-config /etc/kafka/client.properties \
+		--alter --add-config 'SCRAM-SHA-256=[password=alice-secret]' \
+		--entity-type users --entity-name alice
+	docker exec kpanel-kafka-sasl /opt/kafka/bin/kafka-configs.sh \
+		--bootstrap-server localhost:9092 \
+		--command-config /etc/kafka/client.properties \
+		--alter --add-config 'SCRAM-SHA-512=[password=alice-secret]' \
+		--entity-type users --entity-name alice
+	@echo ""
+	@echo "Kafka (SASL) ready at localhost:9092"
+	@echo "  SASL/PLAIN:         admin/admin-secret  or  alice/alice-secret"
+	@echo "  SASL/SCRAM-SHA-256: admin/admin-secret  or  alice/alice-secret"
+	@echo "  SASL/SCRAM-SHA-512: admin/admin-secret  or  alice/alice-secret"
+
+kafka-sasl-down:
+	docker compose -f docker-compose.sasl.yml down
+
+kafka-sasl-logs:
+	docker compose -f docker-compose.sasl.yml logs -f kafka
