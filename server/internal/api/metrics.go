@@ -160,13 +160,19 @@ func (h *Handlers) GetMetrics(w http.ResponseWriter, r *http.Request) {
 
 // fetchCWMetrics calls GetMetricData and maps results to metricsSeries.
 // unitMap maps result IDs (or ID prefixes for SEARCH results) to unit strings.
+//
+// SEARCH expressions return one MetricDataResult per matching metric, all
+// sharing the query Id but with distinct Labels. We key storage by Id+Label so
+// each match becomes its own series, and we suffix duplicate Ids (sum_lag,
+// sum_lag_1, sum_lag_2, ...) so the emitted series.id is unique per topic.
 func fetchCWMetrics(ctx context.Context, cw *cloudwatch.Client, start, end time.Time, queries []cwtypes.MetricDataQuery, unitMap map[string]string) ([]metricsSeries, error) {
 	if len(queries) == 0 {
 		return []metricsSeries{}, nil
 	}
 
-	seriesByID := map[string]*metricsSeries{}
+	seriesByKey := map[string]*metricsSeries{}
 	order := make([]string, 0)
+	idCount := map[string]int{}
 	var nextToken *string
 
 	for {
@@ -188,16 +194,23 @@ func fetchCWMetrics(ctx context.Context, cw *cloudwatch.Client, start, end time.
 				label = id
 			}
 
-			s, ok := seriesByID[id]
+			key := id + "|" + label
+
+			s, ok := seriesByKey[key]
 			if !ok {
+				idCount[id]++
+				seriesID := id
+				if idCount[id] > 1 {
+					seriesID = fmt.Sprintf("%s_%d", id, idCount[id]-1)
+				}
 				s = &metricsSeries{
-					ID:         id,
+					ID:         seriesID,
 					Label:      label,
 					Unit:       resolveUnit(id, unitMap),
 					Datapoints: make([]metricsDatapoint, 0, len(res.Timestamps)),
 				}
-				seriesByID[id] = s
-				order = append(order, id)
+				seriesByKey[key] = s
+				order = append(order, key)
 			}
 
 			for i, ts := range res.Timestamps {
@@ -214,8 +227,8 @@ func fetchCWMetrics(ctx context.Context, cw *cloudwatch.Client, start, end time.
 	}
 
 	series := make([]metricsSeries, 0, len(order))
-	for _, id := range order {
-		s := seriesByID[id]
+	for _, key := range order {
+		s := seriesByKey[key]
 		sort.Slice(s.Datapoints, func(i, j int) bool { return s.Datapoints[i].TS < s.Datapoints[j].TS })
 		series = append(series, *s)
 	}
@@ -342,9 +355,12 @@ func buildConsumerQueries(clusterName, groupID string, period int32) ([]cwtypes.
 			metricName, clusterName, groupID, stat, period,
 		)
 	}
+	// ${PROP('Dim.Topic')} expands to the Topic dimension value, so each
+	// SEARCH-expanded result is labeled with just the topic name.
+	topicLabel := aws.String("${PROP('Dim.Topic')}")
 	queries := []cwtypes.MetricDataQuery{
-		{Id: aws.String("sum_lag"), Expression: aws.String(expr("SumOffsetLag", "Maximum")), ReturnData: aws.Bool(true)},
-		{Id: aws.String("time_lag"), Expression: aws.String(expr("EstimatedMaxTimeLag", "Maximum")), ReturnData: aws.Bool(true)},
+		{Id: aws.String("sum_lag"), Label: topicLabel, Expression: aws.String(expr("SumOffsetLag", "Maximum")), ReturnData: aws.Bool(true)},
+		{Id: aws.String("time_lag"), Label: topicLabel, Expression: aws.String(expr("EstimatedMaxTimeLag", "Maximum")), ReturnData: aws.Bool(true)},
 	}
 	return queries, unitMap
 }
