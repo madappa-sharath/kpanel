@@ -42,6 +42,25 @@ func TestDiscoverMSK_RegionQueryParam(t *testing.T) {
 	}
 }
 
+// TestDiscoverMSK_ProfileQueryParam verifies the endpoint accepts a ?profile= param
+// (used by the discovery UI to swap profiles) and returns an empty array rather
+// than an error when the picked profile has no usable credentials.
+func TestDiscoverMSK_ProfileQueryParam(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
+	h, _ := testServer(t)
+	w := do(t, h, http.MethodGet, "/api/msk/clusters?profile=kpanel-nonexistent-profile&region=us-east-1", nil)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d (body: %s)", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp []any
+	decodeJSON(t, w, &resp)
+	if resp == nil {
+		t.Error("response should be an empty array, not null")
+	}
+}
+
 // ── ImportMSKCluster ─────────────────────────────────────────────────────────
 
 // TestImportMSKCluster_InvalidARNPrefix verifies that an ARN not starting with

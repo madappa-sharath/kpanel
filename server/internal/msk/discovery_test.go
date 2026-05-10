@@ -91,7 +91,7 @@ func TestDiscoverClusters_ReturnsNilNotErrorWhenNoCreds(t *testing.T) {
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
 
 	ctx := context.Background()
-	clusters, err := DiscoverClusters(ctx, "us-east-1")
+	clusters, err := DiscoverClusters(ctx, "us-east-1", "")
 
 	if err != nil {
 		t.Errorf("expected nil error when credentials are unavailable, got: %v", err)

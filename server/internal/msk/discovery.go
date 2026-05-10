@@ -47,12 +47,16 @@ type ClusterInfo struct {
 }
 
 // DiscoverClusters lists MSK clusters in the given region using the caller's AWS credentials.
+// When profile is non-empty, that profile is used instead of the env-derived default.
 // Returns an empty slice (not an error) if credentials are unavailable — the caller treats
 // this as "no MSK clusters found" rather than a failure.
-func DiscoverClusters(ctx context.Context, region string) ([]ClusterInfo, error) {
+func DiscoverClusters(ctx context.Context, region, profile string) ([]ClusterInfo, error) {
 	var loadOpts []func(*config.LoadOptions) error
 	if region != "" {
 		loadOpts = append(loadOpts, config.WithRegion(region))
+	}
+	if profile != "" {
+		loadOpts = append(loadOpts, config.WithSharedConfigProfile(profile))
 	}
 	awsCfg, err := config.LoadDefaultConfig(ctx, loadOpts...)
 	if err != nil {

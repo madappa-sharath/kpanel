@@ -12,14 +12,16 @@ import (
 )
 
 // DiscoverMSK godoc
-// GET /api/msk/clusters?region=us-east-1
+// GET /api/msk/clusters?region=us-east-1&profile=<name>
 func (h *Handlers) DiscoverMSK(w http.ResponseWriter, r *http.Request) {
 	region := r.URL.Query().Get("region")
-	if region == "" {
+	profile := r.URL.Query().Get("profile")
+	if region == "" && profile == "" {
+		// Only fall back to AWS_REGION when caller didn't pick a profile —
+		// once a profile is explicit, its own configured region should win.
 		region = os.Getenv("AWS_REGION")
 	}
-	// If still empty, DiscoverClusters lets the AWS SDK resolve from profile/AWS_DEFAULT_REGION.
-	clusters, err := msk.DiscoverClusters(r.Context(), region)
+	clusters, err := msk.DiscoverClusters(r.Context(), region, profile)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -48,7 +50,8 @@ func (h *Handlers) ImportMSKCluster(w http.ResponseWriter, r *http.Request) {
 	}
 	region := parts[3]
 
-	clusters, err := msk.DiscoverClusters(r.Context(), region)
+	profile := r.URL.Query().Get("profile")
+	clusters, err := msk.DiscoverClusters(r.Context(), region, profile)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "discover clusters: "+err.Error())
 		return
@@ -82,7 +85,9 @@ func (h *Handlers) ImportMSKCluster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	profile := config.ActiveAWSProfile()
+	if profile == "" {
+		profile = config.ActiveAWSProfile()
+	}
 	cluster := config.Cluster{
 		ID:       id,
 		Name:     target.Name,

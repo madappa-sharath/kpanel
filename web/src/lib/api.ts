@@ -106,14 +106,29 @@ export const api = {
   },
 
   aws: {
-    context: () => request<AWSContext>('/aws/context'),
+    context: (profile?: string) => {
+      const qs = profile ? `?profile=${encodeURIComponent(profile)}` : ''
+      return request<AWSContext>(`/aws/context${qs}`)
+    },
+    profiles: () => request<{ profiles: string[] }>('/aws/profiles'),
   },
 
   msk: {
-    discover: (region?: string) =>
-      request<MSKCluster[]>(`/msk/clusters${region ? `?region=${encodeURIComponent(region)}` : ''}`),
-    import: (arn: string, access: 'private' | 'public' = 'private') =>
-      request<Cluster>(`/msk/clusters/${encodeURIComponent(arn)}/import?access=${access}`, { method: 'POST' }),
+    discover: (region?: string, profile?: string) => {
+      const params = new URLSearchParams()
+      if (region) params.set('region', region)
+      if (profile) params.set('profile', profile)
+      const qs = params.toString()
+      return request<MSKCluster[]>(`/msk/clusters${qs ? `?${qs}` : ''}`)
+    },
+    import: (arn: string, access: 'private' | 'public' = 'private', profile?: string) => {
+      const params = new URLSearchParams({ access })
+      if (profile) params.set('profile', profile)
+      return request<Cluster>(
+        `/msk/clusters/${encodeURIComponent(arn)}/import?${params.toString()}`,
+        { method: 'POST' },
+      )
+    },
   },
 
   metrics: {

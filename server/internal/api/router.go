@@ -57,6 +57,7 @@ func Mount(r chi.Router, store *config.Store, version string) {
 
 	r.Route("/api/aws", func(r chi.Router) {
 		r.Get("/context", h.AWSContext)
+		r.Get("/profiles", h.ListAWSProfiles)
 	})
 
 	r.Route("/api/msk", func(r chi.Router) {

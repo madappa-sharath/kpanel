@@ -20,14 +20,29 @@ type awsContextResponse struct {
 }
 
 // AWSContext godoc
-// GET /api/aws/context
+// GET /api/aws/context?profile=<name>
+//
+// When ?profile= is provided, credentials and region are resolved against that
+// profile instead of the env-derived default. This is how the discovery UI
+// previews credentials for a profile other than the one the app launched in.
 func (h *Handlers) AWSContext(w http.ResponseWriter, r *http.Request) {
-	profile := kconfig.ActiveAWSProfile()
+	profile := r.URL.Query().Get("profile")
+	if profile == "" {
+		profile = kconfig.ActiveAWSProfile()
+	}
 
-	// Resolve region: env vars → profile config → fallback to us-east-1
-	region := os.Getenv("AWS_REGION")
-	if region == "" {
-		region = os.Getenv("AWS_DEFAULT_REGION")
+	// Resolve region: when a profile is explicitly picked, prefer that profile's
+	// configured region over env vars (otherwise switching profiles wouldn't
+	// follow the profile's home region). Env vars are still the floor for the
+	// env-derived default profile.
+	envRegion := os.Getenv("AWS_REGION")
+	if envRegion == "" {
+		envRegion = os.Getenv("AWS_DEFAULT_REGION")
+	}
+
+	region := envRegion
+	if r.URL.Query().Get("profile") != "" {
+		region = ""
 	}
 	if region == "" {
 		var loadOpts []func(*config.LoadOptions) error
@@ -37,6 +52,9 @@ func (h *Handlers) AWSContext(w http.ResponseWriter, r *http.Request) {
 		if awsCfg, err := config.LoadDefaultConfig(r.Context(), loadOpts...); err == nil && awsCfg.Region != "" {
 			region = awsCfg.Region
 		}
+	}
+	if region == "" {
+		region = envRegion
 	}
 	if region == "" {
 		region = "us-east-1"
@@ -52,4 +70,18 @@ func (h *Handlers) AWSContext(w http.ResponseWriter, r *http.Request) {
 		Error:    s.Error,
 		Recovery: s.Recovery,
 	})
+}
+
+// ListAWSProfiles godoc
+// GET /api/aws/profiles
+//
+// Returns AWS profile names parsed from ~/.aws/config (or $AWS_CONFIG_FILE).
+// Empty list when the file is missing — that's a normal state, not an error.
+func (h *Handlers) ListAWSProfiles(w http.ResponseWriter, r *http.Request) {
+	profiles, err := awssession.ListProfiles()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"profiles": profiles})
 }

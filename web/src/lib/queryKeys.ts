@@ -24,11 +24,13 @@ export const queryKeys = {
   },
 
   aws: {
-    context: () => ['aws', 'context'] as const,
+    context: (profile?: string) => ['aws', 'context', profile ?? null] as const,
+    profiles: () => ['aws', 'profiles'] as const,
   },
 
   msk: {
-    clusters: (region?: string) => ['msk', 'clusters', region] as const,
+    clusters: (region?: string, profile?: string) =>
+      ['msk', 'clusters', region ?? null, profile ?? null] as const,
   },
 
   metrics: {

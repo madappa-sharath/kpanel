@@ -4,6 +4,7 @@ package api_test
 
 import (
 	"net/http"
+	"path/filepath"
 	"testing"
 )
 
@@ -97,6 +98,41 @@ func TestAWSContext_ValidFalseInTestEnv(t *testing.T) {
 	}
 	if errMsg, _ := resp["error"].(string); errMsg == "" {
 		t.Error("expected non-empty error field when credentials are unavailable")
+	}
+}
+
+// TestAWSContext_ProfileQueryParamOverridesEnv verifies that ?profile= takes
+// precedence over the env-derived AWS_PROFILE — this is how the discovery UI
+// previews credentials for profiles other than the one the app launched in.
+func TestAWSContext_ProfileQueryParamOverridesEnv(t *testing.T) {
+	t.Setenv("AWS_PROFILE", "env-profile")
+	h, _ := testServer(t)
+	w := do(t, h, http.MethodGet, "/api/aws/context?profile=picked-profile", nil)
+
+	var resp map[string]any
+	decodeJSON(t, w, &resp)
+
+	if got, _ := resp["profile"].(string); got != "picked-profile" {
+		t.Errorf("profile: got %q, want picked-profile", got)
+	}
+}
+
+// TestListAWSProfiles_ResponseShape verifies the endpoint returns a JSON object
+// with a "profiles" array — empty when no config file exists.
+func TestListAWSProfiles_ResponseShape(t *testing.T) {
+	t.Setenv("AWS_CONFIG_FILE", filepath.Join(t.TempDir(), "config-does-not-exist"))
+	h, _ := testServer(t)
+	w := do(t, h, http.MethodGet, "/api/aws/profiles", nil)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	decodeJSON(t, w, &resp)
+
+	if _, ok := resp["profiles"]; !ok {
+		t.Error("response missing 'profiles' field")
 	}
 }
 
