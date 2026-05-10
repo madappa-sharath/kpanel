@@ -1,3 +1,13 @@
 # Registers bun-plugin-tailwind for Bun.serve() static routes (dev server)
 [serve.static]
 plugins = ["bun-plugin-tailwind"]
+
+# Block versions published within the last 3 days — most npm compromises are
+# detected and pulled within hours. Override with `bun install --no-minimum-release-age`.
+[install]
+minimumReleaseAge = 259200
+# bun-types tracks the runtime; we want it fresh.
+minimumReleaseAgeExcludes = ["bun-types", "@types/bun"]
+# Most npm RATs execute via lifecycle scripts. Bun's trustedDependencies in
+# package.json still works for packages that legitimately need them.
+ignoreScripts = true

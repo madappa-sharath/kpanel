@@ -27,6 +27,28 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# CycloneDX SBOM per archive — lets downstream consumers verify what was bundled.
+sboms:
+  - artifacts: archive
+
+# Keyless cosign signing using GitHub OIDC (no key management needed).
+# Verify with:
+#   cosign verify-blob --certificate-identity-regexp \
+#     'https://github.com/<owner>/kpanel/.github/workflows/release.yml@.*' \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#     --signature <sig> --certificate <cert> <artifact>
+signs:
+  - cmd: cosign
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
+
 release:
   draft: false
   prerelease: auto

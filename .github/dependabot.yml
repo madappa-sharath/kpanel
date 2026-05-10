@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # Frontend (Bun reads npm package.json; Dependabot's npm ecosystem covers it).
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
+    groups:
+      radix:
+        patterns: ["@radix-ui/*"]
+      tanstack:
+        patterns: ["@tanstack/*"]
+
+  - package-ecosystem: gomod
+    directory: /server
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
+    groups:
+      aws-sdk:
+        patterns: ["github.com/aws/aws-sdk-go-v2/*"]
+      franz-go:
+        patterns: ["github.com/twmb/franz-go*"]
+
+  # Keep GitHub Actions pinned-by-SHA up to date — Dependabot rewrites the
+  # SHA but preserves the trailing version comment as a hint.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 3
