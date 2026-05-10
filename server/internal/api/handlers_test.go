@@ -21,7 +21,7 @@ func testServer(t *testing.T) (http.Handler, *config.Store) {
 		t.Fatalf("NewStore: %v", err)
 	}
 	r := chi.NewRouter()
-	api.Mount(r, store)
+	api.Mount(r, store, "test")
 	return r, store
 }
 
