@@ -6,6 +6,7 @@ import { AlertTriangle, Check, ChevronRight, ChevronsUpDown, Cloud, Copy, Refres
 import { api } from '../../lib/api'
 import { queryKeys } from '../../lib/queryKeys'
 import { cn } from '../../lib/utils'
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -30,6 +31,7 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
   // null = use env-derived AWS_PROFILE; string = user picked from dropdown
   const [profileOverride, setProfileOverride] = useState<string | null>(null)
   const [profilePickerOpen, setProfilePickerOpen] = useState(false)
+  const { copy, isCopied } = useCopyToClipboard()
   const queryClient = useQueryClient()
 
   // Profiles defined in ~/.aws/config — empty when the file doesn't exist.
@@ -283,10 +285,12 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigator.clipboard.writeText(ctx.recovery!)}
+                onClick={() => copy(ctx.recovery!)}
                 className="h-6 gap-1 mt-1 px-0 text-xs"
               >
-                <Copy size={11} /> Copy command
+                {isCopied()
+                  ? <><Check size={11} /> Copied</>
+                  : <><Copy size={11} /> Copy command</>}
               </Button>
             </div>
           </div>

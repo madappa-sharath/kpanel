@@ -1,7 +1,8 @@
 // Inline banner — shown when AWS SSO session is expired for the active cluster.
 
-import { AlertTriangle, Copy } from 'lucide-react'
+import { AlertTriangle, Check, Copy } from 'lucide-react'
 import { useClusterSession } from '../../hooks/useCluster'
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 
@@ -12,6 +13,7 @@ interface AWSAuthAlertProps {
 
 export function AWSAuthAlert({ clusterId, awsProfile }: AWSAuthAlertProps) {
   const { data: session, refetch, isFetching } = useClusterSession(clusterId)
+  const { copy, isCopied } = useCopyToClipboard()
 
   if (!session || session.valid) return null
 
@@ -30,8 +32,8 @@ export function AWSAuthAlert({ clusterId, awsProfile }: AWSAuthAlertProps) {
           </p>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <Button variant="ghost" size="sm" onClick={() => navigator.clipboard.writeText(cmd)} className="h-7 gap-1">
-            <Copy size={12} /> Copy
+          <Button variant="ghost" size="sm" onClick={() => copy(cmd)} className="h-7 gap-1">
+            {isCopied() ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
           </Button>
           <Button
             variant="ghost"

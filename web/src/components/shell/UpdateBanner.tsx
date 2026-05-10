@@ -4,10 +4,11 @@ import { X, ArrowUpCircle, Copy, Check, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/queryKeys'
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 
 export function UpdateBanner() {
   const [dismissed, setDismissed] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const { copy, isCopied } = useCopyToClipboard()
 
   const { data } = useQuery({
     queryKey: queryKeys.version.info(),
@@ -18,12 +19,6 @@ export function UpdateBanner() {
   })
 
   if (!data?.updateAvailable || dismissed) return null
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(data.installCmd)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
 
   return (
     <div className="border-b border-border bg-amber-50 dark:bg-amber-950/30 px-4 py-2.5 flex items-center gap-3 text-sm shrink-0">
@@ -56,10 +51,10 @@ export function UpdateBanner() {
           variant="ghost"
           size="icon"
           className="size-6 text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900"
-          onClick={handleCopy}
+          onClick={() => copy(data.installCmd)}
           title="Copy install command"
         >
-          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+          {isCopied() ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
         </Button>
         <Button
           variant="ghost"

@@ -1,7 +1,7 @@
 import { useParams, Link } from '@tanstack/react-router'
-import { useState } from 'react'
 import { BarChart2 } from 'lucide-react'
 import { useClusters, useConnectionStatus, useClusterOverview } from '../../../hooks/useCluster'
+import { useCopyToClipboard } from '../../../hooks/useCopyToClipboard'
 import { PageHeader } from '../../../components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -185,7 +185,7 @@ export function DashboardPage() {
   const { data: status, isLoading: statusLoading } = useConnectionStatus(clusterId)
   const { data: overview, isLoading } = useClusterOverview(clusterId)
   const cluster = clusters?.find((c) => c.id === clusterId)
-  const [copied, setCopied] = useState(false)
+  const { copy, isCopied } = useCopyToClipboard()
 
   const platformLabel =
     cluster?.platform === 'aws' ? 'AWS MSK'
@@ -193,11 +193,7 @@ export function DashboardPage() {
     : (cluster?.platform ?? 'Kafka')
 
   function copyClusterId() {
-    if (overview?.clusterId) {
-      navigator.clipboard.writeText(overview.clusterId)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    }
+    if (overview?.clusterId) copy(overview.clusterId)
   }
 
   const isAWS = cluster?.platform === 'aws'
@@ -337,9 +333,9 @@ export function DashboardPage() {
                       variant="outline"
                       size="sm"
                       onClick={copyClusterId}
-                      className={cn('h-5 px-1.5 text-xs flex-shrink-0', copied && 'text-green-600')}
+                      className={cn('h-5 px-1.5 text-xs flex-shrink-0', isCopied() && 'text-green-600')}
                     >
-                      {copied ? '✓' : 'copy'}
+                      {isCopied() ? '✓' : 'copy'}
                     </Button>
                   </div>
                 </div>

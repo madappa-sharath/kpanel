@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTopic } from '../../../../../hooks/useTopics'
+import { useCopyToClipboard } from '../../../../../hooks/useCopyToClipboard'
 import { api } from '../../../../../lib/api'
 import { queryKeys } from '../../../../../lib/queryKeys'
 import { Input } from '@/components/ui/input'
@@ -51,7 +52,7 @@ export function TopicConfigPage() {
   const [editValue, setEditValue] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [exportToast, setExportToast] = useState(false)
+  const { copy, isCopied } = useCopyToClipboard()
 
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>
   if (error) return <div className="p-6 text-destructive">{(error as Error).message}</div>
@@ -94,9 +95,7 @@ export function TopicConfigPage() {
 
   function exportNonDefaults() {
     const obj = Object.fromEntries(nonDefaultEntries.map(([k, v]) => [k, v.value]))
-    navigator.clipboard.writeText(JSON.stringify(obj, null, 2))
-    setExportToast(true)
-    setTimeout(() => setExportToast(false), 2000)
+    copy(JSON.stringify(obj, null, 2))
   }
 
   return (
@@ -121,7 +120,7 @@ export function TopicConfigPage() {
           disabled={nonDefaultEntries.length === 0}
           title="Copy non-default configs as JSON"
         >
-          {exportToast ? '✓ Copied!' : 'Export non-defaults'}
+          {isCopied() ? '✓ Copied!' : 'Export non-defaults'}
         </Button>
         <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer select-none">
           <input

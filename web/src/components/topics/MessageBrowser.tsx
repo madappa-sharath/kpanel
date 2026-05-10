@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 
 const LIVE_INTERVALS = [
   { label: '1s',  ms: 1_000 },
@@ -49,7 +50,7 @@ export function MessageBrowser({
   const [liveIntervalMs, setLiveIntervalMs] = useState(5_000)
   const [showAbsolute, setShowAbsolute] = useState(false)
   const [filterText, setFilterText] = useState('')
-  const [copied, setCopied] = useState<string | null>(null)
+  const { copy, isCopied } = useCopyToClipboard()
   const liveCallbackRef = useRef<() => void>(() => {})
   const rowRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
   const cursorRef = useRef<string | null>(null)
@@ -146,12 +147,6 @@ export function MessageBrowser({
     const btn = rowRefs.current.get(nextKey)
     btn?.scrollIntoView({ block: 'nearest' })
     btn?.focus()
-  }
-
-  async function copyToClipboard(text: string, label: string) {
-    await navigator.clipboard.writeText(text)
-    setCopied(label)
-    setTimeout(() => setCopied(null), 1500)
   }
 
   const selectedMessage = effectiveSelectedKey
@@ -412,8 +407,8 @@ export function MessageBrowser({
           <MessageDetailPanel
             message={selectedMessage}
             onClose={() => setSelectedKey(null)}
-            copied={copied}
-            onCopy={copyToClipboard}
+            isCopied={isCopied}
+            onCopy={copy}
           />
         )}
       </div>
@@ -424,11 +419,11 @@ export function MessageBrowser({
 interface MessageDetailPanelProps {
   message: Message
   onClose: () => void
-  copied: string | null
-  onCopy: (text: string, label: string) => Promise<void>
+  isCopied: (key?: string) => boolean
+  onCopy: (text: string, key?: string) => Promise<void>
 }
 
-function MessageDetailPanel({ message, onClose, copied, onCopy }: MessageDetailPanelProps) {
+function MessageDetailPanel({ message, onClose, isCopied, onCopy }: MessageDetailPanelProps) {
   const msgKey = `${message.partition}-${message.offset}`
   const formattedValue = message.value_encoding === 'base64'
     ? null
@@ -479,9 +474,9 @@ function MessageDetailPanel({ message, onClose, copied, onCopy }: MessageDetailP
                   : message.key}
               </pre>
               {message.key_encoding !== 'base64' && (
-                <Button variant="outline" size="sm" className={cn('h-6 px-2 text-xs mt-1 self-start', copied === `key-${msgKey}` && 'text-green-600')}
+                <Button variant="outline" size="sm" className={cn('h-6 px-2 text-xs mt-1 self-start', isCopied(`key-${msgKey}`) && 'text-green-600')}
                   onClick={() => onCopy(message.key!, `key-${msgKey}`)}>
-                  {copied === `key-${msgKey}` ? 'Copied!' : 'Copy Key'}
+                  {isCopied(`key-${msgKey}`) ? 'Copied!' : 'Copy Key'}
                 </Button>
               )}
             </>
@@ -496,18 +491,18 @@ function MessageDetailPanel({ message, onClose, copied, onCopy }: MessageDetailP
               <Button
                 variant="outline"
                 size="sm"
-                className={cn('h-6 px-2 text-xs', copied === `value-${msgKey}` && 'text-green-600')}
+                className={cn('h-6 px-2 text-xs', isCopied(`value-${msgKey}`) && 'text-green-600')}
                 onClick={() => onCopy(message.value, `value-${msgKey}`)}
               >
-                {copied === `value-${msgKey}` ? 'Copied!' : 'Copy Value'}
+                {isCopied(`value-${msgKey}`) ? 'Copied!' : 'Copy Value'}
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className={cn('h-6 px-2 text-xs', copied === `msg-${msgKey}` && 'text-green-600')}
+                className={cn('h-6 px-2 text-xs', isCopied(`msg-${msgKey}`) && 'text-green-600')}
                 onClick={() => onCopy(JSON.stringify(message, null, 2), `msg-${msgKey}`)}
               >
-                {copied === `msg-${msgKey}` ? 'Copied!' : 'Copy Message'}
+                {isCopied(`msg-${msgKey}`) ? 'Copied!' : 'Copy Message'}
               </Button>
             </div>
           </div>
