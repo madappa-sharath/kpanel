@@ -45,7 +45,7 @@ curl -fsSL "$CHECKSUMS_URL" -o "$TMP/checksums.txt"
 
 # Verify checksum before extracting
 echo "Verifying checksum..."
-EXPECTED=$(grep "$ARCHIVE" "$TMP/checksums.txt" | awk '{print $1}')
+EXPECTED=$(awk -v f="$ARCHIVE" '$2 == f {print $1; exit}' "$TMP/checksums.txt")
 if [ -z "$EXPECTED" ]; then
   echo "Could not find checksum for $ARCHIVE in checksums.txt." >&2
   exit 1

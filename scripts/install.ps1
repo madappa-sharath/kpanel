@@ -39,7 +39,12 @@ try {
     Invoke-WebRequest -Uri $ChecksumsUrl -OutFile $ChecksumsPath
 
     Write-Host "Verifying checksum..."
-    $Expected = (Get-Content $ChecksumsPath | Where-Object { $_ -match [regex]::Escape($Archive) }) -replace "^(\S+)\s+.*", '$1'
+    $Expected = Get-Content $ChecksumsPath |
+      ForEach-Object {
+        $parts = $_ -split '\s+', 2
+        if ($parts.Count -eq 2 -and $parts[1] -eq $Archive) { $parts[0] }
+      } |
+      Select-Object -First 1
     if (-not $Expected) {
         Write-Error "Could not find checksum for $Archive in checksums.txt."
         exit 1
