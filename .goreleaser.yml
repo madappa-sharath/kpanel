@@ -32,22 +32,21 @@ sboms:
   - artifacts: archive
 
 # Keyless cosign signing using GitHub OIDC (no key management needed).
+# cosign v2 defaults to bundle output; we write it explicitly to avoid
+# deprecated flag behavior across runner/cosign versions.
 # Verify with:
 #   cosign verify-blob --certificate-identity-regexp \
 #     'https://github.com/<owner>/kpanel/.github/workflows/release.yml@.*' \
 #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-#     --signature <sig> --certificate <cert> <artifact>
+#     --bundle <artifact>.sigstore.json <artifact>
 signs:
   - cmd: cosign
-    certificate: "${artifact}.pem"
     args:
       - sign-blob
-      - "--output-certificate=${certificate}"
-      - "--output-signature=${signature}"
+      - "--bundle=${artifact}.sigstore.json"
       - "${artifact}"
       - "--yes"
     artifacts: checksum
-    output: true
 
 release:
   draft: false
