@@ -41,6 +41,7 @@ sboms:
 #     --bundle <artifact>.sigstore.json <artifact>
 signs:
   - cmd: cosign
+    signature: "${artifact}.sigstore.json"
     args:
       - sign-blob
       - "--bundle=${artifact}.sigstore.json"
