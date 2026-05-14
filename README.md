@@ -68,7 +68,8 @@ If no AWS credentials are present, these features are simply hidden. The core Ka
 curl -fsSL https://raw.githubusercontent.com/madappa-sharath/kpanel/main/scripts/install.sh | sh
 ```
 
-Installs to `~/.local/bin/kpanel`. No sudo required.
+Installs to `~/.local/bin/kpanel` by default (or `$KPANEL_INSTALL_DIR` if set). No sudo required.
+After install, run `kpanel`. If that fails, make sure the printed install directory is in your `PATH`.
 
 **Windows (PowerShell):**
 
@@ -83,15 +84,21 @@ Installs to `%LOCALAPPDATA%\kpanel\kpanel.exe` and adds it to your user PATH. No
 ```bash
 # macOS (Apple Silicon)
 curl -fLO https://github.com/madappa-sharath/kpanel/releases/latest/download/kpanel_darwin_arm64.tar.gz
-tar xzf kpanel_darwin_arm64.tar.gz && ./kpanel
+tar xzf kpanel_darwin_arm64.tar.gz
+install -m 0755 kpanel ~/.local/bin/kpanel
+kpanel
 
 # macOS (Intel)
 curl -fLO https://github.com/madappa-sharath/kpanel/releases/latest/download/kpanel_darwin_amd64.tar.gz
-tar xzf kpanel_darwin_amd64.tar.gz && ./kpanel
+tar xzf kpanel_darwin_amd64.tar.gz
+install -m 0755 kpanel ~/.local/bin/kpanel
+kpanel
 
 # Linux (amd64)
 curl -fLO https://github.com/madappa-sharath/kpanel/releases/latest/download/kpanel_linux_amd64.tar.gz
-tar xzf kpanel_linux_amd64.tar.gz && ./kpanel
+tar xzf kpanel_linux_amd64.tar.gz
+install -m 0755 kpanel ~/.local/bin/kpanel
+kpanel
 ```
 
 ```powershell
@@ -104,14 +111,14 @@ For MSK, log in first:
 
 ```bash
 aws sso login   # or aws configure, or set AWS_PROFILE / AWS_ACCESS_KEY_ID
-./kpanel
+kpanel
 ```
 
 Then open `http://localhost:8080`. Add a manual connection (enter broker addresses) or click "Discover MSK Clusters" to import from your AWS account.
 
 ## Security
 
-The install script writes only to `~/.local/bin` (or `$KPANEL_INSTALL_DIR`) and never uses sudo. Both scripts are in this repo — [`scripts/install.sh`](./scripts/install.sh) and [`scripts/install.ps1`](./scripts/install.ps1) — if you want to read them before running.
+The install script writes only to `~/.local/bin` (or `$KPANEL_INSTALL_DIR`) and never uses sudo. If that directory is not in your `PATH`, the installer prints exact shell commands to add it. Both scripts are in this repo — [`scripts/install.sh`](./scripts/install.sh) and [`scripts/install.ps1`](./scripts/install.ps1) — if you want to read them before running.
 
 Every release includes a `checksums.txt` with SHA-256 hashes. The install script verifies the checksum before extracting. To verify manually:
 

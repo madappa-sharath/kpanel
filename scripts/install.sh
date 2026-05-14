@@ -75,7 +75,13 @@ echo "Installed to $INSTALL_DIR/kpanel"
 # Warn if INSTALL_DIR is not on PATH
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;
-  *) echo "Note: $INSTALL_DIR is not in your PATH. Add it to your shell config." ;;
+  *)
+    echo "Note: $INSTALL_DIR is not in your PATH."
+    echo "Add this to your shell config, then restart the terminal:"
+    echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
+    echo "zsh:   echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> ~/.zshrc"
+    echo "bash:  echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> ~/.bashrc"
+    ;;
 esac
 
 "$INSTALL_DIR/kpanel" --version
