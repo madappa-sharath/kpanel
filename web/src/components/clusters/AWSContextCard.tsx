@@ -1,6 +1,6 @@
 // AWS context card — shows active profile, credential status, and MSK discovery.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Check, ChevronRight, ChevronsUpDown, Cloud, Copy, RefreshCw } from 'lucide-react'
 import { api } from '../../lib/api'
@@ -26,6 +26,9 @@ interface AWSContextCardProps {
 
 export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded)
+  const [guideActive, setGuideActive] = useState(false)
+  const [guideStep, setGuideStep] = useState(1)
+  const [hasSeenGuide, setHasSeenGuide] = useState(true)
   // null = user hasn't typed yet, use AWS-resolved region; string = user override
   const [regionOverride, setRegionOverride] = useState<string | null>(null)
   // null = use env-derived AWS_PROFILE; string = user picked from dropdown
@@ -33,6 +36,33 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
   const [profilePickerOpen, setProfilePickerOpen] = useState(false)
   const { copy, isCopied } = useCopyToClipboard()
   const queryClient = useQueryClient()
+  const guideStorageKey = 'kpanel.aws-discovery-guide-seen'
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const seen = window.localStorage.getItem(guideStorageKey) === '1'
+    setHasSeenGuide(seen)
+  }, [])
+
+  function handleExpand() {
+    setExpanded(true)
+    if (!hasSeenGuide) {
+      setGuideActive(true)
+      setGuideStep(1)
+    }
+  }
+
+  function finishGuide() {
+    setGuideActive(false)
+    setHasSeenGuide(true)
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(guideStorageKey, '1')
+    }
+  }
+
+  function dismissGuide() {
+    setGuideActive(false)
+  }
 
   // Profiles defined in ~/.aws/config — empty when the file doesn't exist.
   const { data: profilesData } = useQuery({
@@ -74,6 +104,7 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
     setRegionOverride(null)
     // Clear any prior discovery results — they belong to the previous profile.
     queryClient.removeQueries({ queryKey: ['msk', 'clusters'] })
+    if (guideActive && guideStep === 1) setGuideStep(2)
   }
 
   // Per-cluster access mode selection: 'private' | 'public'
@@ -167,8 +198,8 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
     return (
       <div className="rounded-md border bg-card px-4 py-2.5 flex items-center gap-2">
         <Cloud size={13} className="text-muted-foreground flex-shrink-0" />
-        <span className="text-xs text-muted-foreground">AWS</span>
-        <span className="text-xs text-muted-foreground/60">No credentials detected</span>
+        <span className="text-xs text-muted-foreground">AWS MSK helper (optional)</span>
+        <span className="text-xs text-muted-foreground/60">No AWS credentials detected on this machine</span>
         <Button
           variant="ghost"
           size="sm"
@@ -190,25 +221,26 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
     return (
       <div className="rounded-md border bg-card px-4 py-2.5 flex items-center gap-2">
         <Cloud size={13} className="text-muted-foreground flex-shrink-0" />
-        <span className="text-xs text-muted-foreground">AWS</span>
+        <span className="text-xs text-muted-foreground">AWS MSK helper (optional)</span>
         <ProfileSelector compact />
         {ctx.account && (
           <span className="text-xs text-muted-foreground/60">{ctx.account}</span>
         )}
         <button
-          onClick={() => setExpanded(true)}
+          onClick={handleExpand}
           className="ml-auto text-xs text-amber-600 hover:text-amber-500 flex items-center gap-0.5 transition-colors"
         >
-          {ctx.valid ? 'Discover clusters' : 'Select profile'} <ChevronRight size={12} />
+          {ctx.valid ? 'Discover MSK clusters' : 'Select profile'} <ChevronRight size={12} />
         </button>
       </div>
     )
   }
 
   return (
-    <div className="rounded-md border bg-card p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">AWS</h2>
+    <>
+      <div className="rounded-md border bg-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">AWS MSK (Optional)</h2>
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -229,11 +261,45 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
         </div>
       </div>
 
+      <p className="text-xs text-muted-foreground mb-3">
+        Uses your current AWS profile and region on this machine. It does not scan all AWS accounts automatically.
+      </p>
+
+      {guideActive && (
+        <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/30 px-3 py-2.5">
+          <p className="text-xs font-medium text-foreground mb-1">Guided setup ({guideStep}/3)</p>
+          {guideStep === 1 && <p className="text-xs text-muted-foreground">Choose the AWS profile that can access your MSK cluster.</p>}
+          {guideStep === 2 && <p className="text-xs text-muted-foreground">Confirm the region where your cluster is running.</p>}
+          {guideStep === 3 && <p className="text-xs text-muted-foreground">Click Discover to list clusters visible to this profile, then import one.</p>}
+          <div className="mt-2 flex items-center gap-2">
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={dismissGuide}>Skip</Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              disabled={guideStep === 1}
+              onClick={() => setGuideStep((s) => Math.max(1, s - 1))}
+            >
+              Back
+            </Button>
+            {guideStep < 3 ? (
+              <Button size="sm" className="h-7 text-xs" onClick={() => setGuideStep((s) => Math.min(3, s + 1))}>
+                Next
+              </Button>
+            ) : (
+              <Button size="sm" className="h-7 text-xs" onClick={finishGuide}>
+                Done
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Invalid session, no SSO recovery — most common cause is the
           env-derived profile not existing in ~/.aws/config. Make the next step
           obvious: pick one of the available profiles. */}
       {!ctx.valid && !ctx.recovery && profiles.length > 0 && (
-        <div className="mb-3 rounded-md border border-dashed bg-muted/30 px-3 py-3 space-y-2">
+        <div className={cn('mb-3 rounded-md border border-dashed bg-muted/30 px-3 py-3 space-y-2', guideActive && guideStep === 1 && 'border-amber-500/60 ring-1 ring-amber-500/40')}>
           <div className="flex items-start gap-2">
             <Cloud size={14} className="text-muted-foreground flex-shrink-0 mt-0.5" />
             <div className="min-w-0 flex-1">
@@ -244,7 +310,7 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
                 {profiles.length === 1
                   ? `Found 1 profile in ~/.aws/config.`
                   : `Found ${profiles.length} profiles in ~/.aws/config.`}{' '}
-                Pick one to check credentials and list its MSK clusters.
+                Pick one to check credentials and list clusters visible to that profile.
               </p>
             </div>
           </div>
@@ -253,7 +319,7 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
             <ProfileSelector />
             <ChevronRight size={12} className="text-muted-foreground/40" />
             <span className="text-xs text-muted-foreground/60">
-              region & Discover appear after a valid profile is picked
+              region and Discover appear after a valid profile is picked
             </span>
           </div>
         </div>
@@ -262,7 +328,7 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
       {/* SSO-expired / recoverable invalid session — show profile picker so
           users can switch out of the broken profile if they want. */}
       {!ctx.valid && ctx.recovery && profiles.length > 0 && (
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <div className={cn('flex items-center gap-2 mb-3 flex-wrap', guideActive && guideStep === 1 && 'rounded-md border border-amber-500/60 bg-amber-50/30 dark:bg-amber-950/20 px-2 py-2')}>
           <span className="text-xs text-muted-foreground">Profile:</span>
           <ProfileSelector />
         </div>
@@ -299,44 +365,55 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
 
       {/* Valid session info + region picker + discover button */}
       {ctx.valid && (
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <ProfileSelector />
-          {ctx.account && (
-            <span className="text-xs text-muted-foreground">{ctx.account}</span>
-          )}
-          <Input
-            value={region}
-            onChange={(e) => setRegionOverride(e.target.value)}
-            placeholder="us-east-1"
-            className="ml-auto h-7 w-36 font-mono text-xs"
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 gap-1.5"
-            onClick={() => discover()}
-            disabled={isDiscovering || !region}
-          >
-            {isDiscovering
-              ? <><RefreshCw size={12} className="animate-spin" /> Discovering…</>
-              : 'Discover'
-            }
-          </Button>
+        <div className="mb-3 space-y-2">
+          <div className={cn('flex items-center gap-2 flex-wrap', guideActive && guideStep === 1 && 'rounded-md border border-amber-500/60 bg-amber-50/30 dark:bg-amber-950/20 px-2 py-2')}>
+            <ProfileSelector />
+            {ctx.account && (
+              <span className="text-xs text-muted-foreground">{ctx.account}</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Input
+              value={region}
+              onChange={(e) => {
+                setRegionOverride(e.target.value)
+                if (guideActive && guideStep === 2) setGuideStep(3)
+              }}
+              placeholder="us-east-1"
+              className={cn('h-7 w-36 font-mono text-xs', guideActive && guideStep === 2 && 'border-amber-500/60 ring-1 ring-amber-500/40')}
+              aria-label="AWS region"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className={cn('h-7 gap-1.5', guideActive && guideStep === 3 && 'border-amber-500/60 ring-1 ring-amber-500/40')}
+              onClick={() => {
+                if (guideActive && guideStep < 3) setGuideStep(3)
+                discover()
+              }}
+              disabled={isDiscovering || !region}
+            >
+              {isDiscovering
+                ? <><RefreshCw size={12} className="animate-spin" /> Discovering…</>
+                : 'Discover in region'
+              }
+            </Button>
+          </div>
         </div>
       )}
 
       {/* Discovery results */}
       {hasDiscovered && !isDiscovering && mskClusters && mskClusters.length === 0 && (
-        <p className="text-sm text-muted-foreground">No MSK clusters found in {region}.</p>
+        <p className="text-sm text-muted-foreground">No MSK clusters found for this profile in {region}.</p>
       )}
 
       {importError && (
         <p className="text-xs text-destructive mb-3">{importError}</p>
       )}
 
-      {mskClusters && mskClusters.length > 0 && (
-        <div className="-mx-4 -mb-4 border-t">
-          {mskClusters.map((c) => {
+        {mskClusters && mskClusters.length > 0 && (
+          <div className="-mx-4 -mb-4 border-t">
+            {mskClusters.map((c) => {
             const hasPublic = c.publicBrokers && c.publicBrokers.length > 0
             const access = getAccess(c.arn)
             const isThisImporting = isImporting && importingArgs?.arn === c.arn
@@ -389,9 +466,11 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
                 )}
               </div>
             )
-          })}
-        </div>
-      )}
-    </div>
+            })}
+          </div>
+        )}
+      </div>
+
+    </>
   )
 }

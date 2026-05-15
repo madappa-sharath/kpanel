@@ -36,11 +36,6 @@ export function WelcomePage() {
           <p className="mt-2 text-sm text-muted-foreground">kafka cluster manager</p>
         </div>
 
-        {/* AWS context card — shown when credentials are available */}
-        <div className="mb-3">
-          <AWSContextCard defaultExpanded={!clusters || clusters.length === 0} />
-        </div>
-
         {/* Card */}
         <div className="rounded-lg border bg-card overflow-hidden">
 
@@ -111,7 +106,7 @@ export function WelcomePage() {
               {!isLoading && (!clusters || clusters.length === 0) && (
                 <div className="px-4 py-8 text-center text-sm">
                   <p className="font-medium text-foreground mb-1">No clusters configured</p>
-                  <p className="text-muted-foreground">Connect to any Kafka cluster to begin.</p>
+                  <p className="text-muted-foreground">Add any Kafka cluster to get started. AWS discovery is optional.</p>
                 </div>
               )}
 
@@ -122,7 +117,7 @@ export function WelcomePage() {
                   onClick={() => setShowForm(true)}
                 >
                   <Plus size={13} />
-                  Add cluster
+                  Add Kafka cluster
                 </Button>
               </div>
             </>
@@ -131,7 +126,7 @@ export function WelcomePage() {
           {showForm && (
             <div className="p-5">
               <div className="flex items-center justify-between mb-5">
-                <span className="text-sm font-medium">Add cluster</span>
+                <span className="text-sm font-medium">Add Kafka cluster</span>
               </div>
               <ClusterForm
                 onSuccess={() => setShowForm(false)}
@@ -139,6 +134,11 @@ export function WelcomePage() {
               />
             </div>
           )}
+        </div>
+
+        {/* Optional AWS discovery helper lives below saved clusters */}
+        <div className="mt-3">
+          <AWSContextCard />
         </div>
 
         <p className="mt-4 text-center text-xs text-muted-foreground/50">
