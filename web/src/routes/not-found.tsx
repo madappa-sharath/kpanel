@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { Button } from '#/components/ui/button'
+import { Badge } from '#/components/ui/badge'
 
 const LOG_LINES = [
   { ts: '00:00:00.001', level: 'INFO',  msg: 'Broker starting up...' },

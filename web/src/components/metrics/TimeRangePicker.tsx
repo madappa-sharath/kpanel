@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button'
+import { Button } from '#/components/ui/button'
 
 export type TimeRange = '1h' | '3h' | '6h' | '12h' | '1d' | '3d' | '7d'
 

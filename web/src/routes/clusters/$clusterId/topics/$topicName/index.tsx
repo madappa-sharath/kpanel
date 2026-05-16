@@ -11,7 +11,7 @@ import { MetricsErrorBanner } from '../../../../../components/metrics/MetricsErr
 import { TimeRangePicker, type TimeRange } from '../../../../../components/metrics/TimeRangePicker'
 import { formatRetention } from '../../../../../lib/utils'
 import { StatusBadge } from '../../../../../components/shared/StatusBadge'
-import { cn } from '@/lib/utils'
+import { cn } from '#/lib/utils'
 
 export function TopicOverviewPage() {
   const { clusterId, topicName } = useParams({ strict: false }) as {

@@ -7,8 +7,8 @@ import { GroupTable } from '../../../../components/consumer-groups/GroupTable'
 import { useConsumerGroups } from '../../../../hooks/useConsumerGroups'
 import { EmptyState } from '../../../../components/shared/EmptyState'
 import { Users } from 'lucide-react'
-import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Input } from '#/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import {
   Pagination,
   PaginationContent,
@@ -17,7 +17,7 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
-} from '@/components/ui/pagination'
+} from '#/components/ui/pagination'
 
 const PAGE_SIZE = 15
 const ALL_STATES = ['Stable', 'Empty', 'PreparingRebalance', 'CompletingRebalance', 'Dead']

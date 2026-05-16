@@ -5,7 +5,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
+} from '#/components/ui/table'
 
 export interface Column<T> {
   key: keyof T & string

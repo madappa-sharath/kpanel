@@ -7,10 +7,10 @@ import { useTopic } from '../../../../../hooks/useTopics'
 import { useCopyToClipboard } from '../../../../../hooks/useCopyToClipboard'
 import { api } from '../../../../../lib/api'
 import { queryKeys } from '../../../../../lib/queryKeys'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
+import { Input } from '#/components/ui/input'
+import { Button } from '#/components/ui/button'
+import { Badge } from '#/components/ui/badge'
+import { cn } from '#/lib/utils'
 
 const HIGHLIGHTED_KEYS = new Set([
   'cleanup.policy',

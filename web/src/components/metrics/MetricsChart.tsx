@@ -7,7 +7,7 @@ import {
   CartesianGrid,
   Tooltip,
 } from 'recharts'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Skeleton } from '#/components/ui/skeleton'
 import type { MetricSeries } from '../../types/metrics'
 
 interface MetricsChartProps {

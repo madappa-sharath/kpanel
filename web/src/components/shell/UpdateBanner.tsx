@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { X, ArrowUpCircle, Copy, Check, ExternalLink } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { api } from '@/lib/api'
-import { queryKeys } from '@/lib/queryKeys'
-import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
+import { Button } from '#/components/ui/button'
+import { api } from '#/lib/api'
+import { queryKeys } from '#/lib/queryKeys'
+import { useCopyToClipboard } from '#/hooks/useCopyToClipboard'
 
 export function UpdateBanner() {
   const [dismissed, setDismissed] = useState(false)

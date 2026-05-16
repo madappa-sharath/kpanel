@@ -6,7 +6,7 @@ import { useConsumerGroup } from '../../../../../hooks/useConsumerGroups'
 import { DataTable, type Column } from '../../../../../components/shared/DataTable'
 import type { GroupMember } from '../../../../../types/consumer'
 import { formatNumber } from '../../../../../lib/utils'
-import { cn } from '@/lib/utils'
+import { cn } from '#/lib/utils'
 
 const columns: Column<GroupMember>[] = [
   { key: 'client_id', header: 'Client ID' },

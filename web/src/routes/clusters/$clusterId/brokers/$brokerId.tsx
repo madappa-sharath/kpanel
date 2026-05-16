@@ -6,8 +6,8 @@ import { MetricsChart } from '../../../../components/metrics/MetricsChart'
 import { MetricsErrorBanner } from '../../../../components/metrics/MetricsErrorBanner'
 import { TimeRangePicker, type TimeRange } from '../../../../components/metrics/TimeRangePicker'
 import { PageHeader } from '../../../../components/shared/PageHeader'
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Badge } from '#/components/ui/badge'
+import { Skeleton } from '#/components/ui/skeleton'
 
 export function BrokerDetailPage() {
   const { clusterId, brokerId } = useParams({ strict: false }) as {

@@ -2,9 +2,9 @@
 
 import { AlertTriangle, Check, Copy } from 'lucide-react'
 import { useClusterSession } from '../../hooks/useCluster'
-import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { useCopyToClipboard } from '#/hooks/useCopyToClipboard'
+import { Alert, AlertDescription } from '#/components/ui/alert'
+import { Button } from '#/components/ui/button'
 
 interface AWSAuthAlertProps {
   clusterId: string

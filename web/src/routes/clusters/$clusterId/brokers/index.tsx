@@ -3,7 +3,7 @@ import { PageHeader } from '../../../../components/shared/PageHeader'
 import { DataTable, type Column } from '../../../../components/shared/DataTable'
 import { useBrokers } from '../../../../hooks/useBrokers'
 import type { Broker } from '../../../../types/broker'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '#/components/ui/badge'
 
 function fmtBytes(bytes: number): string {
   if (bytes <= 0) return '—'

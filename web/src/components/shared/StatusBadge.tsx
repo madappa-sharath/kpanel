@@ -1,5 +1,5 @@
-import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
+import { Badge } from '#/components/ui/badge'
+import { cn } from '#/lib/utils'
 
 type Variant = 'ok' | 'warn' | 'error' | 'neutral' | 'msk'
 

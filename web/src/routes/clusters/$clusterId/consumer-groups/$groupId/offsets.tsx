@@ -5,9 +5,9 @@ import { useParams } from '@tanstack/react-router'
 import { useConsumerGroup } from '../../../../../hooks/useConsumerGroups'
 import type { GroupOffset } from '../../../../../types/consumer'
 import { formatNumber } from '../../../../../lib/utils'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
+import { Button } from '#/components/ui/button'
+import { cn } from '#/lib/utils'
 import { ChevronRight } from 'lucide-react'
 
 
