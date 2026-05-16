@@ -14,7 +14,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from '#/components/ui/select'
 
 export function GroupLagPage() {
   const { clusterId, groupId } = useParams({ strict: false }) as {

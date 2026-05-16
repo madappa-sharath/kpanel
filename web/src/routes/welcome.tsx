@@ -7,8 +7,8 @@ import { useAppStore } from '../stores/appStore'
 import { ConfirmModal } from '../components/shared/ConfirmModal'
 import { ClusterForm } from '../components/clusters/ClusterForm'
 import { AWSContextCard } from '../components/clusters/AWSContextCard'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { Button } from '#/components/ui/button'
+import { Badge } from '#/components/ui/badge'
 
 export function WelcomePage() {
   const navigate                      = useNavigate()

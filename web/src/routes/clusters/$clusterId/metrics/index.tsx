@@ -6,7 +6,7 @@ import { MetricsChart } from '../../../../components/metrics/MetricsChart'
 import { MetricsErrorBanner } from '../../../../components/metrics/MetricsErrorBanner'
 import { TimeRangePicker, type TimeRange } from '../../../../components/metrics/TimeRangePicker'
 import { PageHeader } from '../../../../components/shared/PageHeader'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '#/components/ui/alert'
 import { Info } from 'lucide-react'
 
 export function MetricsPage() {

@@ -10,8 +10,8 @@ import { AWSContextCard } from '../../components/clusters/AWSContextCard'
 import { useClusters } from '../../hooks/useCluster'
 import { useDeleteCluster } from '../../hooks/useClusterConnection'
 import { useAppStore } from '../../stores/appStore'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { Button } from '#/components/ui/button'
+import { Badge } from '#/components/ui/badge'
 
 export function SettingsPage() {
   const navigate                      = useNavigate()

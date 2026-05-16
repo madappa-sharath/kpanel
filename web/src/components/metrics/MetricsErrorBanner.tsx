@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '#/components/ui/alert'
 import { AlertTriangle, XCircle } from 'lucide-react'
 
 function isPermissionError(msg: string): boolean {

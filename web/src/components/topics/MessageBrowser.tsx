@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Message, PeekRequest, SearchRequest, SearchResponse } from '../../types/topic'
 import { formatBytes, relativeTime } from '../../lib/utils'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Separator } from '@/components/ui/separator'
-import { cn } from '@/lib/utils'
-import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
+import { Button } from '#/components/ui/button'
+import { Input } from '#/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
+import { Separator } from '#/components/ui/separator'
+import { cn } from '#/lib/utils'
+import { useCopyToClipboard } from '#/hooks/useCopyToClipboard'
 
 const LIVE_INTERVALS = [
   { label: '1s',  ms: 1_000 },

@@ -7,9 +7,9 @@ import { TopicTable } from '../../../../components/topics/TopicTable'
 import { useTopics } from '../../../../hooks/useTopics'
 import { EmptyState } from '../../../../components/shared/EmptyState'
 import { MessageSquare } from 'lucide-react'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Input } from '#/components/ui/input'
+import { Button } from '#/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import {
   Pagination,
   PaginationContent,
@@ -18,7 +18,7 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
-} from '@/components/ui/pagination'
+} from '#/components/ui/pagination'
 import { CreateTopicModal } from '../../../../components/topics/CreateTopicModal'
 
 const PAGE_SIZE = 15

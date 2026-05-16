@@ -2,7 +2,7 @@ import { useParams, useRouter } from '@tanstack/react-router'
 import { useClusters } from '../../../../hooks/useCluster'
 import { ClusterForm } from '../../../../components/clusters/ClusterForm'
 import { PageHeader } from '../../../../components/shared/PageHeader'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Skeleton } from '#/components/ui/skeleton'
 
 export function ClusterSettingsPage() {
   const { clusterId } = useParams({ strict: false }) as { clusterId: string }

@@ -6,11 +6,11 @@ import { AlertTriangle, Check, ChevronRight, ChevronsUpDown, Cloud, Copy, Refres
 import { api } from '../../lib/api'
 import { queryKeys } from '../../lib/queryKeys'
 import { cn } from '../../lib/utils'
-import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { useCopyToClipboard } from '#/hooks/useCopyToClipboard'
+import { Button } from '#/components/ui/button'
+import { Badge } from '#/components/ui/badge'
+import { Input } from '#/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
 import {
   Command,
   CommandEmpty,
@@ -18,7 +18,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from '@/components/ui/command'
+} from '#/components/ui/command'
 
 interface AWSContextCardProps {
   defaultExpanded?: boolean

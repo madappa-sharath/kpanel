@@ -3,7 +3,7 @@ import type { ConsumerGroup } from '../../types/consumer'
 import { DataTable, type Column } from '../shared/DataTable'
 import { StatusBadge, groupStateVariant } from '../shared/StatusBadge'
 import { formatNumber } from '../../lib/utils'
-import { cn } from '@/lib/utils'
+import { cn } from '#/lib/utils'
 
 interface GroupTableProps {
   clusterId: string

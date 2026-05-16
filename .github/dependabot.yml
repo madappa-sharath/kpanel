@@ -1,7 +1,7 @@
 version: 2
 updates:
-  # Frontend (Bun reads npm package.json; Dependabot's npm ecosystem covers it).
-  - package-ecosystem: npm
+  # Frontend (Bun package manager + bun.lock lockfile updates).
+  - package-ecosystem: bun
     directory: /web
     schedule:
       interval: weekly
