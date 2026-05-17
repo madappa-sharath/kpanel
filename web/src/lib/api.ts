@@ -17,16 +17,23 @@ import type { Broker, ClusterStatus, ClusterOverview } from '../types/broker'
 const BASE = '/api'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    ...init,
-  })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error((body as { error?: string }).error ?? res.statusText)
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 15_000)
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      ...init,
+      signal: init?.signal ?? controller.signal,
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }))
+      throw new Error((body as { error?: string }).error ?? res.statusText)
+    }
+    const text = await res.text()
+    return (text ? JSON.parse(text) : undefined) as T
+  } finally {
+    clearTimeout(timeout)
   }
-  const text = await res.text()
-  return (text ? JSON.parse(text) : undefined) as T
 }
 
 export const api = {

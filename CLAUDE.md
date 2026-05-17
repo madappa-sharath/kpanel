@@ -304,9 +304,11 @@ const activeTab = pathname.endsWith('/partitions') ? 'partitions' : 'overview'
 
 ```bash
 make setup        # first-time: go mod tidy + bun install
-make dev          # Go server (:8080) + Bun dev server (:3000) in parallel
-make dev-server   # Go server only
-make dev-web      # Bun dev server only
+make dev          # Kafka + seed data, Go server (:8080) + Bun dev server (:3000)
+make dev-server   # Kafka + seed data + Go API only; does not start Bun
+make dev-web      # Bun dev server only; proxies /api to Go
+make kafka-up     # one local broker: PLAINTEXT :9092, SASL_PLAINTEXT :9094
+make kafka-seed   # seed topics, messages, and consumer group offsets
 make build        # production build → ./dist/kpanel
 make build-linux  # cross-compile for Linux amd64
 make build-darwin # cross-compile for macOS arm64

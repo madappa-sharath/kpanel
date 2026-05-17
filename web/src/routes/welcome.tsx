@@ -12,7 +12,7 @@ import { Badge } from '#/components/ui/badge'
 
 export function WelcomePage() {
   const navigate                      = useNavigate()
-  const { data: clusters, isLoading } = useClusters()
+  const { data: clusters, isLoading, error } = useClusters()
   const { mutate: deleteCluster }     = useDeleteCluster()
   const setActive                     = useAppStore((s) => s.setActiveCluster)
   const [showForm, setShowForm]       = useState(false)
@@ -45,7 +45,14 @@ export function WelcomePage() {
                 <div className="px-4 py-5 text-sm text-muted-foreground">Loading…</div>
               )}
 
-              {!isLoading && clusters && clusters.length > 0 && (
+              {!isLoading && error && (
+                <div className="px-4 py-5 text-sm">
+                  <p className="font-medium text-destructive">Could not load clusters</p>
+                  <p className="mt-1 text-muted-foreground">{error.message}</p>
+                </div>
+              )}
+
+              {!isLoading && !error && clusters && clusters.length > 0 && (
                 <div>
                   <div className="px-4 py-2.5 text-xs text-muted-foreground border-b uppercase tracking-wider">
                     Saved clusters
@@ -103,7 +110,7 @@ export function WelcomePage() {
                 </div>
               )}
 
-              {!isLoading && (!clusters || clusters.length === 0) && (
+              {!isLoading && !error && (!clusters || clusters.length === 0) && (
                 <div className="px-4 py-8 text-center text-sm">
                   <p className="font-medium text-foreground mb-1">No clusters configured</p>
                   <p className="text-muted-foreground">Add any Kafka cluster to get started. AWS discovery is optional.</p>

@@ -6,6 +6,7 @@ export function useClusters() {
   return useQuery({
     queryKey: queryKeys.connections.all(),
     queryFn: api.connections.list,
+    retry: false,
   })
 }
 

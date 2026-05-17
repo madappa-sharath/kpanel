@@ -138,13 +138,17 @@ Requires [Go 1.22+](https://go.dev/dl/) and [Bun](https://bun.sh).
 git clone https://github.com/madappa-sharath/kpanel.git
 cd kpanel
 make setup        # go mod tidy + bun install
-make dev          # Go on :8080, React dev server on :3000 with HMR
+make dev          # Kafka + seed data, Go on :8080, React dev server on :3000
+make dev-server   # Kafka + seed data + Go API only; does not start Bun
+make dev-web      # React dev server only; proxies /api to Go
 make build        # production build → ./dist/kpanel
 make build-linux  # cross-compile for Linux amd64
 make build-darwin # cross-compile for macOS arm64
 ```
 
 In development, open `http://localhost:3000`. The Bun dev server proxies `/api` to the Go server at `:8080`.
+
+`make dev-server` automatically starts the local Docker Kafka broker and seeds it if empty. The same broker exposes unauthenticated Kafka on `localhost:9092` and SASL Kafka on `localhost:9094` with `admin/admin-secret` or `alice/alice-secret`.
 
 ## Configuration
 

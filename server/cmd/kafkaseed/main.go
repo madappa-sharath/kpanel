@@ -17,18 +17,24 @@ import (
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/pkg/sasl/plain"
+	"github.com/twmb/franz-go/pkg/sasl/scram"
 )
 
 var (
-	broker  = flag.String("broker", "localhost:9092", "Kafka bootstrap broker")
-	count   = flag.Int("count", 50, "messages per topic")
-	reset   = flag.Bool("reset", false, "delete and recreate topics before seeding")
-	consume = flag.Bool("consume", false, "advance consumer group offsets (reduce lag)")
-	step    = flag.Int64("step", 5, "messages to advance per partition (consume mode)")
-	drain   = flag.Bool("drain", false, "advance all groups to end offset, zeroing lag; implies --consume")
-	produce = flag.Bool("produce", false, "produce more messages to existing topics without re-seeding")
-	members = flag.Bool("members", false, "start real consumers for each group (shows members in UI); runs until Ctrl+C")
-	binary_ = flag.Bool("binary", false, "produce binary (non-UTF-8) messages to binary-test topic for UI testing")
+	broker        = flag.String("broker", "localhost:9092", "Kafka bootstrap broker")
+	count         = flag.Int("count", 50, "messages per topic")
+	reset         = flag.Bool("reset", false, "delete and recreate topics before seeding")
+	ifEmpty       = flag.Bool("if-empty", false, "skip seeding when the dev topics already contain data")
+	consume       = flag.Bool("consume", false, "advance consumer group offsets (reduce lag)")
+	step          = flag.Int64("step", 5, "messages to advance per partition (consume mode)")
+	drain         = flag.Bool("drain", false, "advance all groups to end offset, zeroing lag; implies --consume")
+	produce       = flag.Bool("produce", false, "produce more messages to existing topics without re-seeding")
+	members       = flag.Bool("members", false, "start real consumers for each group (shows members in UI); runs until Ctrl+C")
+	binary_       = flag.Bool("binary", false, "produce binary (non-UTF-8) messages to binary-test topic for UI testing")
+	saslMechanism = flag.String("sasl-mechanism", "", "SASL mechanism: plain, scram-sha-256, or scram-sha-512")
+	saslUser      = flag.String("sasl-user", "", "SASL username")
+	saslPassword  = flag.String("sasl-password", "", "SASL password")
 )
 
 type topicDef struct {
@@ -136,7 +142,11 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	cl, err := kgo.NewClient(kgo.SeedBrokers(*broker), kgo.ClientID("kafkaseed"))
+	opts, err := clientOpts(kgo.SeedBrokers(*broker), kgo.ClientID("kafkaseed"))
+	if err != nil {
+		log.Fatalf("invalid kafka client options: %v", err)
+	}
+	cl, err := kgo.NewClient(opts...)
 	if err != nil {
 		log.Fatalf("failed to create kafka client: %v", err)
 	}
@@ -170,11 +180,48 @@ func main() {
 		deleteTopics(ctx, adm)
 	}
 
+	if *ifEmpty && hasSeedData(ctx, adm) {
+		log.Println("dev topics already contain data; skipping seed")
+		return
+	}
+
 	createTopics(ctx, adm)
 	produceMessages(ctx, cl)
 	commitGroupOffsets(ctx, adm)
 
 	log.Println("done")
+}
+
+func clientOpts(opts ...kgo.Opt) ([]kgo.Opt, error) {
+	switch *saslMechanism {
+	case "":
+		return opts, nil
+	case "plain":
+		opts = append(opts, kgo.SASL(plain.Auth{User: *saslUser, Pass: *saslPassword}.AsMechanism()))
+	case "scram-sha-256":
+		opts = append(opts, kgo.SASL(scram.Auth{User: *saslUser, Pass: *saslPassword}.AsSha256Mechanism()))
+	case "scram-sha-512":
+		opts = append(opts, kgo.SASL(scram.Auth{User: *saslUser, Pass: *saslPassword}.AsSha512Mechanism()))
+	default:
+		return nil, fmt.Errorf("unknown SASL mechanism %q", *saslMechanism)
+	}
+	if *saslUser == "" {
+		return nil, fmt.Errorf("SASL username is required")
+	}
+	return opts, nil
+}
+
+func hasSeedData(ctx context.Context, adm *kadm.Client) bool {
+	offsets, err := adm.ListEndOffsets(ctx, "orders")
+	if err != nil {
+		return false
+	}
+	for _, partition := range offsets["orders"] {
+		if partition.Offset > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func startGroupMembers(ctx context.Context) (func(), *sync.WaitGroup) {
@@ -188,12 +235,17 @@ func startGroupMembers(ctx context.Context) (func(), *sync.WaitGroup) {
 		}
 		for i := 0; i < n; i++ {
 			clientID := fmt.Sprintf("%s-worker-%d", g.name, i)
-			cl, err := kgo.NewClient(
+			opts, err := clientOpts(
 				kgo.SeedBrokers(*broker),
 				kgo.ClientID(clientID),
 				kgo.ConsumerGroup(g.name),
 				kgo.ConsumeTopics(g.topics...),
 			)
+			if err != nil {
+				log.Printf("failed to build consumer %s options: %v", clientID, err)
+				continue
+			}
+			cl, err := kgo.NewClient(opts...)
 			if err != nil {
 				log.Printf("failed to create consumer %s: %v", clientID, err)
 				continue

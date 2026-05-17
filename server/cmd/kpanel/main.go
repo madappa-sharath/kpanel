@@ -220,7 +220,7 @@ func printBanner(url, configDir, preferredPort string, portChanged, prod bool, v
 		fmt.Fprintln(os.Stderr, sep)
 		fmt.Fprintf(os.Stderr, "  API     %s\n", url)
 		fmt.Fprintf(os.Stderr, "  Config  %s\n", configDir)
-		fmt.Fprintf(os.Stderr, "  Web     http://localhost:3000  (bun dev)\n")
+		fmt.Fprintf(os.Stderr, "  Web     http://localhost:3000  (when bun dev is running)\n")
 		fmt.Fprintln(os.Stderr, sep)
 	}
 }
