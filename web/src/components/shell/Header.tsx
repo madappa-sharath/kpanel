@@ -5,6 +5,7 @@ import { useAppStore } from '../../stores/appStore'
 import { ClusterSwitcher } from './ClusterSwitcher'
 import { Button } from '../ui/button'
 import { Badge } from '../ui/badge'
+import { WriteModeControl } from '../shared/WriteModeControl'
 import { cn } from '../../lib/utils'
 
 type Theme = 'light' | 'dark' | 'system'
@@ -129,6 +130,8 @@ export function Header() {
             : 'disconnected'}
         </Badge>
       )}
+
+      <WriteModeControl />
 
       {/* Theme toggle */}
       <Button

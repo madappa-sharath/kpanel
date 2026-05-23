@@ -3,8 +3,10 @@
 import { useState } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
+import { Pencil } from 'lucide-react'
 import { useTopic } from '../../../../../hooks/useTopics'
 import { useCopyToClipboard } from '../../../../../hooks/useCopyToClipboard'
+import { useAppStore } from '../../../../../stores/appStore'
 import { api } from '../../../../../lib/api'
 import { queryKeys } from '../../../../../lib/queryKeys'
 import { Input } from '#/components/ui/input'
@@ -53,6 +55,7 @@ export function TopicConfigPage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const { copy, isCopied } = useCopyToClipboard()
+  const writeModeEnabled = useAppStore((s) => s.writeModeEnabled)
 
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>
   if (error) return <div className="p-6 text-destructive">{(error as Error).message}</div>
@@ -80,6 +83,7 @@ export function TopicConfigPage() {
   }
 
   async function saveEdit(key: string) {
+    if (!writeModeEnabled) return
     setSaving(true)
     setSaveError(null)
     try {
@@ -149,7 +153,7 @@ export function TopicConfigPage() {
           entries.map(([key, entry]) => {
             const highlighted = HIGHLIGHTED_KEYS.has(key)
             const description = CONFIG_DESCRIPTIONS[key]
-            const isEditing = editingKey === key
+            const isEditing = writeModeEnabled && editingKey === key
 
             return (
               <div
@@ -195,15 +199,17 @@ export function TopicConfigPage() {
                         {entry.source}
                       </Badge>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => startEdit(key, entry.value)}
-                      className="flex-shrink-0 h-7 px-2 opacity-0 group-hover:opacity-100 text-muted-foreground"
-                      title={`Edit ${key}`}
-                    >
-                      ✎
-                    </Button>
+                    {writeModeEnabled && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => startEdit(key, entry.value)}
+                        className="flex-shrink-0 h-7 w-7 text-muted-foreground"
+                        title={`Edit ${key}`}
+                      >
+                        <Pencil size={13} />
+                      </Button>
+                    )}
                   </>
                 )}
               </div>

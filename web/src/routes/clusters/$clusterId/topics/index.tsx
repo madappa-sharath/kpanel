@@ -20,6 +20,7 @@ import {
   PaginationPrevious,
 } from '#/components/ui/pagination'
 import { CreateTopicModal } from '../../../../components/topics/CreateTopicModal'
+import { WriteModeGate } from '../../../../components/shared/WriteModeControl'
 
 const PAGE_SIZE = 15
 
@@ -63,7 +64,9 @@ export function TopicsPage() {
           onChange={(e) => { setSearch(e.target.value); setPage(1) }}
           className="w-48"
         />
-        <Button onClick={() => setCreateOpen(true)}>Create Topic</Button>
+        <WriteModeGate>
+          <Button onClick={() => setCreateOpen(true)}>Create Topic</Button>
+        </WriteModeGate>
       </PageHeader>
 
       {/* Summary bar */}
@@ -170,11 +173,13 @@ export function TopicsPage() {
         </div>
       )}
 
-      <CreateTopicModal
-        clusterId={clusterId}
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-      />
+      <WriteModeGate>
+        <CreateTopicModal
+          clusterId={clusterId}
+          open={createOpen}
+          onClose={() => setCreateOpen(false)}
+        />
+      </WriteModeGate>
     </div>
   )
 }

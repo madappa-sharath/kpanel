@@ -4,6 +4,7 @@ import { Link, Outlet, useParams, useRouterState } from '@tanstack/react-router'
 import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { ResetOffsetsModal } from '../../../../../components/consumer-groups/ResetOffsetsModal'
+import { WriteModeGate } from '../../../../../components/shared/WriteModeControl'
 import { useConsumerGroup, useLagHistory } from '../../../../../hooks/useConsumerGroups'
 import { StatusBadge, groupStateVariant } from '../../../../../components/shared/StatusBadge'
 import { formatNumber } from '../../../../../lib/utils'
@@ -52,9 +53,11 @@ export function GroupLayout() {
             <ChevronRight size={13} />
             <span className="text-foreground font-mono text-sm">{groupId}</span>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => setShowReset(true)}>
-            Reset offsets ▾
-          </Button>
+          <WriteModeGate>
+            <Button variant="ghost" size="sm" onClick={() => setShowReset(true)}>
+              Reset offsets ▾
+            </Button>
+          </WriteModeGate>
         </div>
 
         {/* Stats row */}
@@ -102,12 +105,14 @@ export function GroupLayout() {
         <Outlet />
       </div>
 
-      <ResetOffsetsModal
-        open={showReset}
-        clusterId={clusterId}
-        groupId={groupId}
-        onClose={() => setShowReset(false)}
-      />
+      <WriteModeGate>
+        <ResetOffsetsModal
+          open={showReset}
+          clusterId={clusterId}
+          groupId={groupId}
+          onClose={() => setShowReset(false)}
+        />
+      </WriteModeGate>
     </div>
   )
 }

@@ -6,8 +6,10 @@ type Theme = 'light' | 'dark' | 'system'
 interface AppState {
   activeClusterId: string | null
   theme: Theme
+  writeModeEnabled: boolean
   setActiveCluster: (id: string | null) => void
   setTheme: (theme: Theme) => void
+  setWriteModeEnabled: (enabled: boolean) => void
 }
 
 export const useAppStore = create<AppState>()(
@@ -15,9 +17,17 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       activeClusterId: null,
       theme: 'system',
+      writeModeEnabled: false,
       setActiveCluster: (id) => set({ activeClusterId: id }),
       setTheme: (theme) => set({ theme }),
+      setWriteModeEnabled: (enabled) => set({ writeModeEnabled: enabled }),
     }),
-    { name: 'kpanel-app' },
+    {
+      name: 'kpanel-app',
+      partialize: (state) => ({
+        activeClusterId: state.activeClusterId,
+        theme: state.theme,
+      }),
+    },
   ),
 )

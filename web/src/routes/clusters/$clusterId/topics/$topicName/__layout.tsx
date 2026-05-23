@@ -7,6 +7,7 @@ import { useTopic } from '../../../../../hooks/useTopics'
 import { IncreasePartitionsModal } from '../../../../../components/topics/IncreasePartitionsModal'
 import { DeleteTopicModal } from '../../../../../components/topics/DeleteTopicModal'
 import { MessageBrowser } from '../../../../../components/topics/MessageBrowser'
+import { WriteModeGate } from '../../../../../components/shared/WriteModeControl'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Button } from '#/components/ui/button'
 import { cn } from '#/lib/utils'
@@ -80,23 +81,25 @@ export function TopicLayout() {
             <span className="text-foreground font-mono text-sm">{topicName}</span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowIncrease(true)}
-              disabled={!topic}
-            >
-              Increase Partitions
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setShowDelete(true)}
-            >
-              Delete Topic
-            </Button>
-          </div>
+          <WriteModeGate>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowIncrease(true)}
+                disabled={!topic}
+              >
+                Increase Partitions
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowDelete(true)}
+              >
+                Delete Topic
+              </Button>
+            </div>
+          </WriteModeGate>
         </div>
 
         {/* Tab bar using shadcn Tabs */}
@@ -140,29 +143,31 @@ export function TopicLayout() {
         </div>
       </div>
 
-      {topic && (
-        <IncreasePartitionsModal
-          open={showIncrease}
+      <WriteModeGate>
+        {topic && (
+          <IncreasePartitionsModal
+            open={showIncrease}
+            clusterId={clusterId}
+            topicName={topicName}
+            currentPartitions={topic.partitions.length}
+            onClose={() => setShowIncrease(false)}
+          />
+        )}
+
+        <DeleteTopicModal
+          open={showDelete}
           clusterId={clusterId}
           topicName={topicName}
-          currentPartitions={topic.partitions.length}
-          onClose={() => setShowIncrease(false)}
+          onDeleted={() => {
+            setShowDelete(false)
+            navigate({
+              to: '/clusters/$clusterId/topics',
+              params: { clusterId },
+            })
+          }}
+          onClose={() => setShowDelete(false)}
         />
-      )}
-
-      <DeleteTopicModal
-        open={showDelete}
-        clusterId={clusterId}
-        topicName={topicName}
-        onDeleted={() => {
-          setShowDelete(false)
-          navigate({
-            to: '/clusters/$clusterId/topics',
-            params: { clusterId },
-          })
-        }}
-        onClose={() => setShowDelete(false)}
-      />
+      </WriteModeGate>
     </div>
   )
 }
