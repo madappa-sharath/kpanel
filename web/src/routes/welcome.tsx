@@ -9,6 +9,7 @@ import { ClusterForm } from '../components/clusters/ClusterForm'
 import { AWSContextCard } from '../components/clusters/AWSContextCard'
 import { Button } from '#/components/ui/button'
 import { Badge } from '#/components/ui/badge'
+import { Skeleton } from '#/components/ui/skeleton'
 
 export function WelcomePage() {
   const navigate                      = useNavigate()
@@ -24,7 +25,7 @@ export function WelcomePage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-5 py-10">
+    <div className="min-h-screen flex items-start justify-center bg-background px-5 pt-20 pb-10">
       <div className="w-full max-w-md">
 
         {/* Wordmark */}
@@ -42,7 +43,7 @@ export function WelcomePage() {
           {!showForm && (
             <>
               {isLoading && (
-                <div className="px-4 py-5 text-sm text-muted-foreground">Loading…</div>
+                <WelcomeClusterListSkeleton />
               )}
 
               {!isLoading && error && (
@@ -162,6 +163,30 @@ export function WelcomePage() {
         onConfirm={() => { if (confirmDelete) deleteCluster(confirmDelete); setConfirm(null) }}
         onCancel={() => setConfirm(null)}
       />
+    </div>
+  )
+}
+
+function WelcomeClusterListSkeleton() {
+  return (
+    <div aria-hidden="true">
+      <div className="px-4 py-2.5 border-b">
+        <Skeleton className="h-3 w-28" />
+      </div>
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="flex items-center gap-3 px-4 py-3 border-b">
+          <Skeleton className="size-1.5 rounded-full flex-shrink-0" />
+          <div className="flex-1 min-w-0 space-y-2">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3 w-full max-w-64" />
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <Skeleton className="h-7 w-20" />
+            <Skeleton className="h-7 w-7" />
+            <Skeleton className="h-7 w-7" />
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

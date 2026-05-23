@@ -10,6 +10,7 @@ import { useCopyToClipboard } from '#/hooks/useCopyToClipboard'
 import { Button } from '#/components/ui/button'
 import { Badge } from '#/components/ui/badge'
 import { Input } from '#/components/ui/input'
+import { Skeleton } from '#/components/ui/skeleton'
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
 import {
   Command,
@@ -187,7 +188,16 @@ export function AWSContextCard({ defaultExpanded = false }: AWSContextCardProps)
     )
   }
 
-  if (isLoading) return null
+  if (isLoading) {
+    return (
+      <div className="rounded-md border bg-card px-4 py-2.5 flex items-center gap-2" aria-hidden="true">
+        <Skeleton className="size-3.5 rounded-full flex-shrink-0" />
+        <Skeleton className="h-3 w-36" />
+        <Skeleton className="h-5 w-20" />
+        <Skeleton className="ml-auto h-3 w-28" />
+      </div>
+    )
+  }
 
   // Fall back to a minimal stub when the context request totally failed (server
   // down) or when there are no creds AND no profiles to pick from. When the

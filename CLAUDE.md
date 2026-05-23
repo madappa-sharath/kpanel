@@ -315,6 +315,10 @@ make build-darwin # cross-compile for macOS arm64
 make clean        # remove build artifacts
 ```
 
+## Commit Messages
+
+Use Conventional Commit-style prefixes with a scope: `fix(scope): ...`, `feat(scope): ...`, or `chore(scope): ...`. Keep the summary short, imperative, and lowercase after the prefix unless it names a proper noun.
+
 ## Configuration
 
 Connections stored in `~/.kpanel/connections.json` by default.
