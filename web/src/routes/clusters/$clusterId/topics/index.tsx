@@ -21,8 +21,14 @@ import {
 } from '#/components/ui/pagination'
 import { CreateTopicModal } from '../../../../components/topics/CreateTopicModal'
 import { WriteModeGate } from '../../../../components/shared/WriteModeControl'
+import { useAppStore, type TopicListState } from '../../../../stores/appStore'
 
 const PAGE_SIZE = 15
+const DEFAULT_LIST_STATE: TopicListState = {
+  search: '',
+  showInternal: false,
+  page: 1,
+}
 
 /** Returns page numbers and ellipsis markers for a window of max 7 items. */
 function getPageRange(page: number, pageCount: number): (number | 'ellipsis')[] {
@@ -35,10 +41,10 @@ function getPageRange(page: number, pageCount: number): (number | 'ellipsis')[] 
 export function TopicsPage() {
   const { clusterId } = useParams({ strict: false }) as { clusterId: string }
   const { data: topics, isLoading, error } = useTopics(clusterId)
-  const [search, setSearch] = useState('')
-  const [showInternal, setShowInternal] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
-  const [page, setPage] = useState(1)
+  const listState = useAppStore((state) => state.topicListStateByCluster[clusterId] ?? DEFAULT_LIST_STATE)
+  const setTopicListState = useAppStore((state) => state.setTopicListState)
+  const { search, showInternal } = listState
 
   const allTopics = topics ?? []
   const visibleTopics = allTopics.filter((t) => {
@@ -46,7 +52,8 @@ export function TopicsPage() {
     return t.name.toLowerCase().includes(search.toLowerCase())
   })
 
-  const pageCount = Math.ceil(visibleTopics.length / PAGE_SIZE)
+  const pageCount = Math.max(1, Math.ceil(visibleTopics.length / PAGE_SIZE))
+  const page = Math.min(listState.page, pageCount)
   const pagedTopics = visibleTopics.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const showPagination = visibleTopics.length > PAGE_SIZE
 
@@ -70,7 +77,7 @@ export function TopicsPage() {
           type="search"
           placeholder="Search topics…"
           value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+          onChange={(e) => setTopicListState(clusterId, { search: e.target.value, page: 1 })}
           className="max-w-sm"
         />
       </div>
@@ -86,13 +93,13 @@ export function TopicsPage() {
           {hiddenInternalCount > 0 && (
             <span>
               {hiddenInternalCount} internal topic{hiddenInternalCount > 1 ? 's' : ''} hidden —{' '}
-              <Button variant="link" size="sm" className="h-auto p-0" onClick={() => { setShowInternal(true); setPage(1) }}>
+              <Button variant="link" size="sm" className="h-auto p-0" onClick={() => setTopicListState(clusterId, { showInternal: true, page: 1 })}>
                 show
               </Button>
             </span>
           )}
           {showInternal && hiddenInternalCount > 0 && (
-            <Button variant="link" size="sm" className="h-auto p-0 text-muted-foreground" onClick={() => { setShowInternal(false); setPage(1) }}>
+            <Button variant="link" size="sm" className="h-auto p-0 text-muted-foreground" onClick={() => setTopicListState(clusterId, { showInternal: false, page: 1 })}>
               hide internal
             </Button>
           )}
@@ -125,7 +132,10 @@ export function TopicsPage() {
               <PaginationItem>
                 <PaginationPrevious
                   href="#"
-                  onClick={(e) => { e.preventDefault(); setPage(p => Math.max(1, p - 1)) }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setTopicListState(clusterId, { page: Math.max(1, page - 1) })
+                  }}
                   aria-disabled={page === 1}
                   className={page === 1 ? 'pointer-events-none opacity-50' : ''}
                 />
@@ -141,7 +151,10 @@ export function TopicsPage() {
                     <PaginationLink
                       href="#"
                       isActive={item === page}
-                      onClick={(e) => { e.preventDefault(); setPage(item) }}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        setTopicListState(clusterId, { page: item })
+                      }}
                     >
                       {item}
                     </PaginationLink>
@@ -152,7 +165,10 @@ export function TopicsPage() {
               <PaginationItem>
                 <PaginationNext
                   href="#"
-                  onClick={(e) => { e.preventDefault(); setPage(p => Math.min(pageCount, p + 1)) }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setTopicListState(clusterId, { page: Math.min(pageCount, page + 1) })
+                  }}
                   aria-disabled={page === pageCount}
                   className={page === pageCount ? 'pointer-events-none opacity-50' : ''}
                 />
@@ -163,7 +179,7 @@ export function TopicsPage() {
           {/* Right: jump-to-page select */}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>Go to</span>
-            <Select value={String(page)} onValueChange={(v) => setPage(Number(v))}>
+            <Select value={String(page)} onValueChange={(v) => setTopicListState(clusterId, { page: Number(v) })}>
               <SelectTrigger className="w-20 h-8 text-sm">
                 <SelectValue />
               </SelectTrigger>

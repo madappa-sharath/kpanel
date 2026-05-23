@@ -1,6 +1,5 @@
 // Screen-7: Consumer Group List
 
-import { useState } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { PageHeader } from '../../../../components/shared/PageHeader'
 import { GroupTable } from '../../../../components/consumer-groups/GroupTable'
@@ -18,9 +17,15 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '#/components/ui/pagination'
+import { useAppStore, type GroupListState } from '../../../../stores/appStore'
 
 const PAGE_SIZE = 15
 const ALL_STATES = ['Stable', 'Empty', 'PreparingRebalance', 'CompletingRebalance', 'Dead']
+const DEFAULT_LIST_STATE: GroupListState = {
+  search: '',
+  stateFilter: '',
+  page: 1,
+}
 
 /** Returns page numbers and ellipsis markers for a window of max 7 items. */
 function getPageRange(page: number, pageCount: number): (number | 'ellipsis')[] {
@@ -33,9 +38,9 @@ function getPageRange(page: number, pageCount: number): (number | 'ellipsis')[] 
 export function GroupsPage() {
   const { clusterId } = useParams({ strict: false }) as { clusterId: string }
   const { data: groups, isLoading, error } = useConsumerGroups(clusterId)
-  const [search, setSearch] = useState('')
-  const [stateFilter, setStateFilter] = useState('')
-  const [page, setPage] = useState(1)
+  const listState = useAppStore((state) => state.groupListStateByCluster[clusterId] ?? DEFAULT_LIST_STATE)
+  const setGroupListState = useAppStore((state) => state.setGroupListState)
+  const { search, stateFilter } = listState
 
   const filtered = (groups ?? []).filter((g) => {
     const matchSearch = g.id.toLowerCase().includes(search.toLowerCase())
@@ -43,14 +48,15 @@ export function GroupsPage() {
     return matchSearch && matchState
   })
 
-  const pageCount = Math.ceil(filtered.length / PAGE_SIZE)
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const page = Math.min(listState.page, pageCount)
   const pagedGroups = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const showPagination = filtered.length > PAGE_SIZE
 
   return (
     <div className="p-6">
       <PageHeader title="Consumer Groups" description={`${groups?.length ?? '…'} groups`}>
-        <Select value={stateFilter || 'all'} onValueChange={(v) => { setStateFilter(v === 'all' ? '' : v); setPage(1) }}>
+        <Select value={stateFilter || 'all'} onValueChange={(v) => setGroupListState(clusterId, { stateFilter: v === 'all' ? '' : v, page: 1 })}>
           <SelectTrigger className="w-40">
             <SelectValue placeholder="All states" />
           </SelectTrigger>
@@ -65,7 +71,7 @@ export function GroupsPage() {
           type="search"
           placeholder="Search groups…"
           value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+          onChange={(e) => setGroupListState(clusterId, { search: e.target.value, page: 1 })}
           className="w-48"
         />
       </PageHeader>
@@ -96,7 +102,10 @@ export function GroupsPage() {
               <PaginationItem>
                 <PaginationPrevious
                   href="#"
-                  onClick={(e) => { e.preventDefault(); setPage(p => Math.max(1, p - 1)) }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setGroupListState(clusterId, { page: Math.max(1, page - 1) })
+                  }}
                   aria-disabled={page === 1}
                   className={page === 1 ? 'pointer-events-none opacity-50' : ''}
                 />
@@ -112,7 +121,10 @@ export function GroupsPage() {
                     <PaginationLink
                       href="#"
                       isActive={item === page}
-                      onClick={(e) => { e.preventDefault(); setPage(item) }}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        setGroupListState(clusterId, { page: item })
+                      }}
                     >
                       {item}
                     </PaginationLink>
@@ -123,7 +135,10 @@ export function GroupsPage() {
               <PaginationItem>
                 <PaginationNext
                   href="#"
-                  onClick={(e) => { e.preventDefault(); setPage(p => Math.min(pageCount, p + 1)) }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setGroupListState(clusterId, { page: Math.min(pageCount, page + 1) })
+                  }}
                   aria-disabled={page === pageCount}
                   className={page === pageCount ? 'pointer-events-none opacity-50' : ''}
                 />
@@ -134,7 +149,7 @@ export function GroupsPage() {
           {/* Right: jump-to-page select */}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>Go to</span>
-            <Select value={String(page)} onValueChange={(v) => setPage(Number(v))}>
+            <Select value={String(page)} onValueChange={(v) => setGroupListState(clusterId, { page: Number(v) })}>
               <SelectTrigger className="w-20 h-8 text-sm">
                 <SelectValue />
               </SelectTrigger>
