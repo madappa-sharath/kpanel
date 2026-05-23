@@ -6,7 +6,7 @@ import { PageHeader } from '../../../../components/shared/PageHeader'
 import { TopicTable } from '../../../../components/topics/TopicTable'
 import { useTopics } from '../../../../hooks/useTopics'
 import { EmptyState } from '../../../../components/shared/EmptyState'
-import { MessageSquare } from 'lucide-react'
+import { MessageSquare, Plus } from 'lucide-react'
 import { Input } from '#/components/ui/input'
 import { Button } from '#/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
@@ -57,17 +57,23 @@ export function TopicsPage() {
   return (
     <div className="p-6">
       <PageHeader title="Topics" description={`${allTopics.length} topics · ${totalPartitions} partitions`}>
+        <WriteModeGate>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus />
+            Create Topic
+          </Button>
+        </WriteModeGate>
+      </PageHeader>
+
+      <div className="mb-4 flex items-center">
         <Input
           type="search"
           placeholder="Search topics…"
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-          className="w-48"
+          className="max-w-sm"
         />
-        <WriteModeGate>
-          <Button onClick={() => setCreateOpen(true)}>Create Topic</Button>
-        </WriteModeGate>
-      </PageHeader>
+      </div>
 
       {/* Summary bar */}
       {!isLoading && !error && allTopics.length > 0 && (degradedCount > 0 || hiddenInternalCount > 0) && (
