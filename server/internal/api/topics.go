@@ -535,13 +535,14 @@ func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	defer consumerClient.Close()
 
-	var msgs []messageResponse
+	type messageCandidate struct {
+		msg       messageResponse
+		timestamp time.Time
+	}
+	var candidates []messageCandidate
 	totalWanted := int64(0)
 	for _, cr := range consumeRanges {
 		totalWanted += cr.wantCount
-	}
-	if totalWanted > int64(req.Limit) {
-		totalWanted = int64(req.Limit)
 	}
 	var totalCollected int64
 
@@ -564,7 +565,10 @@ func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
 			if rec.Offset < cr.startAt || rec.Offset >= cr.startAt+cr.wantCount {
 				return
 			}
-			msgs = append(msgs, buildMessageResponse(rec))
+			candidates = append(candidates, messageCandidate{
+				msg:       buildMessageResponse(rec),
+				timestamp: rec.Timestamp,
+			})
 			totalCollected++
 			if totalCollected >= totalWanted {
 				fetchCancel()
@@ -572,15 +576,23 @@ func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	sort.Slice(msgs, func(i, j int) bool {
-		if msgs[i].Timestamp != msgs[j].Timestamp {
-			return msgs[i].Timestamp > msgs[j].Timestamp // newest first
+	sort.Slice(candidates, func(i, j int) bool {
+		if !candidates[i].timestamp.Equal(candidates[j].timestamp) {
+			return candidates[i].timestamp.After(candidates[j].timestamp) // newest first
 		}
-		if msgs[i].Partition != msgs[j].Partition {
-			return msgs[i].Partition < msgs[j].Partition
+		if candidates[i].msg.Partition != candidates[j].msg.Partition {
+			return candidates[i].msg.Partition < candidates[j].msg.Partition
 		}
-		return msgs[i].Offset > msgs[j].Offset
+		return candidates[i].msg.Offset > candidates[j].msg.Offset
 	})
+
+	if len(candidates) > req.Limit {
+		candidates = candidates[:req.Limit]
+	}
+	msgs := make([]messageResponse, len(candidates))
+	for i, candidate := range candidates {
+		msgs[i] = candidate.msg
+	}
 	writeJSON(w, http.StatusOK, msgs)
 }
 

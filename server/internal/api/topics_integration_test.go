@@ -421,14 +421,50 @@ func TestPeekMessages_Integration_LimitRespected(t *testing.T) {
 	if len(msgs) != 5 {
 		t.Errorf("expected 5 messages with limit=5, got %d", len(msgs))
 	}
-	// Offsets must be 5 consecutive values (the tail of the partition).
+	// Offsets must be 5 consecutive values (the tail of the partition), newest first.
 	if len(msgs) == 5 {
 		for i := 1; i < 5; i++ {
-			if msgs[i].Offset != msgs[i-1].Offset+1 {
+			if msgs[i].Offset != msgs[i-1].Offset-1 {
 				t.Errorf("offsets not consecutive: msgs[%d].offset=%d, msgs[%d].offset=%d",
 					i-1, msgs[i-1].Offset, i, msgs[i].Offset)
 			}
 		}
+	}
+}
+
+func TestPeekMessages_Integration_AllPartitionsTailTrimsAfterGlobalSort(t *testing.T) {
+	h, store := testServer(t)
+	addCluster(t, store, "pm-all-partitions-tail")
+	const topicName = "test-pm-all-partitions-tail"
+	createTopic(t, topicName, 2)
+
+	busyValues := make([]string, 120)
+	for i := range busyValues {
+		busyValues[i] = fmt.Sprintf("busy-%03d", i)
+	}
+	seedPartitionMessages(t, topicName, 0, busyValues)
+	seedPartitionMessages(t, topicName, 1, []string{"quiet-newest"})
+
+	w := do(t, h, http.MethodPost,
+		"/api/connections/pm-all-partitions-tail/topics/"+topicName+"/peek",
+		map[string]any{"limit": 50})
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body)
+	}
+
+	var msgs []messageResp
+	decodeJSON(t, w, &msgs)
+	if len(msgs) != 50 {
+		t.Fatalf("expected global limit of 50 messages, got %d", len(msgs))
+	}
+	foundQuiet := false
+	for _, msg := range msgs {
+		if msg.Partition == 1 && msg.Value == "quiet-newest" {
+			foundQuiet = true
+		}
+	}
+	if !foundQuiet {
+		t.Fatal("all-partitions Last N dropped the newest message from a quiet partition")
 	}
 }
 

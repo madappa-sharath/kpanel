@@ -4,12 +4,13 @@ package api_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
-	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/kpanel/kpanel/internal/config"
 	kpkafka "github.com/kpanel/kpanel/internal/kafka"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 // ── shared response types ────────────────────────────────────────────────────
@@ -155,5 +156,33 @@ func seedMessages(t *testing.T, topicName string, msgs []struct{ key, value stri
 	}
 	if err := cl.ProduceSync(ctx, records...).FirstErr(); err != nil {
 		t.Fatalf("produce to %q: %v", topicName, err)
+	}
+}
+
+// seedPartitionMessages produces messages to one explicit partition.
+func seedPartitionMessages(t *testing.T, topicName string, partition int32, values []string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	cl, err := kpkafka.NewRawClient(ctx, &config.Cluster{
+		ID: "seed", Name: "seed", Platform: "generic", Brokers: []string{testBroker},
+	}, kgo.RecordPartitioner(kgo.ManualPartitioner()))
+	if err != nil {
+		t.Fatalf("raw kafka client for partition seed: %v", err)
+	}
+	defer cl.Close()
+
+	records := make([]*kgo.Record, len(values))
+	for i, value := range values {
+		records[i] = &kgo.Record{
+			Topic:     topicName,
+			Partition: partition,
+			Key:       []byte(fmt.Sprintf("p%d-%03d", partition, i)),
+			Value:     []byte(value),
+		}
+	}
+	if err := cl.ProduceSync(ctx, records...).FirstErr(); err != nil {
+		t.Fatalf("produce to %q partition %d: %v", topicName, partition, err)
 	}
 }
