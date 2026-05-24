@@ -425,6 +425,7 @@ interface MessageDetailPanelProps {
 
 function MessageDetailPanel({ message, onClose, isCopied, onCopy }: MessageDetailPanelProps) {
   const msgKey = `${message.partition}-${message.offset}`
+  const headerEntries = Object.entries(message.headers)
   const formattedValue = message.value_encoding === 'base64'
     ? null
     : (() => { try { return JSON.stringify(JSON.parse(message.value), null, 2) } catch { return message.value } })()
@@ -483,6 +484,35 @@ function MessageDetailPanel({ message, onClose, isCopied, onCopy }: MessageDetai
           )}
         </div>
 
+        {/* Headers */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Headers</p>
+            {headerEntries.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn('h-6 px-2 text-xs', isCopied(`headers-${msgKey}`) && 'text-green-600')}
+                onClick={() => onCopy(JSON.stringify(message.headers, null, 2), `headers-${msgKey}`)}
+              >
+                {isCopied(`headers-${msgKey}`) ? 'Copied!' : 'Copy Headers'}
+              </Button>
+            )}
+          </div>
+          {headerEntries.length > 0 ? (
+            <div className="flex flex-col gap-1 rounded bg-muted px-3 py-2">
+              {headerEntries.map(([k, v]) => (
+                <div key={k} className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 text-xs font-mono">
+                  <span className="text-muted-foreground break-all">{k}</span>
+                  <span className="break-all">{v}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">(none)</p>
+          )}
+        </div>
+
         {/* Value */}
         <div>
           <div className="flex items-center justify-between mb-1">
@@ -506,30 +536,12 @@ function MessageDetailPanel({ message, onClose, isCopied, onCopy }: MessageDetai
               </Button>
             </div>
           </div>
-          <pre className="text-xs bg-muted rounded px-3 py-2 m-0 font-mono whitespace-pre-wrap break-all">
+          <pre className="max-h-[45vh] overflow-auto text-xs bg-muted rounded px-3 py-2 m-0 font-mono whitespace-pre-wrap break-all">
             {message.value_encoding === 'base64'
               ? <span className="text-muted-foreground italic">[binary — base64 encoded]</span>
               : formattedValue}
           </pre>
         </div>
-
-        {/* Headers */}
-        {Object.keys(message.headers).length > 0 && (
-          <>
-            <Separator />
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Headers</p>
-              <div className="flex flex-col gap-1">
-                {Object.entries(message.headers).map(([k, v]) => (
-                  <div key={k} className="flex gap-3 text-xs font-mono">
-                    <span className="text-muted-foreground min-w-28">{k}</span>
-                    <span className="break-all min-w-0 flex-1">{v}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
       </div>
     </div>
   )
