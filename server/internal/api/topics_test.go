@@ -221,6 +221,90 @@ func TestPeekMessages_UnreachableBroker_ReturnsValidJSONError(t *testing.T) {
 	}
 }
 
+// --- ProduceMessage ---
+
+func TestProduceMessage_ConnectionNotFound(t *testing.T) {
+	h, _ := testServer(t)
+	w := do(t, h, http.MethodPost, "/api/connections/ghost/topics/my-topic/produce",
+		map[string]any{"value": "hello"})
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusNotFound)
+	}
+	var resp map[string]string
+	decodeJSON(t, w, &resp)
+	if _, ok := resp["error"]; !ok {
+		t.Error("error responses must have an 'error' field")
+	}
+}
+
+func TestProduceMessage_InvalidBody(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{ID: "prod-badbody", Platform: "generic", Brokers: []string{"b"}})
+	req := httptest.NewRequest(http.MethodPost, "/api/connections/prod-badbody/topics/foo/produce",
+		strings.NewReader(`{bad json`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var resp map[string]string
+	decodeJSON(t, w, &resp)
+	if _, ok := resp["error"]; !ok {
+		t.Error("error responses must have an 'error' field")
+	}
+}
+
+func TestProduceMessage_InvalidPartition(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{ID: "prod-badpartition", Platform: "generic", Brokers: []string{"b"}})
+	w := do(t, h, http.MethodPost, "/api/connections/prod-badpartition/topics/foo/produce",
+		map[string]any{"value": "hello", "partition": -1})
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var resp map[string]string
+	decodeJSON(t, w, &resp)
+	if _, ok := resp["error"]; !ok {
+		t.Error("error responses must have an 'error' field")
+	}
+}
+
+func TestProduceMessage_InvalidHeader(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{ID: "prod-badheader", Platform: "generic", Brokers: []string{"b"}})
+	w := do(t, h, http.MethodPost, "/api/connections/prod-badheader/topics/foo/produce",
+		map[string]any{
+			"value": "hello",
+			"headers": []map[string]string{
+				{"key": "", "value": "application/json"},
+			},
+		})
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var resp map[string]string
+	decodeJSON(t, w, &resp)
+	if _, ok := resp["error"]; !ok {
+		t.Error("error responses must have an 'error' field")
+	}
+}
+
+func TestProduceMessage_UnreachableBroker_ReturnsValidJSONError(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{ID: "prod-unreachable", Platform: "generic", Brokers: []string{"b"}})
+	w := do(t, h, http.MethodPost, "/api/connections/prod-unreachable/topics/foo/produce",
+		map[string]any{"key": "k", "value": "v"})
+	if w.Code == http.StatusOK {
+		t.Error("expected non-200 status with unreachable broker")
+		return
+	}
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(w.Body).Decode(&raw); err != nil {
+		t.Fatalf("response must be valid JSON: %v (body: %s)", err, w.Body.String())
+	}
+}
+
 // TestPeekMessages_InvalidTimestamp verifies that a malformed start_timestamp
 // value returns 400 before any Kafka I/O takes place. The kafka client creation
 // is lazy so an unreachable broker is fine here.

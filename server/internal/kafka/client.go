@@ -6,15 +6,16 @@ import (
 	"crypto/x509"
 	"fmt"
 	"os"
+	"time"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/kpanel/kpanel/internal/config"
+	"github.com/kpanel/kpanel/internal/credentials"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
 	kaws "github.com/twmb/franz-go/pkg/sasl/aws"
 	"github.com/twmb/franz-go/pkg/sasl/plain"
 	"github.com/twmb/franz-go/pkg/sasl/scram"
-	"github.com/kpanel/kpanel/internal/config"
-	"github.com/kpanel/kpanel/internal/credentials"
 )
 
 // buildOpts assembles kgo.Opt for seed brokers, TLS, and SASL auth from the
@@ -143,7 +144,72 @@ func NewRawClient(ctx context.Context, cluster *config.Cluster, extraOpts ...kgo
 	opts = append(opts, extraOpts...)
 	cl, err := kgo.NewClient(opts...)
 	if err != nil {
-		return nil, fmt.Errorf("create kafka consumer client: %w", err)
+		return nil, fmt.Errorf("create kafka client: %w", err)
 	}
 	return cl, nil
+}
+
+type ProduceMessageInput struct {
+	Topic     string
+	Key       *string
+	Value     string
+	Headers   []ProduceHeader
+	Partition *int32
+}
+
+type ProduceHeader struct {
+	Key   string
+	Value string
+}
+
+type ProduceMessageResult struct {
+	Topic     string
+	Partition int32
+	Offset    int64
+	Timestamp time.Time
+}
+
+func ProduceMessage(ctx context.Context, cluster *config.Cluster, input ProduceMessageInput) (ProduceMessageResult, error) {
+	extraOpts := []kgo.Opt{}
+	if input.Partition != nil {
+		extraOpts = append(extraOpts, kgo.RecordPartitioner(kgo.ManualPartitioner()))
+	}
+
+	cl, err := NewRawClient(ctx, cluster, extraOpts...)
+	if err != nil {
+		return ProduceMessageResult{}, err
+	}
+	defer cl.Close()
+
+	record := &kgo.Record{
+		Topic: input.Topic,
+		Value: []byte(input.Value),
+	}
+	if input.Key != nil {
+		record.Key = []byte(*input.Key)
+	}
+	if input.Partition != nil {
+		record.Partition = *input.Partition
+	}
+	if len(input.Headers) > 0 {
+		record.Headers = make([]kgo.RecordHeader, 0, len(input.Headers))
+		for _, header := range input.Headers {
+			record.Headers = append(record.Headers, kgo.RecordHeader{
+				Key:   header.Key,
+				Value: []byte(header.Value),
+			})
+		}
+	}
+
+	produced, err := cl.ProduceSync(ctx, record).First()
+	if err != nil {
+		return ProduceMessageResult{}, fmt.Errorf("produce message: %w", err)
+	}
+
+	return ProduceMessageResult{
+		Topic:     produced.Topic,
+		Partition: produced.Partition,
+		Offset:    produced.Offset,
+		Timestamp: produced.Timestamp,
+	}, nil
 }

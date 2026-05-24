@@ -2,11 +2,12 @@
 
 import { useState } from 'react'
 import { Link, Outlet, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Plus, Send, Trash2 } from 'lucide-react'
 import { useTopic } from '../../../../../hooks/useTopics'
 import { IncreasePartitionsModal } from '../../../../../components/topics/IncreasePartitionsModal'
 import { DeleteTopicModal } from '../../../../../components/topics/DeleteTopicModal'
 import { MessageBrowser } from '../../../../../components/topics/MessageBrowser'
+import { ProduceMessageModal } from '../../../../../components/topics/ProduceMessageModal'
 import { WriteModeGate } from '../../../../../components/shared/WriteModeControl'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Button } from '#/components/ui/button'
@@ -29,6 +30,7 @@ export function TopicLayout() {
   }
   const { data: topic } = useTopic(clusterId, topicName)
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const [showProduce, setShowProduce] = useState(false)
   const [showIncrease, setShowIncrease] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
 
@@ -86,16 +88,30 @@ export function TopicLayout() {
               <Button
                 variant="outline"
                 size="sm"
+                className="h-9 min-w-32"
+                onClick={() => setShowProduce(true)}
+                disabled={!topic}
+              >
+                <Send className="h-4 w-4" />
+                Produce
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 min-w-40"
                 onClick={() => setShowIncrease(true)}
                 disabled={!topic}
               >
+                <Plus className="h-4 w-4" />
                 Increase Partitions
               </Button>
               <Button
                 variant="destructive"
                 size="sm"
+                className="h-9 min-w-32"
                 onClick={() => setShowDelete(true)}
               >
+                <Trash2 className="h-4 w-4" />
                 Delete Topic
               </Button>
             </div>
@@ -144,6 +160,14 @@ export function TopicLayout() {
       </div>
 
       <WriteModeGate>
+        <ProduceMessageModal
+          open={showProduce}
+          clusterId={clusterId}
+          topicName={topicName}
+          partitions={partitions}
+          onClose={() => setShowProduce(false)}
+        />
+
         {topic && (
           <IncreasePartitionsModal
             open={showIncrease}

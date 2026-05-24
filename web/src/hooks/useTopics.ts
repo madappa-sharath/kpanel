@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { queryKeys } from '../lib/queryKeys'
-import type { CreateTopicRequest, UpdateTopicPartitionsRequest } from '../types/topic'
+import type { CreateTopicRequest, ProduceMessageRequest, UpdateTopicPartitionsRequest } from '../types/topic'
 
 export function useTopics(clusterId: string) {
   return useQuery({
@@ -47,6 +47,16 @@ export function useUpdateTopicPartitions(clusterId: string, topicName: string) {
       api.topics.updatePartitions(clusterId, topicName, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.topics.all(clusterId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.topics.detail(clusterId, topicName) })
+    },
+  })
+}
+
+export function useProduceMessage(clusterId: string, topicName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: ProduceMessageRequest) => api.topics.produce(clusterId, topicName, body),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.topics.detail(clusterId, topicName) })
     },
   })

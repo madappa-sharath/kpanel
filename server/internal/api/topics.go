@@ -55,6 +55,25 @@ type messageResponse struct {
 	Size          int               `json:"size"`
 }
 
+type produceMessageRequest struct {
+	Key       *string                `json:"key"`
+	Value     string                 `json:"value"`
+	Headers   []produceMessageHeader `json:"headers"`
+	Partition *int32                 `json:"partition"`
+}
+
+type produceMessageHeader struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+type produceMessageResponse struct {
+	Topic     string `json:"topic"`
+	Partition int32  `json:"partition"`
+	Offset    int64  `json:"offset"`
+	Timestamp string `json:"timestamp"`
+}
+
 // safeBytes returns the bytes as a UTF-8 string if valid, otherwise as base64.
 // Returns (value, encoding) where encoding is "" for UTF-8 or "base64" for binary.
 func safeBytes(b []byte) (string, string) {
@@ -594,6 +613,64 @@ func (h *Handlers) PeekMessages(w http.ResponseWriter, r *http.Request) {
 		msgs[i] = candidate.msg
 	}
 	writeJSON(w, http.StatusOK, msgs)
+}
+
+// ProduceMessage godoc
+// POST /api/connections/:id/topics/:name/produce
+func (h *Handlers) ProduceMessage(w http.ResponseWriter, r *http.Request) {
+	cluster, ok := h.getClusterOrError(w, r)
+	if !ok {
+		return
+	}
+	name := chi.URLParam(r, "name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "topic name is required")
+		return
+	}
+
+	var req produceMessageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Partition != nil && *req.Partition < 0 {
+		writeError(w, http.StatusBadRequest, "partition must be >= 0")
+		return
+	}
+	headers := make([]kafka.ProduceHeader, 0, len(req.Headers))
+	for _, header := range req.Headers {
+		header.Key = strings.TrimSpace(header.Key)
+		if header.Key == "" {
+			writeError(w, http.StatusBadRequest, "header key is required")
+			return
+		}
+		headers = append(headers, kafka.ProduceHeader{
+			Key:   header.Key,
+			Value: header.Value,
+		})
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	result, err := kafka.ProduceMessage(ctx, cluster, kafka.ProduceMessageInput{
+		Topic:     name,
+		Key:       req.Key,
+		Value:     req.Value,
+		Headers:   headers,
+		Partition: req.Partition,
+	})
+	if err != nil {
+		writeError(w, topicAdminErrorStatus(err), err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, produceMessageResponse{
+		Topic:     result.Topic,
+		Partition: result.Partition,
+		Offset:    result.Offset,
+		Timestamp: result.Timestamp.UTC().Format(time.RFC3339),
+	})
 }
 
 // UpdateTopicPartitions godoc

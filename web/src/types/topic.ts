@@ -52,6 +52,25 @@ export interface CreateTopicRequest {
   replication_factor: number
 }
 
+export interface ProduceMessageRequest {
+  key?: string
+  value: string
+  headers?: ProduceMessageHeader[]
+  partition?: number
+}
+
+export interface ProduceMessageHeader {
+  key: string
+  value: string
+}
+
+export interface ProduceMessageResponse {
+  topic: string
+  partition: number
+  offset: number
+  timestamp: string
+}
+
 export interface UpdateTopicPartitionsRequest {
   partitions: number
 }

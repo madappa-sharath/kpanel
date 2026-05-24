@@ -51,6 +51,71 @@ func TestCreateTopic_Integration_CreatesTopicAndAppearsInList(t *testing.T) {
 	}
 }
 
+// ── ProduceMessage ───────────────────────────────────────────────────────────
+
+func TestProduceMessage_Integration_ProducesAndCanPeek(t *testing.T) {
+	h, store := testServer(t)
+	addCluster(t, store, "prod-basic")
+	const topicName = "test-prod-basic"
+	createTopic(t, topicName, 2)
+
+	w := do(t, h, http.MethodPost, "/api/connections/prod-basic/topics/"+topicName+"/produce", map[string]any{
+		"key":       "order-123",
+		"value":     `{"status":"created"}`,
+		"partition": 1,
+		"headers": []map[string]string{
+			{"key": "content-type", "value": "application/json"},
+			{"key": "source", "value": "kpanel"},
+		},
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("produce status %d: %s", w.Code, w.Body)
+	}
+
+	var produced struct {
+		Topic     string `json:"topic"`
+		Partition int32  `json:"partition"`
+		Offset    int64  `json:"offset"`
+		Timestamp string `json:"timestamp"`
+	}
+	decodeJSON(t, w, &produced)
+	if produced.Topic != topicName {
+		t.Errorf("topic: got %q, want %q", produced.Topic, topicName)
+	}
+	if produced.Partition != 1 {
+		t.Errorf("partition: got %d, want 1", produced.Partition)
+	}
+	if produced.Offset < 0 {
+		t.Errorf("offset: got %d, want >= 0", produced.Offset)
+	}
+	if produced.Timestamp == "" {
+		t.Error("timestamp must not be empty")
+	}
+
+	w2 := do(t, h, http.MethodPost, "/api/connections/prod-basic/topics/"+topicName+"/peek",
+		map[string]any{"limit": 1, "partition": 1})
+	if w2.Code != http.StatusOK {
+		t.Fatalf("peek status %d: %s", w2.Code, w2.Body)
+	}
+	var messages []messageResp
+	decodeJSON(t, w2, &messages)
+	if len(messages) != 1 {
+		t.Fatalf("messages: got %d, want 1", len(messages))
+	}
+	if messages[0].Key == nil || *messages[0].Key != "order-123" {
+		t.Fatalf("key: got %v, want order-123", messages[0].Key)
+	}
+	if messages[0].Value != `{"status":"created"}` {
+		t.Errorf("value: got %q", messages[0].Value)
+	}
+	if messages[0].Headers["content-type"] != "application/json" {
+		t.Errorf("content-type header: got %q", messages[0].Headers["content-type"])
+	}
+	if messages[0].Headers["source"] != "kpanel" {
+		t.Errorf("source header: got %q", messages[0].Headers["source"])
+	}
+}
+
 // ── ListTopics ────────────────────────────────────────────────────────────────
 
 // TestListTopics_Integration_Shape verifies the endpoint returns 200 with a

@@ -7,6 +7,8 @@ import type {
   Message,
   PeekRequest,
   CreateTopicRequest,
+  ProduceMessageRequest,
+  ProduceMessageResponse,
   UpdateTopicPartitionsRequest,
   SearchRequest,
   SearchResponse,
@@ -75,6 +77,11 @@ export const api = {
       request<Message[]>(`/connections/${clusterId}/topics/${encodeURIComponent(name)}/peek`, {
         method: 'POST',
         body: JSON.stringify(opts),
+      }),
+    produce: (clusterId: string, name: string, body: ProduceMessageRequest) =>
+      request<ProduceMessageResponse>(`/connections/${clusterId}/topics/${encodeURIComponent(name)}/produce`, {
+        method: 'POST',
+        body: JSON.stringify(body),
       }),
     updateConfig: (clusterId: string, name: string, configs: Record<string, string>) =>
       request<{ ok: boolean }>(`/connections/${clusterId}/topics/${encodeURIComponent(name)}/config`, {
