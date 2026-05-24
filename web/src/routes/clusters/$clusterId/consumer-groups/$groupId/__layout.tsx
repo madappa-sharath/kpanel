@@ -4,7 +4,7 @@ import { Link, Outlet, useParams, useRouterState } from '@tanstack/react-router'
 import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { ResetOffsetsModal } from '../../../../../components/consumer-groups/ResetOffsetsModal'
-import { WriteModeGate } from '../../../../../components/shared/WriteModeControl'
+import { WriteModeBanner, WriteModeGate } from '../../../../../components/shared/WriteModeControl'
 import { useConsumerGroup, useLagHistory } from '../../../../../hooks/useConsumerGroups'
 import { StatusBadge, groupStateVariant } from '../../../../../components/shared/StatusBadge'
 import { formatNumber } from '../../../../../lib/utils'
@@ -99,6 +99,10 @@ export function GroupLayout() {
             ))}
           </TabsList>
         </Tabs>
+        <WriteModeBanner
+          className="mt-4"
+          description="Enable write mode to reset offsets for this consumer group."
+        />
       </div>
 
       <div className="flex-1 overflow-auto">

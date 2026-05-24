@@ -20,7 +20,7 @@ import {
   PaginationPrevious,
 } from '#/components/ui/pagination'
 import { CreateTopicModal } from '../../../../components/topics/CreateTopicModal'
-import { WriteModeGate } from '../../../../components/shared/WriteModeControl'
+import { WriteModeBanner, WriteModeGate } from '../../../../components/shared/WriteModeControl'
 import { useAppStore, type TopicListState } from '../../../../stores/appStore'
 
 const PAGE_SIZE = 15
@@ -71,6 +71,8 @@ export function TopicsPage() {
           </Button>
         </WriteModeGate>
       </PageHeader>
+
+      <WriteModeBanner description="Enable write mode to create topics from this cluster." />
 
       <div className="mb-4 flex items-center">
         <Input

@@ -8,7 +8,7 @@ import { IncreasePartitionsModal } from '../../../../../components/topics/Increa
 import { DeleteTopicModal } from '../../../../../components/topics/DeleteTopicModal'
 import { MessageBrowser } from '../../../../../components/topics/MessageBrowser'
 import { ProduceMessageModal } from '../../../../../components/topics/ProduceMessageModal'
-import { WriteModeGate } from '../../../../../components/shared/WriteModeControl'
+import { WriteModeBanner, WriteModeGate } from '../../../../../components/shared/WriteModeControl'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Button } from '#/components/ui/button'
 import { cn } from '#/lib/utils'
@@ -46,6 +46,14 @@ export function TopicLayout() {
     : pathname.endsWith('/messages')
     ? 'messages'
     : 'overview'
+  const writeModeDescription =
+    activeTab === 'config'
+      ? 'Enable write mode to edit topic configuration values.'
+      : activeTab === 'messages'
+      ? 'Enable write mode to produce messages to this topic.'
+      : activeTab === 'partitions'
+      ? 'Enable write mode to increase partitions for this topic.'
+      : 'Enable write mode to produce messages, increase partitions, or delete this topic.'
 
   const partitions = (topic?.partitions ?? []).map((p) => p.partition)
 
@@ -134,6 +142,10 @@ export function TopicLayout() {
             ))}
           </TabsList>
         </Tabs>
+        <WriteModeBanner
+          className="mt-4"
+          description={writeModeDescription}
+        />
       </div>
 
       <div className="flex-1 overflow-auto">

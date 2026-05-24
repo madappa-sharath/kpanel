@@ -3,6 +3,22 @@ import { persist } from 'zustand/middleware'
 
 type Theme = 'light' | 'dark' | 'system'
 
+const WRITE_MODE_SESSION_KEY = 'kpanel-write-mode'
+
+function getInitialWriteMode() {
+  if (typeof window === 'undefined') return false
+  return window.sessionStorage.getItem(WRITE_MODE_SESSION_KEY) === 'enabled'
+}
+
+function persistWriteMode(enabled: boolean) {
+  if (typeof window === 'undefined') return
+  if (enabled) {
+    window.sessionStorage.setItem(WRITE_MODE_SESSION_KEY, 'enabled')
+    return
+  }
+  window.sessionStorage.removeItem(WRITE_MODE_SESSION_KEY)
+}
+
 export interface TopicListState {
   search: string
   showInternal: boolean
@@ -45,12 +61,15 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       activeClusterId: null,
       theme: 'system',
-      writeModeEnabled: false,
+      writeModeEnabled: getInitialWriteMode(),
       topicListStateByCluster: {},
       groupListStateByCluster: {},
       setActiveCluster: (id) => set({ activeClusterId: id }),
       setTheme: (theme) => set({ theme }),
-      setWriteModeEnabled: (enabled) => set({ writeModeEnabled: enabled }),
+      setWriteModeEnabled: (enabled) => {
+        persistWriteMode(enabled)
+        set({ writeModeEnabled: enabled })
+      },
       setTopicListState: (clusterId, patch) =>
         set((state) => ({
           topicListStateByCluster: {
