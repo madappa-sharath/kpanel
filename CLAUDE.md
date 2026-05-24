@@ -302,8 +302,10 @@ const activeTab = pathname.endsWith('/partitions') ? 'partitions' : 'overview'
 
 ## Commands
 
+Dependency installs are routed through Socket Firewall (`sfw`) from the root Makefile. Socket Firewall Free officially supports npm/yarn/pnpm, pip/uv, and cargo; Bun is wrapped as an install-time proxy for defense-in-depth and paired with Bun's `minimumReleaseAge`/`ignoreScripts` hardening in `web/bunfig.toml`. Use `make SFW= setup` or `make SFW= build` only when intentionally bypassing the firewall.
+
 ```bash
-make setup        # first-time: go mod tidy + bun install
+make setup        # first-time: go mod tidy + sfw bun install
 make dev          # Kafka + seed data, Go server (:8080) + Bun dev server (:3000)
 make dev-server   # Kafka + seed data + Go API only; does not start Bun
 make dev-web      # Bun dev server only; proxies /api to Go

@@ -1,5 +1,8 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS  = -ldflags "-s -w -X main.version=$(VERSION)"
+SFW ?= sfw
+BUN_INSTALL = $(SFW) bun install
+BUN_INSTALL_FROZEN = $(SFW) bun install --frozen-lockfile
 
 .PHONY: dev dev-api dev-server dev-simulate-v01 dev-web setup build build-web build-server build-linux build-darwin clean kafka-dev kafka-up kafka-down kafka-logs kafka-seed kafka-seed-if-empty kafka-seed-reset kafka-produce kafka-consume kafka-consume-all kafka-members kafka-seed-binary kafka-seed-sasl kafka-sasl-users dev-full test test-integration create-dev-msk destroy-dev-msk kafka-sasl-up kafka-sasl-down kafka-sasl-logs
 
@@ -18,7 +21,7 @@ test-integration-local:
 setup:
 	cd server && go mod tidy
 	cd server/cmd/kafkaseed && go mod tidy
-	cd web && bun install
+	cd web && $(BUN_INSTALL)
 
 dev: kafka-dev
 	@echo "Starting kpanel dev environment..."
@@ -41,7 +44,7 @@ dev-web:
 build: build-web build-server
 
 build-web:
-	cd web && bun install && bun build.ts
+	cd web && $(BUN_INSTALL_FROZEN) && bun build.ts
 	rm -rf server/cmd/kpanel/public
 	cp -r web/dist server/cmd/kpanel/public
 
@@ -49,12 +52,12 @@ build-server: build-web
 	cd server && CGO_ENABLED=0 go build $(LDFLAGS) -o ../dist/kpanel ./cmd/kpanel
 
 build-linux:
-	cd web && bun install && bun build.ts
+	cd web && $(BUN_INSTALL_FROZEN) && bun build.ts
 	rm -rf server/cmd/kpanel/public && cp -r web/dist server/cmd/kpanel/public
 	cd server && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o ../dist/kpanel-linux-amd64 ./cmd/kpanel
 
 build-darwin:
-	cd web && bun install && bun build.ts
+	cd web && $(BUN_INSTALL_FROZEN) && bun build.ts
 	rm -rf server/cmd/kpanel/public && cp -r web/dist server/cmd/kpanel/public
 	cd server && GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o ../dist/kpanel-darwin-arm64 ./cmd/kpanel
 

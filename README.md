@@ -132,12 +132,13 @@ kpanel makes no outbound connections except the ones you configure: directly to 
 
 ## Build from Source
 
-Requires [Go 1.22+](https://go.dev/dl/) and [Bun](https://bun.sh).
+Requires [Go 1.22+](https://go.dev/dl/), [Bun](https://bun.sh), and [Socket Firewall](https://docs.socket.dev/docs/socket-firewall-free) (`sfw`).
 
 ```bash
+npm i -g sfw      # or install the sfw binary manually
 git clone https://github.com/madappa-sharath/kpanel.git
 cd kpanel
-make setup        # go mod tidy + bun install
+make setup        # go mod tidy + sfw bun install
 make dev          # Kafka + seed data, Go on :8080, React dev server on :3000
 make dev-server   # Kafka + seed data + Go API only; does not start Bun
 make dev-web      # React dev server only; proxies /api to Go
@@ -145,6 +146,8 @@ make build        # production build → ./dist/kpanel
 make build-linux  # cross-compile for Linux amd64
 make build-darwin # cross-compile for macOS arm64
 ```
+
+Socket Firewall Free officially supports npm, yarn, pnpm, pip, uv, and cargo; kpanel still uses Bun for package management, so the Makefile wraps Bun installs with `sfw` as an install-time proxy. The frontend also keeps Bun's own supply-chain hardening enabled in `web/bunfig.toml`: minimum release age and ignored lifecycle scripts. If you need to bypass the firewall in a local emergency, run `make SFW= setup` or `make SFW= build`.
 
 In development, open `http://localhost:3000`. The Bun dev server proxies `/api` to the Go server at `:8080`.
 

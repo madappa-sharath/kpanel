@@ -11,13 +11,14 @@
 
 ## Commands
 ```bash
-bun install          # install deps
+sfw bun install      # install deps through Socket Firewall
 bun dev.ts           # dev server on :3000 (HMR + /api proxy → :8080)
 bun build.ts         # production build → dist/
 bun run typecheck    # tsc --noEmit
 ```
 
 `make dev` from the repo root runs both Go server (:8080) and this dev server (:3000) in parallel.
+Root `make setup` and build targets wrap Bun installs with `sfw`. Socket Firewall Free does not officially list Bun as a supported package manager, so this is defense-in-depth alongside `bunfig.toml`'s `minimumReleaseAge` and `ignoreScripts` protections.
 
 ## Bundler notes
 - **No Vite, no PostCSS, no tailwind.config.ts** — Bun handles everything natively
