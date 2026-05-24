@@ -147,7 +147,7 @@ make build-linux  # cross-compile for Linux amd64
 make build-darwin # cross-compile for macOS arm64
 ```
 
-Socket Firewall Free officially supports npm, yarn, pnpm, pip, uv, and cargo; kpanel still uses Bun for package management, so the Makefile wraps Bun installs with `sfw` as an install-time proxy. The frontend also keeps Bun's own supply-chain hardening enabled in `web/bunfig.toml`: minimum release age and ignored lifecycle scripts. If you need to bypass the firewall in a local emergency, run `make SFW= setup` or `make SFW= build`.
+Socket Firewall Free officially supports npm, yarn, pnpm, pip, uv, and cargo; kpanel still uses Bun for package management, so the Makefile wraps Bun installs with `sfw` as an install-time proxy. CI installs Socket Firewall near the start of every workflow, before any dependency install step. The frontend also keeps Bun's own supply-chain hardening enabled in `web/bunfig.toml`: minimum release age and ignored lifecycle scripts. If you need to bypass the firewall in a local emergency, run `make SFW= setup` or `make SFW= build`.
 
 In development, open `http://localhost:3000`. The Bun dev server proxies `/api` to the Go server at `:8080`.
 
