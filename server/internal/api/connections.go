@@ -20,6 +20,7 @@ type addConnectionRequest struct {
 	ID       string   `json:"id"`
 	Name     string   `json:"name"`
 	Platform string   `json:"platform"` // "aws" | "confluent" | "generic"; defaults to "generic"
+	Color    string   `json:"color,omitempty"`
 	Brokers  []string `json:"brokers"`
 	Auth     struct {
 		Mechanism      string `json:"mechanism"` // "sasl_plain" | "sasl_scram_sha256" | "sasl_scram_sha512" | "aws_iam"
@@ -35,12 +36,34 @@ type addConnectionRequest struct {
 	} `json:"tls,omitempty"`
 }
 
+var validClusterColors = map[string]bool{
+	"":       true,
+	"none":   true,
+	"red":    true,
+	"orange": true,
+	"amber":  true,
+	"green":  true,
+	"blue":   true,
+	"violet": true,
+	"zinc":   true,
+}
+
 type statusResponse struct {
 	Connected    bool   `json:"connected"`
 	BrokerCount  int    `json:"brokerCount,omitempty"`
 	ControllerID int32  `json:"controllerId,omitempty"`
 	Identity     string `json:"identity,omitempty"` // AWS ARN of the principal used for auth
 	Error        string `json:"error,omitempty"`
+}
+
+func normalizeClusterColor(color string) (string, bool) {
+	if !validClusterColors[color] {
+		return "", false
+	}
+	if color == "none" {
+		return "", true
+	}
+	return color, true
 }
 
 // withCredentialUsername resolves the stored username from keychain and injects
@@ -84,6 +107,11 @@ func (h *Handlers) AddConnection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name and brokers are required")
 		return
 	}
+	color, ok := normalizeClusterColor(req.Color)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "color must be one of: none, red, orange, amber, green, blue, violet, zinc")
+		return
+	}
 	if req.ID == "" {
 		req.ID = slugify(req.Name)
 	}
@@ -111,6 +139,7 @@ func (h *Handlers) AddConnection(w http.ResponseWriter, r *http.Request) {
 		ID:       req.ID,
 		Name:     req.Name,
 		Platform: platform,
+		Color:    color,
 		Brokers:  req.Brokers,
 	}
 
@@ -185,11 +214,17 @@ func (h *Handlers) UpdateConnection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name and brokers are required")
 		return
 	}
+	color, ok := normalizeClusterColor(req.Color)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "color must be one of: none, red, orange, amber, green, blue, violet, zinc")
+		return
+	}
 
 	cluster := config.Cluster{
 		ID:       existing.ID,
 		Name:     req.Name,
 		Platform: existing.Platform,
+		Color:    color,
 		Brokers:  req.Brokers,
 	}
 

@@ -183,6 +183,41 @@ func TestAddConnection_DefaultPlatformGeneric(t *testing.T) {
 	}
 }
 
+func TestAddConnection_ColorPersisted(t *testing.T) {
+	h, _ := testServer(t)
+	body := map[string]any{
+		"id":      "prod",
+		"name":    "Prod",
+		"color":   "red",
+		"brokers": []string{"b:9092"},
+	}
+	w := do(t, h, http.MethodPost, "/api/connections/", body)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("status: got %d, want %d (body: %s)", w.Code, http.StatusCreated, w.Body.String())
+	}
+	var resp config.Cluster
+	decodeJSON(t, w, &resp)
+	if resp.Color != "red" {
+		t.Errorf("Color: got %q, want red", resp.Color)
+	}
+}
+
+func TestAddConnection_InvalidColor(t *testing.T) {
+	h, _ := testServer(t)
+	body := map[string]any{
+		"id":      "prod",
+		"name":    "Prod",
+		"color":   "hotpink",
+		"brokers": []string{"b:9092"},
+	}
+	w := do(t, h, http.MethodPost, "/api/connections/", body)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
 func TestAddConnection_AutoSlugFromName(t *testing.T) {
 	h, _ := testServer(t)
 	body := map[string]any{
@@ -263,6 +298,27 @@ func TestUpdateConnection_Basic(t *testing.T) {
 	}
 	if len(resp.Brokers) != 1 || resp.Brokers[0] != "new:9092" {
 		t.Errorf("Brokers: got %v", resp.Brokers)
+	}
+}
+
+func TestUpdateConnection_ColorPersisted(t *testing.T) {
+	h, store := testServer(t)
+	_ = store.Add(config.Cluster{ID: "upd-color", Name: "Old Name", Platform: "generic", Brokers: []string{"old:9092"}})
+
+	body := map[string]any{
+		"name":    "New Name",
+		"color":   "blue",
+		"brokers": []string{"new:9092"},
+	}
+	w := do(t, h, http.MethodPut, "/api/connections/upd-color", body)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d (body: %s)", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp config.Cluster
+	decodeJSON(t, w, &resp)
+	if resp.Color != "blue" {
+		t.Errorf("Color: got %q, want blue", resp.Color)
 	}
 }
 

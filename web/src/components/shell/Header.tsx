@@ -7,6 +7,7 @@ import { Button } from '../ui/button'
 import { Badge } from '../ui/badge'
 import { WriteModeControl } from '../shared/WriteModeControl'
 import { cn } from '../../lib/utils'
+import { clusterColorStyles, normalizeClusterColor } from '../../lib/clusterColors'
 
 type Theme = 'light' | 'dark' | 'system'
 
@@ -28,6 +29,7 @@ export function Header() {
   const { data: status, isLoading } = useConnectionStatus(clusterId ?? '')
 
   const cluster = clusters?.find((c) => c.id === clusterId)
+  const clusterColor = normalizeClusterColor(cluster?.color)
 
   function cycleTheme() {
     const idx = THEME_CYCLE.indexOf(theme)
@@ -36,9 +38,21 @@ export function Header() {
 
   return (
     <header
-      className="bg-card border-b border-border flex items-center px-4 gap-3 flex-shrink-0"
+      className={cn(
+        'relative bg-card border-b border-border flex items-center px-4 gap-3 flex-shrink-0',
+      )}
       style={{ height: 'var(--header-h)' }}
     >
+      {clusterColor !== 'none' && (
+        <span
+          aria-hidden="true"
+          className={cn(
+            'absolute inset-x-0 top-0 h-1 animate-cluster-accent-pulse',
+            clusterColorStyles[clusterColor].dot,
+          )}
+        />
+      )}
+
       {/* Cluster switcher */}
       <ClusterSwitcher />
 

@@ -10,6 +10,9 @@ import { AWSContextCard } from '../components/clusters/AWSContextCard'
 import { Button } from '#/components/ui/button'
 import { Badge } from '#/components/ui/badge'
 import { Skeleton } from '#/components/ui/skeleton'
+import { clusterColorStyles, normalizeClusterColor } from '../lib/clusterColors'
+import { cn } from '../lib/utils'
+import type { Cluster } from '../types/cluster'
 
 export function WelcomePage() {
   const navigate                      = useNavigate()
@@ -59,54 +62,16 @@ export function WelcomePage() {
                     Saved clusters
                   </div>
                   {clusters.map((c) => (
-                    <div
+                    <WelcomeClusterRow
                       key={c.id}
-                      className="flex items-center gap-3 px-4 py-3 border-b hover:bg-muted/40 transition-colors"
-                    >
-                      <div className="size-1.5 rounded-full bg-muted-foreground/40 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-sm font-medium text-foreground truncate">{c.name}</span>
-                          {c.platform === 'aws' && (
-                            <Badge variant="outline" className="text-amber-600 border-amber-600/30 bg-amber-50 dark:bg-amber-950 dark:text-amber-400 flex-shrink-0 text-[10px] px-1.5 py-0">
-                              MSK
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground truncate">{c.brokers.join(', ')}</div>
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => connectTo(c.id)}
-                          className="h-7 text-amber-600 hover:text-amber-600 gap-1"
-                        >
-                          Connect <ArrowRight size={11} />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setActive(c.id)
-                            navigate({ to: '/clusters/$clusterId/settings', params: { clusterId: c.id } })
-                          }}
-                          aria-label={`Edit ${c.name}`}
-                          className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                        >
-                          <Pencil size={12} />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setConfirm(c.id)}
-                          aria-label={`Delete ${c.name}`}
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 size={12} />
-                        </Button>
-                      </div>
-                    </div>
+                      cluster={c}
+                      connectTo={connectTo}
+                      editCluster={(id) => {
+                        setActive(id)
+                        navigate({ to: '/clusters/$clusterId/settings', params: { clusterId: id } })
+                      }}
+                      deleteCluster={setConfirm}
+                    />
                   ))}
                 </div>
               )}
@@ -163,6 +128,67 @@ export function WelcomePage() {
         onConfirm={() => { if (confirmDelete) deleteCluster(confirmDelete); setConfirm(null) }}
         onCancel={() => setConfirm(null)}
       />
+    </div>
+  )
+}
+
+function WelcomeClusterRow({
+  cluster,
+  connectTo,
+  editCluster,
+  deleteCluster,
+}: {
+  cluster: Cluster
+  connectTo: (id: string) => void
+  editCluster: (id: string) => void
+  deleteCluster: (id: string) => void
+}) {
+  const color = normalizeClusterColor(cluster.color)
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 border-b hover:bg-muted/40 transition-colors">
+      {color !== 'none' && (
+        <div className={cn('size-1.5 rounded-full flex-shrink-0', clusterColorStyles[color].dot)} />
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-sm font-medium text-foreground truncate">{cluster.name}</span>
+          {cluster.platform === 'aws' && (
+            <Badge variant="outline" className="text-amber-600 border-amber-600/30 bg-amber-50 dark:bg-amber-950 dark:text-amber-400 flex-shrink-0 text-[10px] px-1.5 py-0">
+              MSK
+            </Badge>
+          )}
+        </div>
+        <div className="text-xs text-muted-foreground truncate">{cluster.brokers.join(', ')}</div>
+      </div>
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => connectTo(cluster.id)}
+          className="h-7 text-amber-600 hover:text-amber-600 gap-1"
+        >
+          Connect <ArrowRight size={11} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => editCluster(cluster.id)}
+          aria-label={`Edit ${cluster.name}`}
+          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+        >
+          <Pencil size={12} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => deleteCluster(cluster.id)}
+          aria-label={`Delete ${cluster.name}`}
+          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+        >
+          <Trash2 size={12} />
+        </Button>
+      </div>
     </div>
   )
 }

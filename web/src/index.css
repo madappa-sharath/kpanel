@@ -148,6 +148,25 @@ body {
 /* ─── Selection ──────────────────────────────────────────────────────────── */
 ::selection { background: oklch(0.769 0.188 70.08 / 20%); }
 
+@keyframes cluster-accent-pulse {
+  0%, 100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.35);
+  }
+}
+
+.animate-cluster-accent-pulse {
+  animation: cluster-accent-pulse 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-cluster-accent-pulse {
+    animation: none;
+  }
+}
+
 /* ─── Tailwind base layer ────────────────────────────────────────────────── */
 @layer base {
   * {

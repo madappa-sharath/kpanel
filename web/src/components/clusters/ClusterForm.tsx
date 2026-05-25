@@ -2,11 +2,12 @@
 // Edit mode (cluster prop): flat single-page form with "Save and test"
 
 import { useState } from 'react'
-import { ArrowRight, AlertCircle, Check, CheckCircle2, XCircle, Loader2, Info } from 'lucide-react'
-import type { Platform, AuthMechanism, AddClusterRequest, Cluster } from '../../types/cluster'
+import { ArrowRight, AlertCircle, Check, CheckCircle2, XCircle, Loader2, Info, CircleOff } from 'lucide-react'
+import type { Platform, AuthMechanism, AddClusterRequest, Cluster, ClusterColor } from '../../types/cluster'
 import { useAddCluster, useUpdateCluster } from '../../hooks/useClusterConnection'
 import { api } from '../../lib/api'
 import { slugify } from '../../lib/utils'
+import { CLUSTER_COLORS, clusterColorStyles, normalizeClusterColor } from '../../lib/clusterColors'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
@@ -17,6 +18,7 @@ type Step = 'platform' | 'connection' | 'auth'
 
 interface FormState {
   platform:       Platform
+  color:          ClusterColor
   name:           string
   brokers:        string
   mechanism:      AuthMechanism
@@ -31,6 +33,7 @@ interface FormState {
 
 const INITIAL: FormState = {
   platform:       'generic',
+  color:          'none',
   name:           '',
   brokers:        '',
   mechanism:      'none',
@@ -57,6 +60,7 @@ export function ClusterForm({ onSuccess, onCancel, cluster }: ClusterFormProps) 
     const awsCfg = cluster.platform === 'aws' ? cluster.platformConfig?.aws : undefined
     return {
       platform:       cluster.platform,
+      color:          normalizeClusterColor(cluster.color),
       name:           cluster.name,
       brokers:        cluster.brokers.join(', '),
       mechanism:      cluster.platform === 'aws' ? 'aws_iam' : (cluster.auth?.mechanism ?? 'none'),
@@ -95,6 +99,7 @@ export function ClusterForm({ onSuccess, onCancel, cluster }: ClusterFormProps) 
     const body: AddClusterRequest = {
       name:     form.name,
       platform: form.platform,
+      color:    form.color === 'none' ? undefined : form.color,
       brokers:  form.brokers.split(/[,\n]/).map((b) => b.trim()).filter(Boolean),
       auth: {
         mechanism:      form.platform === 'aws' ? 'aws_iam' : form.mechanism,
@@ -166,6 +171,8 @@ export function ClusterForm({ onSuccess, onCancel, cluster }: ClusterFormProps) 
               <label className={lbl}>Name</label>
               <Input value={form.name} onChange={(e) => patch({ name: e.target.value })} />
             </div>
+
+            <ClusterColorField value={form.color} onChange={(color) => patch({ color })} labelClassName={lbl} />
 
             <div>
               <label className={lbl}>Broker addresses</label>
@@ -412,6 +419,11 @@ export function ClusterForm({ onSuccess, onCancel, cluster }: ClusterFormProps) 
               autoFocus
             />
           </div>
+          <ClusterColorField
+            value={form.color}
+            onChange={(color) => patch({ color })}
+            labelClassName="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5"
+          />
           <div>
             <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">Broker addresses</label>
             <Input
@@ -548,6 +560,48 @@ export function ClusterForm({ onSuccess, onCancel, cluster }: ClusterFormProps) 
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function ClusterColorField({
+  value,
+  onChange,
+  labelClassName,
+}: {
+  value: ClusterColor
+  onChange: (color: ClusterColor) => void
+  labelClassName: string
+}) {
+  return (
+    <div>
+      <label className={labelClassName}>Color</label>
+      <div className="flex flex-wrap gap-2">
+        {CLUSTER_COLORS.map((color) => {
+          const selected = value === color.value
+          return (
+            <button
+              key={color.value}
+              type="button"
+              title={color.label}
+              aria-label={`Cluster color: ${color.label}`}
+              aria-pressed={selected}
+              onClick={() => onChange(color.value)}
+              className={cn(
+                'h-8 w-8 rounded-md border border-border bg-background inline-flex items-center justify-center transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                selected && 'ring-2 ring-offset-2 ring-offset-background',
+                selected && clusterColorStyles[color.value].ring,
+              )}
+            >
+              {color.value === 'none' ? (
+                <CircleOff size={16} className="text-muted-foreground/70" />
+              ) : (
+                <span className={cn('size-4 rounded-full', clusterColorStyles[color.value].dot)} />
+              )}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

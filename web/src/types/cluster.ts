@@ -2,6 +2,8 @@
 
 export type Platform = 'aws' | 'confluent' | 'generic'
 
+export type ClusterColor = 'none' | 'red' | 'orange' | 'amber' | 'green' | 'blue' | 'violet' | 'zinc'
+
 export type AuthMechanism =
   | 'none'
   | 'sasl_plain'
@@ -36,6 +38,7 @@ export interface Cluster {
   id: string
   name: string
   platform: Platform
+  color?: ClusterColor
   brokers: string[]
   auth: ClusterAuth
   tls: TLSConfig
@@ -78,6 +81,7 @@ export interface AddClusterRequest {
   id?: string
   name: string
   platform: Platform
+  color?: ClusterColor
   brokers: string[]
   auth: {
     mechanism: AuthMechanism

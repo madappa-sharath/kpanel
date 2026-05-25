@@ -14,6 +14,7 @@ type Cluster struct {
 	ID             string                     `json:"id"`
 	Name           string                     `json:"name"`
 	Platform       string                     `json:"platform"` // "aws" | "confluent" | "generic"
+	Color          string                     `json:"color,omitempty"`
 	Brokers        []string                   `json:"brokers"`
 	PlatformConfig map[string]json.RawMessage `json:"platformConfig,omitempty"`
 	Auth           *ClusterAuth               `json:"auth,omitempty"`
