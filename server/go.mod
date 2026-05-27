@@ -8,7 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.57.0
 	github.com/aws/aws-sdk-go-v2/service/kafka v1.51.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1
-	github.com/go-chi/chi/v5 v5.2.5
+	github.com/go-chi/chi/v5 v5.3.0
 	github.com/testcontainers/testcontainers-go/modules/kafka v0.42.0
 	github.com/tidwall/gjson v1.19.0
 	github.com/twmb/franz-go v1.21.2
