@@ -159,11 +159,17 @@ func (h *Handlers) ClusterOverview(w http.ResponseWriter, r *http.Request) {
 
 	kafkaVersion := "unknown"
 	if vRes.err == nil {
-		// Prefer the controller broker for a deterministic pick
-		if bv, ok := vRes.versions[mRes.meta.Controller]; ok {
+		// Prefer the controller broker for a deterministic pick. A per-broker
+		// ApiVersions call can fail independently of the overall request; when
+		// it does, BrokerApiVersions.Err is set and the underlying response is
+		// nil, so VersionGuess() panics. Skip errored entries.
+		if bv, ok := vRes.versions[mRes.meta.Controller]; ok && bv.Err == nil {
 			kafkaVersion = bv.VersionGuess()
 		} else {
 			for _, bv := range vRes.versions {
+				if bv.Err != nil {
+					continue
+				}
 				kafkaVersion = bv.VersionGuess()
 				break
 			}
