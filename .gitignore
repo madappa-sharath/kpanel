@@ -9,6 +9,7 @@ server/cmd/kpanel/public/
 # Bun/Node
 web/node_modules/
 web/dist/
+web/sfw bun install/
 
 # Build output
 dist/
