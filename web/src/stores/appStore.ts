@@ -28,6 +28,7 @@ export interface TopicListState {
 export interface GroupListState {
   search: string
   stateFilter: string
+  sortBy: 'lag-desc' | 'lag-asc' | 'group-id'
   page: number
 }
 
@@ -53,6 +54,7 @@ const defaultTopicListState: TopicListState = {
 const defaultGroupListState: GroupListState = {
   search: '',
   stateFilter: '',
+  sortBy: 'lag-desc',
   page: 1,
 }
 

@@ -5,7 +5,7 @@ import { PageHeader } from '../../../../components/shared/PageHeader'
 import { GroupTable } from '../../../../components/consumer-groups/GroupTable'
 import { useConsumerGroups } from '../../../../hooks/useConsumerGroups'
 import { EmptyState } from '../../../../components/shared/EmptyState'
-import { Users } from 'lucide-react'
+import { ArrowDownWideNarrow, ListFilter, Search, Users } from 'lucide-react'
 import { Input } from '#/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import {
@@ -24,6 +24,7 @@ const ALL_STATES = ['Stable', 'Empty', 'PreparingRebalance', 'CompletingRebalanc
 const DEFAULT_LIST_STATE: GroupListState = {
   search: '',
   stateFilter: '',
+  sortBy: 'lag-desc',
   page: 1,
 }
 
@@ -40,40 +41,72 @@ export function GroupsPage() {
   const { data: groups, isLoading, error } = useConsumerGroups(clusterId)
   const listState = useAppStore((state) => state.groupListStateByCluster[clusterId] ?? DEFAULT_LIST_STATE)
   const setGroupListState = useAppStore((state) => state.setGroupListState)
-  const { search, stateFilter } = listState
+  const { search, stateFilter, sortBy } = listState
 
   const filtered = (groups ?? []).filter((g) => {
     const matchSearch = g.id.toLowerCase().includes(search.toLowerCase())
     const matchState = !stateFilter || g.state === stateFilter
     return matchSearch && matchState
   })
+  const sortedGroups = [...filtered].sort((a, b) => {
+    if (sortBy === 'lag-asc') return a.total_lag - b.total_lag || a.id.localeCompare(b.id)
+    if (sortBy === 'group-id') return a.id.localeCompare(b.id)
+    return b.total_lag - a.total_lag || a.id.localeCompare(b.id)
+  })
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(sortedGroups.length / PAGE_SIZE))
   const page = Math.min(listState.page, pageCount)
-  const pagedGroups = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-  const showPagination = filtered.length > PAGE_SIZE
+  const pagedGroups = sortedGroups.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const showPagination = sortedGroups.length > PAGE_SIZE
 
   return (
     <div className="p-6">
       <PageHeader title="Consumer Groups" description={`${groups?.length ?? '…'} groups`}>
-        <Select value={stateFilter || 'all'} onValueChange={(v) => setGroupListState(clusterId, { stateFilter: v === 'all' ? '' : v, page: 1 })}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="All states" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All states</SelectItem>
-            {ALL_STATES.map((s) => (
-              <SelectItem key={s} value={s}>{s}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Input
-          type="search"
-          placeholder="Search groups…"
-          value={search}
-          onChange={(e) => setGroupListState(clusterId, { search: e.target.value, page: 1 })}
-          className="w-48"
-        />
+        <div role="toolbar" aria-label="Consumer group controls" className="flex items-center gap-2">
+          <div className="flex h-10 items-center rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+            <div className="flex items-center gap-2 pl-3 pr-1 text-sm text-muted-foreground">
+              <ListFilter className="size-4" aria-hidden="true" />
+              <span>State</span>
+            </div>
+            <Select value={stateFilter || 'all'} onValueChange={(v) => setGroupListState(clusterId, { stateFilter: v === 'all' ? '' : v, page: 1 })}>
+              <SelectTrigger className="h-9 w-32 border-0 bg-transparent pl-2 pr-3 shadow-none focus:ring-0 focus:ring-offset-0">
+                <SelectValue placeholder="All states" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All states</SelectItem>
+                {ALL_STATES.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex h-10 items-center rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+            <div className="flex items-center gap-2 pl-3 pr-1 text-sm text-muted-foreground">
+              <ArrowDownWideNarrow className="size-4" aria-hidden="true" />
+              <span>Sort</span>
+            </div>
+            <Select value={sortBy} onValueChange={(v) => setGroupListState(clusterId, { sortBy: v as GroupListState['sortBy'], page: 1 })}>
+              <SelectTrigger className="h-9 w-36 border-0 bg-transparent pl-2 pr-3 shadow-none focus:ring-0 focus:ring-offset-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="lag-desc">Total lag ↓</SelectItem>
+                <SelectItem value="lag-asc">Total lag ↑</SelectItem>
+                <SelectItem value="group-id">Group ID A-Z</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Input
+              type="search"
+              placeholder="Search groups…"
+              value={search}
+              onChange={(e) => setGroupListState(clusterId, { search: e.target.value, page: 1 })}
+              className="w-48 pl-9"
+            />
+          </div>
+        </div>
       </PageHeader>
 
       {isLoading && <p className="text-muted-foreground">Loading consumer groups…</p>}
@@ -93,7 +126,7 @@ export function GroupsPage() {
         <div className="flex items-center justify-between mt-4">
           {/* Left: range label */}
           <p className="text-sm text-muted-foreground">
-            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} groups
+            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, sortedGroups.length)} of {sortedGroups.length} groups
           </p>
 
           {/* Center: page number links */}
