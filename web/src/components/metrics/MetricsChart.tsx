@@ -75,8 +75,8 @@ export function MetricsChart({ series, isLoading = false, height = 160 }: Metric
     pts.length > 1 && pts[pts.length - 1].ts - pts[0].ts > 20 * 60 * 60 * 1000
 
   return (
-    <div>
-      <p className="text-xs text-muted-foreground mb-2">{series.label}</p>
+    <div className="min-w-0">
+      <p className="mb-2 min-w-0 truncate text-xs text-muted-foreground">{series.label}</p>
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={series.datapoints} margin={{ top: 2, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />

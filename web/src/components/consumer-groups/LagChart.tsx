@@ -82,8 +82,8 @@ export function LagChart({ clusterId, groupId }: LagChartProps) {
   const showTopics = topics.length > 0 && topics.length <= 8
 
   return (
-    <div className="rounded-md border bg-card p-4">
-      <p className="text-sm text-muted-foreground mb-3">
+    <div className="min-w-0 rounded-md border bg-card p-4">
+      <p className="mb-3 min-w-0 truncate text-sm text-muted-foreground">
         Live session history — sampled every 15 s · {rows.length} sample{rows.length !== 1 ? 's' : ''} · cleared on server restart
       </p>
       <ResponsiveContainer width="100%" height={260}>

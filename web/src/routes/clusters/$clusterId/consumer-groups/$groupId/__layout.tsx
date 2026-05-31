@@ -38,20 +38,20 @@ export function GroupLayout() {
     : 'members'
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full min-w-0 flex-col">
       {/* Breadcrumb + actions */}
-      <div className="px-6 pt-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+      <div className="min-w-0 px-6 pt-5">
+        <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
             <Link
               to="/clusters/$clusterId/consumer-groups"
               params={{ clusterId }}
-              className="text-muted-foreground no-underline hover:text-foreground transition-colors"
+              className="shrink-0 text-muted-foreground no-underline hover:text-foreground transition-colors"
             >
               Consumer Groups
             </Link>
-            <ChevronRight size={13} />
-            <span className="text-foreground font-mono text-sm">{groupId}</span>
+            <ChevronRight size={13} className="shrink-0" />
+            <span className="min-w-0 truncate text-foreground font-mono text-sm">{groupId}</span>
           </div>
           <WriteModeGate>
             <Button variant="ghost" size="sm" onClick={() => setShowReset(true)}>
@@ -62,7 +62,7 @@ export function GroupLayout() {
 
         {/* Stats row */}
         {group && (
-          <div className="flex gap-5 mb-3 text-sm items-center">
+          <div className="mb-3 flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2 text-sm">
             <StatusBadge variant={groupStateVariant(group.state)} label={group.state} />
             <span className="text-muted-foreground">
               Lag:{' '}
@@ -105,7 +105,7 @@ export function GroupLayout() {
         />
       </div>
 
-      <div className="flex-1 overflow-auto">
+      <div className="min-w-0 flex-1 overflow-auto">
         <Outlet />
       </div>
 

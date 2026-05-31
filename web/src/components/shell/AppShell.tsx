@@ -9,14 +9,14 @@ export function AppShell() {
       className="bg-background text-foreground"
       style={{
         display: 'grid',
-        gridTemplateColumns: 'var(--sidebar-w) 1fr',
+        gridTemplateColumns: 'var(--sidebar-w) minmax(0, 1fr)',
         gridTemplateRows: 'var(--header-h) 1fr',
         height: '100vh',
         overflow: 'hidden',
       }}
     >
       {/* Sidebar spans both rows */}
-      <div style={{ gridRow: '1 / -1' }}>
+      <div className="min-w-0" style={{ gridRow: '1 / -1' }}>
         <Sidebar />
       </div>
 
@@ -24,7 +24,7 @@ export function AppShell() {
       <Header />
 
       {/* Main content */}
-      <main className="overflow-auto bg-background flex flex-col">
+      <main className="min-w-0 overflow-auto bg-background flex flex-col">
         <UpdateBanner />
         <Outlet />
       </main>

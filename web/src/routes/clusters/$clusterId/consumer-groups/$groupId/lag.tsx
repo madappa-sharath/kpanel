@@ -50,24 +50,24 @@ export function GroupLagPage() {
   const selectedTimeLag = timeLagSeries.find((s) => s.label === effectiveTopic)
 
   return (
-    <div className="p-6 flex flex-col gap-6">
+    <div className="flex min-w-0 flex-col gap-6 p-6">
       {/* Kafka offset-based lag history */}
       <LagChart clusterId={clusterId} groupId={groupId} />
 
       {/* CloudWatch lag (AWS MSK only) */}
       {isAWS && (
-        <div>
-          <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <div className="min-w-0">
+          <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-3">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               CloudWatch Lag
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
               {topics.length > 1 && effectiveTopic && (
                 <Select
                   value={effectiveTopic}
                   onValueChange={(v) => setTopicOverride(v)}
                 >
-                  <SelectTrigger className="h-7 w-[220px] text-xs">
+                  <SelectTrigger className="h-7 w-[220px] max-w-full text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -85,20 +85,20 @@ export function GroupLagPage() {
           <MetricsErrorBanner error={metricsError as Error | null} />
 
           {metricsLoading ? (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-md border bg-card p-4">
+            <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+              <div className="min-w-0 rounded-md border bg-card p-4">
                 <p className="text-xs text-muted-foreground mb-2">Offset Lag</p>
                 <MetricsChart series={null} isLoading />
               </div>
-              <div className="rounded-md border bg-card p-4">
+              <div className="min-w-0 rounded-md border bg-card p-4">
                 <p className="text-xs text-muted-foreground mb-2">Time Lag</p>
                 <MetricsChart series={null} isLoading />
               </div>
             </div>
           ) : effectiveTopic ? (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-md border bg-card p-4">
-                <p className="text-xs text-muted-foreground mb-2">
+            <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+              <div className="min-w-0 rounded-md border bg-card p-4">
+                <p className="mb-2 min-w-0 truncate text-xs text-muted-foreground">
                   Offset Lag — <span className="font-mono">{effectiveTopic}</span>
                 </p>
                 <MetricsChart
@@ -109,8 +109,8 @@ export function GroupLagPage() {
                   }
                 />
               </div>
-              <div className="rounded-md border bg-card p-4">
-                <p className="text-xs text-muted-foreground mb-2">
+              <div className="min-w-0 rounded-md border bg-card p-4">
+                <p className="mb-2 min-w-0 truncate text-xs text-muted-foreground">
                   Time Lag — <span className="font-mono">{effectiveTopic}</span>
                 </p>
                 <MetricsChart

@@ -77,13 +77,13 @@ export function WriteModeBanner({
   return (
     <div
       className={cn(
-        'mb-3 flex flex-wrap items-center justify-end gap-2 text-sm text-muted-foreground',
+        'mb-3 flex min-w-0 flex-wrap items-center justify-end gap-2 text-sm text-muted-foreground',
         className,
       )}
     >
-      <div className="flex min-w-0 items-center justify-end gap-2 text-right">
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-2 text-right">
         <Shield size={14} className="shrink-0" />
-        <span className="font-medium text-foreground">Read-only</span>
+        <span className="shrink-0 font-medium text-foreground">Read-only</span>
         <span className="hidden sm:inline">·</span>
         <span className="min-w-0 truncate">{description}</span>
       </div>
