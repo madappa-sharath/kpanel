@@ -45,10 +45,14 @@ type overviewResp struct {
 type topicSummaryResp struct {
 	Name                      string `json:"name"`
 	Partitions                int    `json:"partitions"`
+	MessageCount              *int64 `json:"message_count"`
 	ReplicationFactor         int    `json:"replication_factor"`
 	Internal                  bool   `json:"internal"`
 	ISRHealth                 string `json:"isr_health"`
 	UnderReplicatedPartitions int    `json:"under_replicated_partitions"`
+	LogSizeBytes              *int64 `json:"log_size_bytes"`
+	LeaderLogSizeBytes        *int64 `json:"leader_log_size_bytes"`
+	ReplicaOverheadBytes      *int64 `json:"replica_overhead_bytes"`
 }
 
 type partitionDetailResp struct {
@@ -61,9 +65,14 @@ type partitionDetailResp struct {
 }
 
 type topicDetailResp struct {
-	Name       string                     `json:"name"`
-	Partitions []partitionDetailResp      `json:"partitions"`
-	Config     map[string]configEntryResp `json:"config"`
+	Name                    string                     `json:"name"`
+	Partitions              []partitionDetailResp      `json:"partitions"`
+	Config                  map[string]configEntryResp `json:"config"`
+	LogSizeBytes            *int64                     `json:"log_size_bytes"`
+	LeaderLogSizeBytes      *int64                     `json:"leader_log_size_bytes"`
+	ReplicaOverheadBytes    *int64                     `json:"replica_overhead_bytes"`
+	LogSizeAvailable        bool                       `json:"log_size_available"`
+	LogSizeUnavailableCause string                     `json:"log_size_unavailable_cause"`
 }
 
 type messageResp struct {

@@ -22,6 +22,8 @@ function persistWriteMode(enabled: boolean) {
 export interface TopicListState {
   search: string
   showInternal: boolean
+  sortKey: 'name' | 'partitions' | 'message_count' | 'log_size_bytes' | 'replication_factor' | 'isr_health'
+  sortDir: 'asc' | 'desc'
   page: number
 }
 
@@ -48,6 +50,8 @@ interface AppState {
 const defaultTopicListState: TopicListState = {
   search: '',
   showInternal: false,
+  sortKey: 'name',
+  sortDir: 'asc',
   page: 1,
 }
 

@@ -146,11 +146,23 @@ func TestListTopics_Integration_Shape(t *testing.T) {
 		if topic.Partitions <= 0 {
 			t.Errorf("topic %q: partitions=%d, want > 0", topic.Name, topic.Partitions)
 		}
+		if topic.MessageCount != nil && *topic.MessageCount < 0 {
+			t.Errorf("topic %q: message_count=%d, want >= 0", topic.Name, *topic.MessageCount)
+		}
 		if topic.ReplicationFactor <= 0 {
 			t.Errorf("topic %q: replication_factor=%d, want > 0", topic.Name, topic.ReplicationFactor)
 		}
 		if topic.ISRHealth != "healthy" && topic.ISRHealth != "degraded" {
 			t.Errorf("topic %q: isr_health=%q, want healthy or degraded", topic.Name, topic.ISRHealth)
+		}
+		if topic.LogSizeBytes != nil && *topic.LogSizeBytes < 0 {
+			t.Errorf("topic %q: log_size_bytes=%d, want >= 0", topic.Name, *topic.LogSizeBytes)
+		}
+		if topic.LeaderLogSizeBytes != nil && *topic.LeaderLogSizeBytes < 0 {
+			t.Errorf("topic %q: leader_log_size_bytes=%d, want >= 0", topic.Name, *topic.LeaderLogSizeBytes)
+		}
+		if topic.ReplicaOverheadBytes != nil && *topic.ReplicaOverheadBytes < 0 {
+			t.Errorf("topic %q: replica_overhead_bytes=%d, want >= 0", topic.Name, *topic.ReplicaOverheadBytes)
 		}
 	}
 }
@@ -260,6 +272,17 @@ func TestGetTopic_Integration_Shape(t *testing.T) {
 	}
 	if len(resp.Config) == 0 {
 		t.Error("config: expected non-empty map")
+	}
+	if resp.LogSizeAvailable {
+		if resp.LogSizeBytes == nil {
+			t.Error("log_size_bytes must be present when log_size_available=true")
+		}
+		if resp.LeaderLogSizeBytes == nil {
+			t.Error("leader_log_size_bytes must be present when log_size_available=true")
+		}
+		if resp.ReplicaOverheadBytes == nil {
+			t.Error("replica_overhead_bytes must be present when log_size_available=true")
+		}
 	}
 }
 

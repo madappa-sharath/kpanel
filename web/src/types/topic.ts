@@ -1,10 +1,14 @@
 export interface Topic {
   name: string
   partitions: number
+  message_count: number | null
   replication_factor: number
   internal: boolean
   isr_health: 'healthy' | 'degraded'
   under_replicated_partitions: number
+  log_size_bytes: number | null
+  leader_log_size_bytes: number | null
+  replica_overhead_bytes: number | null
 }
 
 export interface TopicPartition {
@@ -25,6 +29,11 @@ export interface TopicDetail {
   name: string
   partitions: TopicPartition[]
   config: Record<string, ConfigEntry>
+  log_size_bytes: number | null
+  leader_log_size_bytes: number | null
+  replica_overhead_bytes: number | null
+  log_size_available: boolean
+  log_size_unavailable_cause?: string
 }
 
 export interface Message {

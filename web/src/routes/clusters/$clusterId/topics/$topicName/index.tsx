@@ -9,7 +9,7 @@ import { useTopicMetrics } from '../../../../../hooks/useMetrics'
 import { MetricsChart } from '../../../../../components/metrics/MetricsChart'
 import { MetricsErrorBanner } from '../../../../../components/metrics/MetricsErrorBanner'
 import { TimeRangePicker, type TimeRange } from '../../../../../components/metrics/TimeRangePicker'
-import { formatRetention } from '../../../../../lib/utils'
+import { formatBytes, formatRetention } from '../../../../../lib/utils'
 import { StatusBadge } from '../../../../../components/shared/StatusBadge'
 import { cn } from '#/lib/utils'
 
@@ -58,6 +58,9 @@ export function TopicOverviewPage() {
   const minISR = topic.config['min.insync.replicas']?.value ?? '—'
   const cleanupPolicy = topic.config['cleanup.policy']?.value ?? 'delete'
   const replicationFactor = topic.partitions[0]?.replicas.length ?? '—'
+  const diskUsage = topic.log_size_bytes === null ? '—' : formatBytes(topic.log_size_bytes)
+  const primaryData = topic.leader_log_size_bytes === null ? '—' : formatBytes(topic.leader_log_size_bytes)
+  const replicaOverhead = topic.replica_overhead_bytes === null ? '—' : formatBytes(topic.replica_overhead_bytes)
 
   const leaderCounts = Object.values(leaderCount)
   const avgLeaders = leaderCounts.length > 0
@@ -87,15 +90,18 @@ export function TopicOverviewPage() {
       )}
 
       {/* Stats cards */}
-      <div className="grid grid-cols-7 gap-3 mb-7">
+      <div className="grid grid-cols-2 md:grid-cols-5 xl:grid-cols-10 gap-3 mb-7">
         {[
           { label: 'Partitions', value: topic.partitions.length },
           { label: 'Total Messages', value: totalMessages.toLocaleString() },
-          { label: 'End Offset', value: endOffset.toLocaleString(), sub: 'max across partitions' },
+          { label: 'Disk Usage', value: diskUsage, sub: topic.log_size_available ? 'includes replicas' : 'unavailable' },
+          { label: 'Primary Data', value: primaryData, sub: topic.log_size_available ? 'leader replicas' : undefined },
+          { label: 'Replica Overhead', value: replicaOverhead },
           { label: 'Replication', value: replicationFactor },
           { label: 'Min ISR', value: minISR },
           { label: 'Retention', value: formatRetention(retentionMs) },
           { label: 'Cleanup', value: cleanupPolicy },
+          { label: 'End Offset', value: endOffset.toLocaleString(), sub: 'max partition' },
         ].map(({ label, value, sub }) => (
           <div key={label} className="border rounded-md p-3 bg-card">
             <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{label}</p>

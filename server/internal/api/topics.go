@@ -22,10 +22,14 @@ import (
 type topicSummary struct {
 	Name                      string `json:"name"`
 	Partitions                int    `json:"partitions"`
+	MessageCount              *int64 `json:"message_count"`
 	ReplicationFactor         int    `json:"replication_factor"`
 	Internal                  bool   `json:"internal"`
 	ISRHealth                 string `json:"isr_health"` // "healthy" | "degraded"
 	UnderReplicatedPartitions int    `json:"under_replicated_partitions"`
+	LogSizeBytes              *int64 `json:"log_size_bytes"`
+	LeaderLogSizeBytes        *int64 `json:"leader_log_size_bytes"`
+	ReplicaOverheadBytes      *int64 `json:"replica_overhead_bytes"`
 }
 
 type partitionDetail struct {
@@ -38,9 +42,14 @@ type partitionDetail struct {
 }
 
 type topicDetailResponse struct {
-	Name       string                 `json:"name"`
-	Partitions []partitionDetail      `json:"partitions"`
-	Config     map[string]configEntry `json:"config"`
+	Name                    string                 `json:"name"`
+	Partitions              []partitionDetail      `json:"partitions"`
+	Config                  map[string]configEntry `json:"config"`
+	LogSizeBytes            *int64                 `json:"log_size_bytes"`
+	LeaderLogSizeBytes      *int64                 `json:"leader_log_size_bytes"`
+	ReplicaOverheadBytes    *int64                 `json:"replica_overhead_bytes"`
+	LogSizeAvailable        bool                   `json:"log_size_available"`
+	LogSizeUnavailableCause string                 `json:"log_size_unavailable_cause,omitempty"`
 }
 
 type messageResponse struct {
@@ -145,16 +154,112 @@ func writeTopicAdminResponse(w http.ResponseWriter, err error) {
 func fetchOffsets(ctx context.Context, adm *kadm.Client, topic string) (
 	start kadm.ListedOffsets, end kadm.ListedOffsets, startErr, endErr error,
 ) {
+	return fetchOffsetsForTopics(ctx, adm, []string{topic})
+}
+
+func fetchOffsetsForTopics(ctx context.Context, adm *kadm.Client, topics []string) (
+	start kadm.ListedOffsets, end kadm.ListedOffsets, startErr, endErr error,
+) {
+	if len(topics) == 0 {
+		return kadm.ListedOffsets{}, kadm.ListedOffsets{}, nil, nil
+	}
+
 	type result struct {
 		offsets kadm.ListedOffsets
 		err     error
 	}
 	startCh := make(chan result, 1)
 	endCh := make(chan result, 1)
-	go func() { o, e := adm.ListStartOffsets(ctx, topic); startCh <- result{o, e} }()
-	go func() { o, e := adm.ListEndOffsets(ctx, topic); endCh <- result{o, e} }()
+	go func() { o, e := adm.ListStartOffsets(ctx, topics...); startCh <- result{o, e} }()
+	go func() { o, e := adm.ListEndOffsets(ctx, topics...); endCh <- result{o, e} }()
 	s, e := <-startCh, <-endCh
 	return s.offsets, e.offsets, s.err, e.err
+}
+
+type topicLogSize struct {
+	PhysicalBytes int64
+	LeaderBytes   int64
+}
+
+// topicLogSizeFromDetails aggregates DescribeLogDirs replica sizes by topic.
+// PhysicalBytes is replicated local disk usage; LeaderBytes approximates the
+// primary topic data by summing only leader replica log segments.
+func topicLogSizeFromDetails(ctx context.Context, adm *kadm.Client, details kadm.TopicDetails) (map[string]topicLogSize, error) {
+	if len(details) == 0 {
+		return map[string]topicLogSize{}, nil
+	}
+
+	logDirs, err := adm.DescribeAllLogDirs(ctx, details.TopicsSet())
+	if err != nil {
+		return nil, err
+	}
+
+	leaders := make(map[string]map[int32]int32)
+	for topic, td := range details {
+		if td.Err != nil {
+			continue
+		}
+		leaders[topic] = make(map[int32]int32, len(td.Partitions))
+		for partID, p := range td.Partitions {
+			if p.Err == nil {
+				leaders[topic][partID] = p.Leader
+			}
+		}
+	}
+
+	sizes := make(map[string]topicLogSize, len(details))
+	logDirs.Each(func(d kadm.DescribedLogDir) {
+		if d.Err != nil {
+			return
+		}
+		d.Topics.Each(func(p kadm.DescribedLogDirPartition) {
+			size := sizes[p.Topic]
+			size.PhysicalBytes += p.Size
+			if topicLeaders, ok := leaders[p.Topic]; ok && topicLeaders[p.Partition] == p.Broker {
+				size.LeaderBytes += p.Size
+			}
+			sizes[p.Topic] = size
+		})
+	})
+
+	return sizes, nil
+}
+
+func ptrInt64(v int64) *int64 {
+	return &v
+}
+
+func topicMessageCounts(
+	details kadm.TopicDetails,
+	startOffsets kadm.ListedOffsets,
+	endOffsets kadm.ListedOffsets,
+	startErr error,
+	endErr error,
+) map[string]int64 {
+	if startErr != nil || endErr != nil {
+		return nil
+	}
+
+	counts := make(map[string]int64, len(details))
+	for topic, td := range details {
+		if td.Err != nil {
+			continue
+		}
+		var count int64
+		for partID, p := range td.Partitions {
+			if p.Err != nil {
+				continue
+			}
+			start, startOK := startOffsets[topic][partID]
+			end, endOK := endOffsets[topic][partID]
+			if !startOK || !endOK || start.Err != nil || end.Err != nil {
+				continue
+			}
+			count += max(0, end.Offset-start.Offset)
+		}
+		counts[topic] = count
+	}
+	return counts
 }
 
 // ListTopics godoc
@@ -180,6 +285,11 @@ func (h *Handlers) ListTopics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	logSizes, _ := topicLogSizeFromDetails(ctx, admClient, details)
+	topicNames := details.TopicsSet().Topics()
+	startOffsets, endOffsets, startErr, endErr := fetchOffsetsForTopics(ctx, admClient, topicNames)
+	messageCounts := topicMessageCounts(details, startOffsets, endOffsets, startErr, endErr)
+
 	topics := make([]topicSummary, 0, len(details))
 	for _, td := range details {
 		if td.Err != nil {
@@ -202,13 +312,29 @@ func (h *Handlers) ListTopics(w http.ResponseWriter, r *http.Request) {
 		if underReplicated > 0 {
 			isrHealth = "degraded"
 		}
+		var logSizeBytes *int64
+		var leaderLogSizeBytes *int64
+		var replicaOverheadBytes *int64
+		if size, ok := logSizes[td.Topic]; ok {
+			logSizeBytes = ptrInt64(size.PhysicalBytes)
+			leaderLogSizeBytes = ptrInt64(size.LeaderBytes)
+			replicaOverheadBytes = ptrInt64(size.PhysicalBytes - size.LeaderBytes)
+		}
+		var messageCount *int64
+		if count, ok := messageCounts[td.Topic]; ok {
+			messageCount = ptrInt64(count)
+		}
 		topics = append(topics, topicSummary{
 			Name:                      td.Topic,
 			Partitions:                len(td.Partitions),
+			MessageCount:              messageCount,
 			ReplicationFactor:         replicationFactor,
 			Internal:                  td.IsInternal,
 			ISRHealth:                 isrHealth,
 			UnderReplicatedPartitions: underReplicated,
+			LogSizeBytes:              logSizeBytes,
+			LeaderLogSizeBytes:        leaderLogSizeBytes,
+			ReplicaOverheadBytes:      replicaOverheadBytes,
 		})
 	}
 	sort.Slice(topics, func(i, j int) bool { return topics[i].Name < topics[j].Name })
@@ -298,9 +424,14 @@ func (h *Handlers) GetTopic(w http.ResponseWriter, r *http.Request) {
 		configs kadm.ResourceConfigs
 		err     error
 	}
+	type logSizeRes struct {
+		sizes map[string]topicLogSize
+		err   error
+	}
 
 	detailCh := make(chan detailRes, 1)
 	cfgCh := make(chan cfgRes, 1)
+	logSizeCh := make(chan logSizeRes, 1)
 
 	go func() { d, e := admClient.ListTopics(ctx, name); detailCh <- detailRes{d, e} }()
 	go func() { c, e := admClient.DescribeTopicConfigs(ctx, name); cfgCh <- cfgRes{c, e} }()
@@ -318,6 +449,10 @@ func (h *Handlers) GetTopic(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "topic not found")
 		return
 	}
+	go func() {
+		s, e := topicLogSizeFromDetails(ctx, admClient, kadm.TopicDetails{name: td})
+		logSizeCh <- logSizeRes{s, e}
+	}()
 
 	partitions := make([]partitionDetail, 0, len(td.Partitions))
 	for partID, p := range td.Partitions {
@@ -371,10 +506,32 @@ func (h *Handlers) GetTopic(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	logSizeResult := <-logSizeCh
+	var logSizeBytes *int64
+	var leaderLogSizeBytes *int64
+	var replicaOverheadBytes *int64
+	logSizeAvailable := false
+	logSizeUnavailableCause := ""
+	if logSizeResult.err == nil {
+		if size, ok := logSizeResult.sizes[name]; ok {
+			logSizeBytes = ptrInt64(size.PhysicalBytes)
+			leaderLogSizeBytes = ptrInt64(size.LeaderBytes)
+			replicaOverheadBytes = ptrInt64(size.PhysicalBytes - size.LeaderBytes)
+			logSizeAvailable = true
+		}
+	} else {
+		logSizeUnavailableCause = logSizeResult.err.Error()
+	}
+
 	writeJSON(w, http.StatusOK, topicDetailResponse{
-		Name:       name,
-		Partitions: partitions,
-		Config:     configMap,
+		Name:                    name,
+		Partitions:              partitions,
+		Config:                  configMap,
+		LogSizeBytes:            logSizeBytes,
+		LeaderLogSizeBytes:      leaderLogSizeBytes,
+		ReplicaOverheadBytes:    replicaOverheadBytes,
+		LogSizeAvailable:        logSizeAvailable,
+		LogSizeUnavailableCause: logSizeUnavailableCause,
 	})
 }
 

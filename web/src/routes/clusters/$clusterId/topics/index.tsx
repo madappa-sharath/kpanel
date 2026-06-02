@@ -22,11 +22,16 @@ import {
 import { CreateTopicModal } from '../../../../components/topics/CreateTopicModal'
 import { WriteModeBanner, WriteModeGate } from '../../../../components/shared/WriteModeControl'
 import { useAppStore, type TopicListState } from '../../../../stores/appStore'
+import type { Topic } from '../../../../types/topic'
 
 const PAGE_SIZE = 15
+type TopicSortKey = TopicListState['sortKey']
+
 const DEFAULT_LIST_STATE: TopicListState = {
   search: '',
   showInternal: false,
+  sortKey: 'name',
+  sortDir: 'asc',
   page: 1,
 }
 
@@ -38,24 +43,73 @@ function getPageRange(page: number, pageCount: number): (number | 'ellipsis')[] 
   return [1, 'ellipsis', page - 1, page, page + 1, 'ellipsis', pageCount]
 }
 
+function compareNullableNumber(a: number | null, b: number | null, dir: 'asc' | 'desc') {
+  if (a === null && b === null) return 0
+  if (a === null) return 1
+  if (b === null) return -1
+  const result = a - b
+  return dir === 'asc' ? result : -result
+}
+
+function compareTopics(a: Topic, b: Topic, key: TopicSortKey, dir: 'asc' | 'desc') {
+  switch (key) {
+    case 'name':
+      return dir === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
+    case 'partitions':
+      return dir === 'asc' ? a.partitions - b.partitions : b.partitions - a.partitions
+    case 'message_count':
+      return compareNullableNumber(a.message_count, b.message_count, dir)
+    case 'log_size_bytes':
+      return compareNullableNumber(a.log_size_bytes, b.log_size_bytes, dir)
+    case 'replication_factor':
+      return dir === 'asc' ? a.replication_factor - b.replication_factor : b.replication_factor - a.replication_factor
+    case 'isr_health': {
+      const healthRank = { degraded: 0, healthy: 1 }
+      const result = healthRank[a.isr_health] - healthRank[b.isr_health]
+      return dir === 'asc' ? result : -result
+    }
+  }
+}
+
 export function TopicsPage() {
   const { clusterId } = useParams({ strict: false }) as { clusterId: string }
   const { data: topics, isLoading, error } = useTopics(clusterId)
   const [createOpen, setCreateOpen] = useState(false)
   const listState = useAppStore((state) => state.topicListStateByCluster[clusterId] ?? DEFAULT_LIST_STATE)
   const setTopicListState = useAppStore((state) => state.setTopicListState)
-  const { search, showInternal } = listState
+  const {
+    search,
+    showInternal,
+    sortKey = DEFAULT_LIST_STATE.sortKey,
+    sortDir = DEFAULT_LIST_STATE.sortDir,
+  } = listState
 
   const allTopics = topics ?? []
   const visibleTopics = allTopics.filter((t) => {
     if (!showInternal && t.internal) return false
     return t.name.toLowerCase().includes(search.toLowerCase())
   })
+  const sortedTopics = [...visibleTopics].sort((a, b) => {
+    const result = compareTopics(a, b, sortKey, sortDir)
+    if (result !== 0) return result
+    return a.name.localeCompare(b.name)
+  })
 
-  const pageCount = Math.max(1, Math.ceil(visibleTopics.length / PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(sortedTopics.length / PAGE_SIZE))
   const page = Math.min(listState.page, pageCount)
-  const pagedTopics = visibleTopics.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-  const showPagination = visibleTopics.length > PAGE_SIZE
+  const pagedTopics = sortedTopics.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const showPagination = sortedTopics.length > PAGE_SIZE
+  const handleSort = (key: keyof Topic & string) => {
+    if (key === sortKey) {
+      setTopicListState(clusterId, { sortDir: sortDir === 'asc' ? 'desc' : 'asc', page: 1 })
+      return
+    }
+    setTopicListState(clusterId, {
+      sortKey: key as TopicSortKey,
+      sortDir: key === 'name' || key === 'isr_health' ? 'asc' : 'desc',
+      page: 1,
+    })
+  }
 
   const totalPartitions = allTopics.reduce((sum, t) => sum + t.partitions, 0)
   const hiddenInternalCount = allTopics.filter((t) => t.internal && !showInternal).length
@@ -118,14 +172,20 @@ export function TopicsPage() {
         />
       )}
       {!isLoading && visibleTopics.length > 0 && (
-        <TopicTable clusterId={clusterId} topics={pagedTopics} />
+        <TopicTable
+          clusterId={clusterId}
+          topics={pagedTopics}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onSort={handleSort}
+        />
       )}
 
       {showPagination && (
         <div className="flex items-center justify-between mt-4">
           {/* Left: range label */}
           <p className="text-sm text-muted-foreground">
-            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, visibleTopics.length)} of {visibleTopics.length} topics
+            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, sortedTopics.length)} of {sortedTopics.length} topics
           </p>
 
           {/* Center: page number links */}
