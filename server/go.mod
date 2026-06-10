@@ -11,7 +11,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/testcontainers/testcontainers-go/modules/kafka v0.42.0
 	github.com/tidwall/gjson v1.19.0
-	github.com/twmb/franz-go v1.21.2
+	github.com/twmb/franz-go v1.21.3
 	github.com/twmb/franz-go/pkg/kadm v1.18.0
 	github.com/twmb/franz-go/pkg/kmsg v1.13.1
 	github.com/zalando/go-keyring v0.2.8
