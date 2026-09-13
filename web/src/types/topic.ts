@@ -95,8 +95,17 @@ export interface SearchRequest {
 
 export interface SearchResponse {
   messages: Message[]
+  /** How many records were read and tested. */
   scanned: number
+  /** How many of those matched the query. */
   matched: number
+  /** Records in the selected range before the scan budget narrowed it. */
+  searchable: number
+  /** The scan stopped before covering the whole selected range. */
   truncated: boolean
+  /** The scan stopped because it filled `limit` results. */
+  limit_reached: boolean
+  /** The scan hit the server deadline; results are partial. */
+  timed_out: boolean
   duration_ms: number
 }

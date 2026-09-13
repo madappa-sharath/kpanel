@@ -48,6 +48,42 @@ Your workstation
 
 The server listens on localhost. It reads your existing credentials directly — no credential sharing between teammates, no token vending machines, no IAM gymnastics to give a central service access to your clusters.
 
+## Searching messages
+
+Browsing and searching are separate tabs, because they are separate activities:
+
+- **Messages** browses the topic — pick a partition and a starting point, fetch a page, optionally tail it live.
+- **Search** scans the whole topic on the broker and finds messages you have not fetched. It has its own controls (query, partition scope, starting point, scan budget, max results) and none of the browser's paging controls, which would not apply. Each scan reads back from the newest message up to a scan budget (500 – 50,000 messages), so you can widen the budget or set a starting offset or timestamp to reach further back.
+
+Both tabs have a **Filter** box above the list that narrows the rows currently on screen. It runs in your browser and takes **plain text only** — no operators, no JSON paths. The query language below belongs to Search.
+
+For a search you don't need to know the field name. A plain query is matched as a substring, case-insensitively, anywhere in the message key or value:
+
+```
+payment declined
+order-4821
+```
+
+Only a leading `$.` marks a JSON path, so a query like `$100 refund` is searched as text. Quote the query to search for text that would otherwise read as an expression — anything containing `.`, `>`, `<` or `=`:
+
+```
+"10.0.4.17"
+"user@example.com"
+"a > b"
+```
+
+For JSON values you can also query fields directly. Dotted paths index into nested objects:
+
+| Query | Matches |
+|---|---|
+| `user.id == "abc"` | field equals a string, number, or `true` / `false` |
+| `status != "done"` | field does not equal |
+| `latency > 100` | numeric comparison — also `>=`, `<`, `<=` |
+| `name ~= "kafka"` | field contains text |
+| `$.user.premium` | field is present — the `$.` prefix is what marks it as a path |
+
+The result summary reports how many messages were scanned out of how many were in range, and says when a scan stopped early because it hit the result limit, the scan budget, or the request deadline.
+
 ## AWS MSK
 
 If you have AWS credentials configured, kpanel will automatically surface MSK features.

@@ -1,4 +1,4 @@
-// Topic layout — tab bar shared by Overview, Partitions, Configuration, Messages
+// Topic layout — tab bar shared by Overview, Partitions, Configuration, Messages, Search
 
 import { useState } from 'react'
 import { Link, Outlet, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router'
@@ -7,6 +7,7 @@ import { useTopic } from '../../../../../hooks/useTopics'
 import { IncreasePartitionsModal } from '../../../../../components/topics/IncreasePartitionsModal'
 import { DeleteTopicModal } from '../../../../../components/topics/DeleteTopicModal'
 import { MessageBrowser } from '../../../../../components/topics/MessageBrowser'
+import { MessageSearch } from '../../../../../components/topics/MessageSearch'
 import { ProduceMessageModal } from '../../../../../components/topics/ProduceMessageModal'
 import { WriteModeBanner, WriteModeGate } from '../../../../../components/shared/WriteModeControl'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
@@ -20,6 +21,7 @@ const TABS = [
   { label: 'Partitions',    value: 'partitions',    to: '/clusters/$clusterId/topics/$topicName/partitions' as const,    exact: false },
   { label: 'Configuration', value: 'config',        to: '/clusters/$clusterId/topics/$topicName/config' as const,        exact: false },
   { label: 'Messages',      value: 'messages',      to: '/clusters/$clusterId/topics/$topicName/messages' as const,      exact: false },
+  { label: 'Search',        value: 'search',        to: '/clusters/$clusterId/topics/$topicName/search' as const,        exact: false },
 ]
 
 export function TopicLayout() {
@@ -39,17 +41,22 @@ export function TopicLayout() {
   const [fetchError, setFetchError] = useState<string | null>(null)
   const { partition: initialPartition } = useSearch({ strict: false }) as { partition?: number }
 
-  const activeTab = pathname.endsWith('/partitions')
-    ? 'partitions'
-    : pathname.endsWith('/config')
-    ? 'config'
-    : pathname.endsWith('/messages')
-    ? 'messages'
+  // Read the segment after the topic name rather than matching a path suffix:
+  // a topic literally named "messages" or "search" would otherwise hijack that
+  // tab and make its own Overview unreachable.
+  const afterTopics = pathname.split('/topics/')[1] ?? ''
+  const slash = afterTopics.indexOf('/')
+  const subPath = slash === -1 ? '' : afterTopics.slice(slash + 1)
+  const activeTab =
+    subPath === 'partitions' ? 'partitions'
+    : subPath === 'config' ? 'config'
+    : subPath === 'messages' ? 'messages'
+    : subPath === 'search' ? 'search'
     : 'overview'
   const writeModeDescription =
     activeTab === 'config'
       ? 'Enable write mode to edit topic configuration values.'
-      : activeTab === 'messages'
+      : activeTab === 'messages' || activeTab === 'search'
       ? 'Enable write mode to produce messages to this topic.'
       : activeTab === 'partitions'
       ? 'Enable write mode to increase partitions for this topic.'
@@ -149,12 +156,13 @@ export function TopicLayout() {
       </div>
 
       <div className="flex-1 overflow-auto">
-        {/* Non-messages tabs */}
-        <div className={cn(activeTab === 'messages' && 'hidden')}>
+        {/* Tabs whose content comes from the router */}
+        <div className={cn((activeTab === 'messages' || activeTab === 'search') && 'hidden')}>
           <Outlet />
         </div>
 
-        {/* Messages tab — always mounted, hidden when inactive */}
+        {/* Messages tab — always mounted, hidden when inactive, so a fetched page
+            and a live tail survive tab switches */}
         <div className={cn('p-6 h-full flex flex-col', activeTab !== 'messages' && 'hidden')}>
           {fetchError && <p className="text-destructive text-sm mb-3">{fetchError}</p>}
           <div className="flex-1 min-h-0">
@@ -165,8 +173,14 @@ export function TopicLayout() {
               initialPartition={initialPartition}
               isVisible={activeTab === 'messages'}
               onFetch={handleFetch}
-              onSearch={handleSearch}
             />
+          </div>
+        </div>
+
+        {/* Search tab — also kept mounted so results are not lost on a detour */}
+        <div className={cn('p-6 h-full flex flex-col', activeTab !== 'search' && 'hidden')}>
+          <div className="flex-1 min-h-0">
+            <MessageSearch partitions={partitions} onSearch={handleSearch} />
           </div>
         </div>
       </div>

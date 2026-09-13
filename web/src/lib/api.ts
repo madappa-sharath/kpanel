@@ -18,9 +18,11 @@ import type { Broker, ClusterStatus, ClusterOverview } from '../types/broker'
 
 const BASE = '/api'
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+const DEFAULT_TIMEOUT_MS = 15_000
+
+async function request<T>(path: string, init?: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 15_000)
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const res = await fetch(`${BASE}${path}`, {
       headers: { 'Content-Type': 'application/json', ...init?.headers },
@@ -36,6 +38,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } finally {
     clearTimeout(timeout)
   }
+}
+
+// A scan may legitimately run for a while, and the server has its own deadline
+// (searchTimeout / largeSearchTimeout in server/internal/api/topics.go). Stay
+// clear of it so a slow scan returns partial results instead of being aborted
+// here, which would surface as a bare AbortError.
+function searchTimeoutMs(scanLimit?: number): number {
+  return (scanLimit ?? 0) > 10_000 ? 195_000 : 75_000
 }
 
 export const api = {
@@ -97,6 +107,7 @@ export const api = {
       request<SearchResponse>(
         `/connections/${clusterId}/topics/${encodeURIComponent(name)}/search`,
         { method: 'POST', body: JSON.stringify(opts) },
+        searchTimeoutMs(opts.scan_limit),
       ),
   },
 

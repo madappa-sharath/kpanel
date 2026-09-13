@@ -22,6 +22,7 @@ import { TopicOverviewPage } from './routes/clusters/$clusterId/topics/$topicNam
 import { TopicPartitionsPage } from './routes/clusters/$clusterId/topics/$topicName/partitions'
 import { TopicConfigPage } from './routes/clusters/$clusterId/topics/$topicName/config'
 import { TopicMessagesPage } from './routes/clusters/$clusterId/topics/$topicName/messages'
+import { TopicSearchPage } from './routes/clusters/$clusterId/topics/$topicName/search'
 
 // Consumer group pages
 import { GroupsPage } from './routes/clusters/$clusterId/consumer-groups/index'
@@ -147,6 +148,15 @@ const topicMessagesRoute = createRoute({
   }),
 })
 
+const topicSearchRoute = createRoute({
+  getParentRoute: () => topicRoute,
+  path: '/search',
+  component: TopicSearchPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    partition: search.partition != null ? Number(search.partition) : undefined,
+  }),
+})
+
 // ─── Consumer group routes ────────────────────────────────────────────────────
 const groupsRoute = createRoute({
   getParentRoute: () => clusterRoute,
@@ -235,6 +245,7 @@ const routeTree = rootRoute.addChildren([
         topicPartitionsRoute,
         topicConfigRoute,
         topicMessagesRoute,
+        topicSearchRoute,
       ]),
       groupsRoute,
       groupRoute.addChildren([

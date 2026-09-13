@@ -52,7 +52,8 @@ src/
 │   ├── shell/            — AppShell, Sidebar, Header (theme toggle), ClusterSwitcher
 │   ├── shared/           — DataTable, StatusBadge, PageHeader, EmptyState, ConfirmModal, ErrorBoundary
 │   ├── clusters/         — ClusterForm (3-step wizard), AWSAuthAlert
-│   ├── topics/           — TopicTable, CreateTopicModal, MessageBrowser
+│   ├── topics/           — TopicTable, CreateTopicModal, MessageBrowser (browse),
+│   │                       MessageSearch (topic search), MessageList (shared rows)
 │   └── consumer-groups/  — GroupTable, LagChart, ResetOffsetsModal
 └── routes/
     ├── welcome.tsx
@@ -62,8 +63,8 @@ src/
         ├── index.tsx              — Dashboard (stat cards, partition health, config table)
         ├── brokers/index.tsx, $brokerId.tsx
         ├── topics/index.tsx
-        ├── topics/$topicName/__layout.tsx   — tab bar (Overview/Partitions/Configuration/Messages)
-        ├── topics/$topicName/index.tsx, partitions.tsx, config.tsx, messages.tsx
+        ├── topics/$topicName/__layout.tsx   — tab bar (Overview/Partitions/Configuration/Messages/Search)
+        ├── topics/$topicName/index.tsx, partitions.tsx, config.tsx, messages.tsx, search.tsx
         ├── consumer-groups/index.tsx
         ├── consumer-groups/$groupId/__layout.tsx  — tab bar (Members/Offsets/Lag)
         ├── consumer-groups/$groupId/members.tsx, offsets.tsx, lag.tsx

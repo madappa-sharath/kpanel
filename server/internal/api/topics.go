@@ -121,12 +121,42 @@ func buildMessageResponse(rec *kgo.Record) messageResponse {
 }
 
 type searchResponse struct {
-	Messages   []messageResponse `json:"messages"`
-	Scanned    int64             `json:"scanned"`
-	Matched    int64             `json:"matched"`
-	Truncated  bool              `json:"truncated"`
-	DurationMs int64             `json:"duration_ms"`
+	Messages []messageResponse `json:"messages"`
+	// Scanned is how many records were read and tested.
+	Scanned int64 `json:"scanned"`
+	// Matched is how many of those records matched the query.
+	Matched int64 `json:"matched"`
+	// Searchable is the size of the selected range before the scan budget is
+	// applied, so the UI can say "scanned 5,000 of 1,200,000". It is an offset
+	// span, so on a compacted or transactional topic it is an upper bound on
+	// the record count; a scan that drains the range reports its exact count.
+	Searchable int64 `json:"searchable"`
+	// Truncated reports that the scan stopped before covering that range.
+	Truncated bool `json:"truncated"`
+	// LimitReached reports that the scan stopped because it filled the
+	// requested number of results, not because it ran out of records.
+	LimitReached bool `json:"limit_reached"`
+	// TimedOut reports that the scan hit the request deadline; results are partial.
+	TimedOut   bool  `json:"timed_out"`
+	DurationMs int64 `json:"duration_ms"`
 }
+
+const (
+	defaultSearchLimit     = 20
+	maxSearchLimit         = 500
+	defaultSearchScanLimit = 1000
+	maxSearchScanLimit     = 50000
+	// Scans below this budget get the base deadline; larger ones get more
+	// headroom, since the request has proportionally more records to read.
+	searchTimeout      = 60 * time.Second
+	largeSearchTimeout = 180 * time.Second
+	largeSearchScan    = 10000
+	// A bounded historical scan gets its records immediately, so a poll that
+	// comes back empty means the range is drained. Offsets are not a record
+	// count — compaction and transaction markers leave gaps — so this, not
+	// arithmetic on offsets, is how the scan knows when to stop.
+	searchPollIdle = 5 * time.Second
+)
 
 func topicAdminErrorStatus(err error) int {
 	switch {
@@ -950,6 +980,20 @@ func (h *Handlers) UpdateTopicConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
+// clampSearchLimit applies a default to an unset value and clamps anything
+// larger than the ceiling down to it — an over-large request gets the most the
+// server can do rather than silently dropping back to the default.
+func clampSearchLimit(v, def, max int) int {
+	switch {
+	case v <= 0:
+		return def
+	case v > max:
+		return max
+	default:
+		return v
+	}
+}
+
 // SearchMessages godoc
 // POST /api/connections/:id/topics/:name/search
 func (h *Handlers) SearchMessages(w http.ResponseWriter, r *http.Request) {
@@ -976,12 +1020,8 @@ func (h *Handlers) SearchMessages(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "query is required")
 		return
 	}
-	if req.Limit <= 0 || req.Limit > 500 {
-		req.Limit = 20
-	}
-	if req.ScanLimit <= 0 || req.ScanLimit > 10000 {
-		req.ScanLimit = 1000
-	}
+	req.Limit = clampSearchLimit(req.Limit, defaultSearchLimit, maxSearchLimit)
+	req.ScanLimit = clampSearchLimit(req.ScanLimit, defaultSearchScanLimit, maxSearchScanLimit)
 
 	pq, err := parseQuery(req.Query)
 	if err != nil {
@@ -989,7 +1029,11 @@ func (h *Handlers) SearchMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	timeout := searchTimeout
+	if req.ScanLimit > largeSearchScan {
+		timeout = largeSearchTimeout
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
 
 	admClient, err := h.pool.get(cluster)
@@ -1056,6 +1100,10 @@ func (h *Handlers) SearchMessages(w http.ResponseWriter, r *http.Request) {
 		perPartScan = 1
 	}
 
+	// searchable counts everything the user asked to search over, before the
+	// scan budget narrows it — "scanned 5,000 of 1,200,000".
+	var searchable int64
+
 	for partID, endOff := range topicEndOffsets {
 		if req.Partition != nil && partID != *req.Partition {
 			continue
@@ -1092,6 +1140,16 @@ func (h *Handlers) SearchMessages(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// With an explicit start the range is startAt..end; tailing searches the
+		// newest slice of the whole retained log, so the range is logStart..end.
+		windowStart := logStart
+		if req.StartOffset != nil || timestampOffsets != nil {
+			windowStart = startAt
+		}
+		if n := endOff.Offset - windowStart; n > 0 {
+			searchable += n
+		}
+
 		wantCount := endOff.Offset - startAt
 		if wantCount <= 0 {
 			continue
@@ -1126,18 +1184,31 @@ func (h *Handlers) SearchMessages(w http.ResponseWriter, r *http.Request) {
 
 	var matches []messageResponse
 	var totalScanned, totalMatched int64
-	var truncated bool
+	var limitReached, done, exhausted bool
 	scanStart := time.Now()
 
 	fetchCtx, fetchCancel := context.WithCancel(ctx)
 	defer fetchCancel()
 
 	for totalScanned < scanCap {
-		fetches := consumerClient.PollFetches(fetchCtx)
+		// Bound each poll so a drained range ends the scan instead of blocking
+		// until the request deadline.
+		pollCtx, pollCancel := context.WithTimeout(fetchCtx, searchPollIdle)
+		fetches := consumerClient.PollFetches(pollCtx)
+		pollCancel()
 		if fetchCtx.Err() != nil {
 			break
 		}
+		if fetches.Empty() {
+			exhausted = true
+			break
+		}
 		fetches.EachRecord(func(rec *kgo.Record) {
+			// EachRecord walks the whole batch even after fetchCancel, so the
+			// caps have to be enforced here or the response overshoots them.
+			if done {
+				return
+			}
 			if rec.Topic != name {
 				return
 			}
@@ -1153,20 +1224,35 @@ func (h *Handlers) SearchMessages(w http.ResponseWriter, r *http.Request) {
 				totalMatched++
 				matches = append(matches, buildMessageResponse(rec))
 				if totalMatched >= int64(req.Limit) {
-					truncated = true
+					limitReached = true
+					done = true
 					fetchCancel()
 					return
 				}
 			}
 			if totalScanned >= scanCap {
-				if int64(req.ScanLimit) < totalAvailable {
-					truncated = true
-				}
+				done = true
 				fetchCancel()
 			}
 		})
+		if done {
+			break
+		}
 	}
 	durationMs := time.Since(scanStart).Milliseconds()
+
+	// The deadline lives on ctx; fetchCtx is also cancelled on a clean finish,
+	// so it can't distinguish "done" from "out of time".
+	timedOut := errors.Is(ctx.Err(), context.DeadlineExceeded)
+	// The scan covered the range only if it drained it and was not cut short by
+	// the result limit or the deadline. Comparing counts against `searchable`
+	// would misreport here, since that is an offset span rather than a count.
+	truncated := limitReached || timedOut || !exhausted
+	if exhausted && searchable > totalScanned {
+		// Offset gaps made the range look bigger than it was; report what the
+		// scan actually saw rather than an inflated total.
+		searchable = totalScanned
+	}
 
 	sort.Slice(matches, func(i, j int) bool {
 		if matches[i].Timestamp != matches[j].Timestamp {
@@ -1182,10 +1268,13 @@ func (h *Handlers) SearchMessages(w http.ResponseWriter, r *http.Request) {
 		matches = []messageResponse{}
 	}
 	writeJSON(w, http.StatusOK, searchResponse{
-		Messages:   matches,
-		Scanned:    totalScanned,
-		Matched:    totalMatched,
-		Truncated:  truncated,
-		DurationMs: durationMs,
+		Messages:     matches,
+		Scanned:      totalScanned,
+		Matched:      totalMatched,
+		Searchable:   searchable,
+		Truncated:    truncated,
+		LimitReached: limitReached,
+		TimedOut:     timedOut,
+		DurationMs:   durationMs,
 	})
 }

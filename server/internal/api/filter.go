@@ -12,7 +12,7 @@ import (
 type filterOp int
 
 const (
-	opExists   filterOp = iota
+	opExists filterOp = iota
 	opEq
 	opNe
 	opGt
@@ -23,7 +23,7 @@ const (
 )
 
 type parsedQuery struct {
-	raw     string // original (for plain-text mode)
+	raw     string // text to match in plain-text mode (outer quotes stripped)
 	isPlain bool
 	path    string
 	op      filterOp
@@ -34,7 +34,20 @@ type parsedQuery struct {
 }
 
 // parseQuery parses a search query string into a parsedQuery.
-// Supports plain text, gjson path existence checks, and path+operator comparisons.
+//
+// The query language has three shapes, resolved in this order:
+//
+//  1. A fully quoted query is always a literal text search — "10.0.4.17",
+//     "a > b". Use it for terms that would otherwise look like an expression.
+//  2. A field comparison — user.id == "abc", latency > 100, name ~= "kafka".
+//     An optional $ / $. prefix on the path is stripped.
+//  3. A $. prefixed path with no operator is a field-existence check —
+//     $.user.premium.
+//
+// Anything else is a plain-text search across the record key and value, so an
+// unadorned term like order.created or user@example.com searches for that text
+// rather than being mistaken for a JSON path — and so does a term that merely
+// starts with a dollar sign, like "$100 refund".
 func parseQuery(q string) (parsedQuery, error) {
 	q = strings.TrimSpace(q)
 	if q == "" {
@@ -43,12 +56,25 @@ func parseQuery(q string) (parsedQuery, error) {
 
 	pq := parsedQuery{raw: q}
 
-	// Strip leading $. or $ (common JSONPath prefix)
-	stripped := q
-	if strings.HasPrefix(stripped, "$.") {
-		stripped = stripped[2:]
-	} else if strings.HasPrefix(stripped, "$") {
-		stripped = stripped[1:]
+	// A fully quoted query forces a literal text search.
+	if lit, ok := quotedLiteral(q); ok {
+		if lit == "" {
+			return parsedQuery{}, fmt.Errorf("query is required")
+		}
+		pq.raw = lit
+		pq.isPlain = true
+		return pq, nil
+	}
+
+	// Strip a leading $. or $ (common JSONPath prefix) before looking for an
+	// operator, so both $.user.id == "x" and $user.id == "x" work. Only the
+	// $. form marks an operator-less query as a path: a bare $ is far more
+	// likely to be a currency amount the user wants to find.
+	stripped, dotPrefixed := q, false
+	if rest, ok := strings.CutPrefix(q, "$."); ok {
+		stripped, dotPrefixed = rest, true
+	} else if rest, ok := strings.CutPrefix(q, "$"); ok {
+		stripped = rest
 	}
 
 	// Scan for operators in order of precedence (longer first to avoid ambiguity)
@@ -97,16 +123,34 @@ func parseQuery(q string) (parsedQuery, error) {
 		return pq, nil
 	}
 
-	// No operator found — check if it looks like a path (dot, no spaces)
-	if strings.Contains(stripped, ".") && !strings.Contains(stripped, " ") {
-		pq.path = stripped
-		pq.op = opExists
-		return pq, nil
+	// No operator — a $. prefix means "this field exists", but only when what
+	// follows actually looks like a path. "$. " or "$.a b" is text.
+	if dotPrefixed {
+		path := strings.TrimSpace(stripped)
+		if path != "" && !strings.ContainsAny(path, " \t") {
+			pq.path = path
+			pq.op = opExists
+			return pq, nil
+		}
 	}
 
-	// Plain text search
+	// Plain text search, over the query exactly as typed
 	pq.isPlain = true
 	return pq, nil
+}
+
+// quotedLiteral reports whether q is a single double-quoted literal and returns
+// its contents. A query containing further quotes (user.id == "abc") is not a
+// literal, so operator parsing still gets a chance at it.
+func quotedLiteral(q string) (string, bool) {
+	if len(q) < 2 || !strings.HasPrefix(q, `"`) || !strings.HasSuffix(q, `"`) {
+		return "", false
+	}
+	inner := q[1 : len(q)-1]
+	if strings.Contains(inner, `"`) {
+		return "", false
+	}
+	return inner, true
 }
 
 // matchRecord returns true if the Kafka record matches the parsed query.

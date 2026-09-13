@@ -10,6 +10,7 @@ func TestParseQuery(t *testing.T) {
 	tests := []struct {
 		input   string
 		isPlain bool
+		raw     string // expected match text for plain-text queries (defaults to input)
 		path    string
 		op      filterOp
 		litType string
@@ -25,9 +26,36 @@ func TestParseQuery(t *testing.T) {
 		{input: "hello world", isPlain: true},
 		{input: "error", isPlain: true},
 
-		// Path existence (dot, no spaces)
-		{input: "user.premium", path: "user.premium", op: opExists},
-		{input: "a.b.c", path: "a.b.c", op: opExists},
+		// Dotted terms are plain text, not paths — an explicit $ prefix marks a path
+		{input: "user.premium", isPlain: true},
+		{input: "a.b.c", isPlain: true},
+		{input: "user@example.com", isPlain: true},
+		{input: "10.0.4.17", isPlain: true},
+		{input: "v1.2.3", isPlain: true},
+
+		// Path existence requires the $. prefix
+		{input: "$.user.premium", path: "user.premium", op: opExists},
+		{input: "$.a.b.c", path: "a.b.c", op: opExists},
+
+		// A bare $ is text, not a path — currency beats JSONPath here
+		{input: "$user.premium", isPlain: true},
+		{input: "$100 refund", isPlain: true},
+		{input: "$5.00", isPlain: true},
+		{input: "$", isPlain: true},
+		{input: "$.", isPlain: true},
+		{input: "$. a b", isPlain: true},
+
+		// ...but a $ prefix is still stripped from an operator query
+		{input: `$user.id == "abc"`, path: "user.id", op: opEq, litType: "string", strVal: "abc"},
+
+		// A fully quoted query is always literal text
+		{input: `"10.0.4.17"`, isPlain: true, raw: "10.0.4.17"},
+		{input: `"a > b"`, isPlain: true, raw: "a > b"},
+		{input: `"$.user.premium"`, isPlain: true, raw: "$.user.premium"},
+		{input: `""`, wantErr: true},
+
+		// ...but a quoted literal on the right of an operator still parses as a comparison
+		{input: `user.id == "abc"`, path: "user.id", op: opEq, litType: "string", strVal: "abc"},
 
 		// Strip $ prefix
 		{input: "$.user.id == \"abc\"", path: "user.id", op: opEq, litType: "string", strVal: "abc"},
@@ -60,7 +88,16 @@ func TestParseQuery(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if pq.isPlain != tt.isPlain {
-				t.Errorf("isPlain: got %v, want %v", pq.isPlain, tt.isPlain)
+				t.Fatalf("isPlain: got %v, want %v", pq.isPlain, tt.isPlain)
+			}
+			if tt.isPlain {
+				wantRaw := tt.raw
+				if wantRaw == "" {
+					wantRaw = tt.input
+				}
+				if pq.raw != wantRaw {
+					t.Errorf("raw: got %q, want %q", pq.raw, wantRaw)
+				}
 			}
 			if !tt.isPlain {
 				if pq.path != tt.path {
@@ -113,14 +150,24 @@ func TestMatchRecord(t *testing.T) {
 		{"plain no match", "xyz", rec("k", `{"msg":"hello"}`), false},
 		{"plain case insensitive", "HELLO", rec("k", `{"msg":"hello"}`), true},
 
+		// Plain text covers terms that read like paths or expressions
+		{"dotted term matches value text", "order.created", rec("k", `{"event":"order.created"}`), true},
+		{"dotted term no match", "order.created", rec("k", `{"event":"order.shipped"}`), false},
+		{"email matches value text", "user@example.com", rec("k", `{"email":"USER@example.com"}`), true},
+		{"dotted term matches non-json value", "10.0.4.17", rec("k", `client 10.0.4.17 connected`), true},
+		{"quoted literal matches text", `"a > b"`, rec("k", `{"expr":"a > b"}`), true},
+		{"dollar amount matches text", "$100 refund", rec("k", `{"note":"$100 refund issued"}`), true},
+		{"dollar amount no match", "$100 refund", rec("k", `{"note":"$50 refund issued"}`), false},
+		{"quoted literal does not match quotes", `"10.0.4.17"`, rec("k", `{"ip":"10.0.4.17"}`), true},
+
 		// JSON path existence — pure presence check, not truthiness
-		{"exists found true", "user.premium", rec("", `{"user":{"premium":true}}`), true},
-		{"exists found false", "user.premium", rec("", `{"user":{"premium":false}}`), true},
-		{"exists found null", "user.premium", rec("", `{"user":{"premium":null}}`), true},
-		{"exists found zero", "user.premium", rec("", `{"user":{"premium":0}}`), true},
-		{"exists found empty string", "user.premium", rec("", `{"user":{"premium":""}}`), true},
-		{"exists missing", "user.premium", rec("", `{"user":{}}`), false},
-		{"exists not json", "user.premium", rec("", `not json`), false},
+		{"exists found true", "$.user.premium", rec("", `{"user":{"premium":true}}`), true},
+		{"exists found false", "$.user.premium", rec("", `{"user":{"premium":false}}`), true},
+		{"exists found null", "$.user.premium", rec("", `{"user":{"premium":null}}`), true},
+		{"exists found zero", "$.user.premium", rec("", `{"user":{"premium":0}}`), true},
+		{"exists found empty string", "$.user.premium", rec("", `{"user":{"premium":""}}`), true},
+		{"exists missing", "$.user.premium", rec("", `{"user":{}}`), false},
+		{"exists not json", "$.user.premium", rec("", `not json`), false},
 
 		// Equality
 		{`eq string match`, `user.id == "abc"`, rec("", `{"user":{"id":"abc"}}`), true},
