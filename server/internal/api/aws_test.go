@@ -55,6 +55,10 @@ func TestAWSContext_ProfileFromEnv(t *testing.T) {
 func TestAWSContext_RegionDefaultsToUsEast1(t *testing.T) {
 	t.Setenv("AWS_REGION", "")
 	t.Setenv("AWS_DEFAULT_REGION", "")
+	// A region in the shared config or from IMDS would reach the handler
+	// before its fallback does.
+	t.Setenv("AWS_CONFIG_FILE", filepath.Join(t.TempDir(), "config-does-not-exist"))
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
 	h, _ := testServer(t)
 	w := do(t, h, http.MethodGet, "/api/aws/context", nil)
 
