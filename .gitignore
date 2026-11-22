@@ -1,5 +1,9 @@
 # Go
-server/cmd/kpanel/public/
+# Built frontend assets, copied here by `make build` for go:embed.
+# .gitkeep stays tracked so `go:embed all:public` compiles in a fresh
+# clone or worktree, where no build has run yet.
+server/cmd/kpanel/public/*
+!server/cmd/kpanel/public/.gitkeep
 *.exe
 *.exe~
 *.dll
