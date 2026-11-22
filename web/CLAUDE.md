@@ -12,7 +12,7 @@
 ## Commands
 ```bash
 sfw bun install      # install deps through Socket Firewall
-bun dev.ts           # dev server on :3000 (HMR + /api proxy → :8080)
+bun dev.ts           # dev server on :3000 (/api proxy → :8080; HMR off, save then refresh)
 bun build.ts         # production build → dist/
 bun run typecheck    # tsc --noEmit
 ```
