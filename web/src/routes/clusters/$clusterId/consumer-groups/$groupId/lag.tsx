@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from 'react'
 import { useParams } from '@tanstack/react-router'
-import { LagChart } from '../../../../../components/consumer-groups/LagChart'
+import { SessionHistory } from '../../../../../components/consumer-groups/SessionHistory'
 import { useClusters } from '../../../../../hooks/useCluster'
-import { useConsumerMetrics } from '../../../../../hooks/useMetrics'
+import { useConsumerMetrics, useTopicMetrics } from '../../../../../hooks/useMetrics'
 import { MetricsChart } from '../../../../../components/metrics/MetricsChart'
 import { MetricsErrorBanner } from '../../../../../components/metrics/MetricsErrorBanner'
 import { TimeRangePicker, type TimeRange } from '../../../../../components/metrics/TimeRangePicker'
@@ -49,10 +49,23 @@ export function GroupLagPage() {
   const selectedSumLag = sumLagSeries.find((s) => s.label === effectiveTopic)
   const selectedTimeLag = timeLagSeries.find((s) => s.label === effectiveTopic)
 
+  // Per-topic message rates need enhanced monitoring; bytes are free.
+  const {
+    data: topicMetrics,
+    isLoading: topicMetricsLoading,
+    error: topicMetricsError,
+  } = useTopicMetrics(
+    clusterId,
+    effectiveTopic ?? '',
+    isAWS && !!effectiveTopic,
+    range,
+  )
+  const bytesIn = topicMetrics?.series.find((s) => s.id === 'bytes_in')
+  const bytesOut = topicMetrics?.series.find((s) => s.id === 'bytes_out')
+
   return (
     <div className="flex min-w-0 flex-col gap-6 p-6">
-      {/* Kafka offset-based lag history */}
-      <LagChart clusterId={clusterId} groupId={groupId} />
+      <SessionHistory clusterId={clusterId} groupId={groupId} />
 
       {/* CloudWatch lag (AWS MSK only) */}
       {isAWS && (
@@ -83,6 +96,7 @@ export function GroupLagPage() {
             </div>
           </div>
           <MetricsErrorBanner error={metricsError as Error | null} />
+          {!metricsError && <MetricsErrorBanner error={topicMetricsError as Error | null} />}
 
           {metricsLoading ? (
             <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
@@ -119,6 +133,24 @@ export function GroupLagPage() {
                       ? { ...selectedTimeLag, label: 'EstimatedMaxTimeLag' }
                       : null
                   }
+                />
+              </div>
+              <div className="min-w-0 rounded-md border bg-card p-4">
+                <p className="mb-2 min-w-0 truncate text-xs text-muted-foreground">
+                  Topic Bytes In — <span className="font-mono">{effectiveTopic}</span>
+                </p>
+                <MetricsChart
+                  series={bytesIn ? { ...bytesIn, label: 'BytesInPerSec (producers)' } : null}
+                  isLoading={topicMetricsLoading}
+                />
+              </div>
+              <div className="min-w-0 rounded-md border bg-card p-4">
+                <p className="mb-2 min-w-0 truncate text-xs text-muted-foreground">
+                  Topic Bytes Out — <span className="font-mono">{effectiveTopic}</span>
+                </p>
+                <MetricsChart
+                  series={bytesOut ? { ...bytesOut, label: 'BytesOutPerSec (all consumer groups)' } : null}
+                  isLoading={topicMetricsLoading}
                 />
               </div>
             </div>

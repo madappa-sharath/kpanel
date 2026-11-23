@@ -205,6 +205,7 @@ func (h *Handlers) ResetOffsets(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "commit offsets: "+err.Error())
 			return
 		}
+		h.lagStore.resetBaseline(cluster.ID, groupID)
 	}
 
 	writeJSON(w, http.StatusOK, resp)
