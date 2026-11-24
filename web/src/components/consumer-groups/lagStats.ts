@@ -147,8 +147,20 @@ export function diagnose(stats: WindowStats): Diagnosis {
     return { tone: 'idle', title: 'Idle — caught up, nothing arriving' }
   }
 
+  if (lag > 0 && outRate === 0) {
+    return {
+      tone: 'warn',
+      title: `No progress — ${fmtCount(lag)} waiting, nothing processed in the last 30 s`,
+      detail:
+        inRate < IDLE_RATE
+          ? 'Nothing is arriving, so the lag is messages already in the topic that the consumer hasn’t worked through.'
+          : `${fmtRate(inRate)} is still arriving, so the backlog is growing.`,
+    }
+  }
+
   const net = outRate - inRate
-  const tolerance = Math.max(Math.max(inRate, outRate) * PACE_TOLERANCE, MIN_PACE_TOLERANCE)
+  // With nothing arriving, any processing shrinks the backlog.
+  const tolerance = inRate < IDLE_RATE ? 0 : Math.max(Math.max(inRate, outRate) * PACE_TOLERANCE, MIN_PACE_TOLERANCE)
   if (Math.abs(net) <= tolerance) {
     return lag === 0
       ? { tone: 'ok', title: 'Keeping up — processing as fast as messages arrive' }
@@ -164,7 +176,7 @@ export function diagnose(stats: WindowStats): Diagnosis {
   }
   return {
     tone: 'warn',
-    title: `Falling behind by ${fmtRate(-net)} — incoming is ${fmtRatio(inRate / Math.max(outRate, 0.01))} processing`,
+    title: `Falling behind by ${fmtRate(-net)} — incoming is ${fmtRatio(inRate / outRate)} processing`,
     detail: capacityDetail(stats),
   }
 }
@@ -174,10 +186,15 @@ export function diagnose(stats: WindowStats): Diagnosis {
 // while there is a backlog; otherwise the consumer just matches incoming.
 function capacityDetail(stats: WindowStats) {
   const cap = stats.capacity
-  if (!cap) return 'Needs a few minutes of history to compare against the consumer’s normal pace.'
+  if (cap === null) return 'Needs a few minutes of history to compare against the consumer’s normal pace.'
+  if (cap < IDLE_RATE) return 'The consumer hasn’t processed at a steady rate this session, so there’s no normal pace to compare against.'
   const pct = Math.round((stats.processing.now / cap) * 100)
   const of = `Processing at ${pct}% of its fastest 30 s pace this session (p95, ${fmtRate(cap)})`
-  if (pct >= 85) return `${of}: the consumer is at full speed, so the backlog is from incoming volume.`
+  if (pct >= 85) {
+    return stats.incoming.now >= IDLE_RATE && stats.processing.now <= stats.incoming.now
+      ? `${of}: the consumer is at full speed, so the backlog is from incoming volume.`
+      : `${of}: the consumer is at full speed, working through messages that arrived earlier.`
+  }
   if (pct < 60) return `${of}: the consumer looks slower than it has been.`
   return `${of}.`
 }
@@ -193,12 +210,14 @@ export function fmtCount(v: number, digits = 0) {
 }
 
 function fmtRatio(r: number) {
+  if (r >= 100) return 'over 100×'
   return `${r >= 10 ? Math.round(r) : r.toFixed(1)}×`
 }
 
 export function fmtDuration(seconds: number) {
   if (seconds < 60) return `${Math.ceil(seconds)}s`
   if (seconds < 3600) return `${Math.ceil(seconds / 60)}m`
+  if (seconds >= 48 * 3600) return `${Math.round(seconds / 86_400)}d`
   const h = Math.floor(seconds / 3600)
   const m = Math.round((seconds % 3600) / 60)
   return m ? `${h}h ${m}m` : `${h}h`
