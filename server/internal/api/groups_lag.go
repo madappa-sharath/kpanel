@@ -2,19 +2,22 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/kpanel/kpanel/internal/config"
+	"github.com/twmb/franz-go/pkg/kerr"
 )
 
 const (
-	lagPollInterval  = 15 * time.Second
-	lagHistoryWindow = time.Hour
-	lagMaxSnapshots  = int(lagHistoryWindow / lagPollInterval) // 240
-	lagRateMaxGap    = 8 * lagPollInterval
+	lagSampleInterval = 5 * time.Second
+	lagRetention      = 6 * time.Hour
+	lagWatchTTL       = 6 * time.Hour // keep sampling this long after the last view
+	lagRateMaxGap     = 4 * lagSampleInterval
 )
 
 // LagSnapshot is a point-in-time lag measurement for a consumer group.
@@ -25,6 +28,17 @@ type LagSnapshot struct {
 	ByTopic     map[string]int64 `json:"by_topic"`
 	ProduceRate *float64         `json:"produce_rate"`
 	ConsumeRate *float64         `json:"consume_rate"`
+	// Partitions whose committed offset moved since the previous snapshot.
+	Commits *int `json:"commits"`
+}
+
+type lagHistoryResponse struct {
+	IntervalMs    int64         `json:"interval_ms"`
+	RetentionMs   int64         `json:"retention_ms"`
+	WatchTTLMs    int64         `json:"watch_ttl_ms"`
+	SamplingSince int64         `json:"sampling_since"`
+	LastError     string        `json:"last_error,omitempty"`
+	Snapshots     []LagSnapshot `json:"snapshots"`
 }
 
 type topicPartition struct {
@@ -38,129 +52,310 @@ type partitionOffsets struct {
 	end       int64
 }
 
-// offsetRates uses the same partitions for both rates so they are comparable.
-func offsetRates(prev, cur map[topicPartition]partitionOffsets, dtMs int64) (produce, consume *float64) {
+type offsetDelta struct {
+	produce, consume *float64
+	commits          *int
+}
+
+// offsetRates counts production on every partition, since all of it adds to
+// lag, and consumption only where both samples have a commit to compare.
+func offsetRates(prev, cur map[topicPartition]partitionOffsets, dtMs int64) offsetDelta {
 	if dtMs <= 0 {
-		return nil, nil
+		return offsetDelta{}
 	}
 	var produced, consumed int64
-	var n int
+	var n, commits int
 	for tp, c := range cur {
 		p, ok := prev[tp]
-		if !ok || p.committed < 0 || c.committed < 0 {
+		if !ok {
 			continue
 		}
-		dEnd, dCommit := c.end-p.end, c.committed-p.committed
-		if dEnd < 0 || dCommit < 0 {
-			continue
-		}
-		produced += dEnd
-		consumed += dCommit
 		n++
+		if dEnd := c.end - p.end; dEnd > 0 {
+			produced += dEnd
+		}
+		if p.committed < 0 || c.committed < 0 {
+			continue
+		}
+		if dCommit := c.committed - p.committed; dCommit > 0 {
+			consumed += dCommit
+			commits++
+		}
 	}
 	if n == 0 {
-		return nil, nil
+		return offsetDelta{}
 	}
 	secs := float64(dtMs) / 1000
 	pr, cr := float64(produced)/secs, float64(consumed)/secs
-	return &pr, &cr
+	return offsetDelta{produce: &pr, consume: &cr, commits: &commits}
 }
 
-// lagRingBuffer holds up to capacity snapshots in insertion order.
-type lagRingBuffer struct {
-	mu          sync.RWMutex
+// lagSeries is the sampled history of one consumer group.
+type lagSeries struct {
+	mu          sync.Mutex
 	snapshots   []LagSnapshot
-	head        int // next write position
-	size        int // current number of stored entries
-	capacity    int
+	retentionMs int64
 	lastOffsets map[topicPartition]partitionOffsets
-	resetAt     int64 // unix ms of the last offset reset made through kpanel
+	resetAt     int64  // unix ms of the last offset reset made through kpanel
+	clusterFP   string // connection config the history was sampled with
+	startedAt   int64
+	lastViewed  time.Time
+	lastErr     string
 }
 
-func newLagRingBuffer(capacity int) *lagRingBuffer {
-	return &lagRingBuffer{
-		snapshots: make([]LagSnapshot, capacity),
-		capacity:  capacity,
-	}
+func newLagSeries(retention time.Duration, now time.Time) *lagSeries {
+	return &lagSeries{retentionMs: retention.Milliseconds(), startedAt: now.UnixMilli(), lastViewed: now}
 }
 
-// appendIfNew appends snap only if the buffer is empty or the last snapshot's
-// timestamp is at least minGapMs milliseconds before snap.Ts, and snap.Ts is
-// after the last reset. Returns all snapshots in chronological order.
-func (b *lagRingBuffer) appendIfNew(snap LagSnapshot, offsets map[topicPartition]partitionOffsets, minGapMs int64) []LagSnapshot {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	shouldAppend := snap.Ts >= b.resetAt
-	if shouldAppend && b.size > 0 {
-		last := b.snapshots[(b.head-1+b.capacity)%b.capacity]
-		dt := snap.Ts - last.Ts
-		shouldAppend = dt >= minGapMs
-		if shouldAppend && dt <= lagRateMaxGap.Milliseconds() {
-			snap.ProduceRate, snap.ConsumeRate = offsetRates(b.lastOffsets, offsets, dt)
+// record stores snap, filling its rates from the previous snapshot. A sample
+// taken before the last reset is dropped.
+func (s *lagSeries) record(snap LagSnapshot, offsets map[topicPartition]partitionOffsets) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastErr = ""
+	if snap.Ts < s.resetAt {
+		return
+	}
+	if n := len(s.snapshots); n > 0 {
+		dt := snap.Ts - s.snapshots[n-1].Ts
+		if dt <= 0 {
+			return
+		}
+		if s.lastOffsets != nil && dt <= lagRateMaxGap.Milliseconds() {
+			d := offsetRates(s.lastOffsets, offsets, dt)
+			snap.ProduceRate, snap.ConsumeRate, snap.Commits = d.produce, d.consume, d.commits
 		}
 	}
-	if shouldAppend {
-		b.lastOffsets = offsets
-		b.snapshots[b.head] = snap
-		b.head = (b.head + 1) % b.capacity
-		if b.size < b.capacity {
-			b.size++
-		}
+	s.lastOffsets = offsets
+	s.snapshots = append(s.snapshots, snap)
+	drop := 0
+	for drop < len(s.snapshots) && s.snapshots[drop].Ts < snap.Ts-s.retentionMs {
+		drop++
 	}
-	result := make([]LagSnapshot, b.size)
-	start := (b.head - b.size + b.capacity) % b.capacity
-	for i := 0; i < b.size; i++ {
-		result[i] = b.snapshots[(start+i)%b.capacity]
-	}
-	return result
+	s.snapshots = s.snapshots[drop:]
+}
+
+func (s *lagSeries) recordError(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastErr = err.Error()
 }
 
 // resetBaseline stops a reset's offset jump from showing up as consumption.
-func (b *lagRingBuffer) resetBaseline(now int64) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.lastOffsets = nil
-	b.resetAt = now
+func (s *lagSeries) resetBaseline(now int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastOffsets = nil
+	s.resetAt = now
 }
 
-// LagStore holds in-memory lag history for consumer groups across connections.
+// useCluster drops the history when the connection now points somewhere
+// else, so offsets from two clusters are never compared.
+func (s *lagSeries) useCluster(fp string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.clusterFP != fp {
+		s.clusterFP = fp
+		s.snapshots = nil
+		s.lastOffsets = nil
+	}
+}
+
+func (s *lagSeries) touch(now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastViewed = now
+}
+
+func (s *lagSeries) idle(now time.Time) time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return now.Sub(s.lastViewed)
+}
+
+func (s *lagSeries) view() lagHistoryResponse {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return lagHistoryResponse{
+		IntervalMs:    lagSampleInterval.Milliseconds(),
+		RetentionMs:   lagRetention.Milliseconds(),
+		WatchTTLMs:    lagWatchTTL.Milliseconds(),
+		SamplingSince: s.startedAt,
+		LastError:     s.lastErr,
+		Snapshots:     append([]LagSnapshot{}, s.snapshots...),
+	}
+}
+
+// LagStore holds the groups being sampled in the background, per connection.
 type LagStore struct {
-	mu      sync.RWMutex
-	buffers map[string]*lagRingBuffer // "connectionID/groupID" → ring buffer
+	mu     sync.Mutex
+	series map[string]*lagSeries // "connectionID/groupID"
 }
 
 func NewLagStore() *LagStore {
-	return &LagStore{buffers: make(map[string]*lagRingBuffer)}
+	return &LagStore{series: make(map[string]*lagSeries)}
 }
 
-func (ls *LagStore) key(connectionID, groupID string) string {
+func lagKey(connectionID, groupID string) string {
 	return connectionID + "/" + groupID
 }
 
-func (ls *LagStore) getOrCreate(connectionID, groupID string) *lagRingBuffer {
-	k := ls.key(connectionID, groupID)
+// watch returns the group's series and whether it was just created.
+func (ls *LagStore) watch(connectionID, groupID string, now time.Time) (*lagSeries, bool) {
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
-	if b, ok := ls.buffers[k]; ok {
-		return b
+	k := lagKey(connectionID, groupID)
+	if s, ok := ls.series[k]; ok {
+		s.touch(now)
+		return s, false
 	}
-	b := newLagRingBuffer(lagMaxSnapshots)
-	ls.buffers[k] = b
-	return b
+	s := newLagSeries(lagRetention, now)
+	ls.series[k] = s
+	return s, true
 }
 
-func (ls *LagStore) appendIfNew(connectionID, groupID string, snap LagSnapshot, offsets map[topicPartition]partitionOffsets, minGapMs int64) []LagSnapshot {
-	return ls.getOrCreate(connectionID, groupID).appendIfNew(snap, offsets, minGapMs)
+// expire removes s if nobody has viewed it for ttl. It holds the store lock
+// so a concurrent watch either renews s first or creates a new series.
+func (ls *LagStore) expire(connectionID, groupID string, s *lagSeries, now time.Time, ttl time.Duration) bool {
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	if s.idle(now) <= ttl {
+		return false
+	}
+	ls.removeLocked(connectionID, groupID, s)
+	return true
+}
+
+func (ls *LagStore) remove(connectionID, groupID string, s *lagSeries) {
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	ls.removeLocked(connectionID, groupID, s)
+}
+
+func (ls *LagStore) removeLocked(connectionID, groupID string, s *lagSeries) {
+	k := lagKey(connectionID, groupID)
+	if ls.series[k] == s {
+		delete(ls.series, k)
+	}
 }
 
 func (ls *LagStore) resetBaseline(connectionID, groupID string) {
-	ls.getOrCreate(connectionID, groupID).resetBaseline(time.Now().UnixMilli())
+	ls.mu.Lock()
+	s := ls.series[lagKey(connectionID, groupID)]
+	ls.mu.Unlock()
+	if s != nil {
+		s.resetBaseline(time.Now().UnixMilli())
+	}
 }
 
-// GetLagHistory fetches the current lag for a consumer group, stores it in the
-// in-memory ring buffer, and returns the full history accumulated so far.
-// Callers (the frontend Lag tab) should poll this every ~15 seconds to build
-// a live time-series without requiring a background server-side goroutine.
+// runLagSampler samples the group until nobody has viewed it for lagWatchTTL
+// or the connection is deleted.
+func (h *Handlers) runLagSampler(connectionID, groupID string, s *lagSeries) {
+	ticker := time.NewTicker(lagSampleInterval)
+	defer ticker.Stop()
+	for {
+		if h.lagStore.expire(connectionID, groupID, s, time.Now(), lagWatchTTL) {
+			return
+		}
+		cluster, ok := h.store.Get(connectionID)
+		if !ok {
+			h.lagStore.remove(connectionID, groupID, s)
+			return
+		}
+		s.useCluster(clusterFingerprint(cluster))
+		ctx, cancel := context.WithTimeout(context.Background(), 2*lagSampleInterval)
+		snap, offsets, err := h.sampleLag(ctx, cluster, groupID)
+		cancel()
+		if err != nil {
+			s.recordError(err)
+		} else {
+			s.record(snap, offsets)
+		}
+		<-ticker.C
+	}
+}
+
+// sampleLag reads committed and end offsets for every partition of the
+// group's topics. Lag counts committed partitions only, matching the group
+// page; incoming counts all of them. Any partition-level error fails the
+// sample rather than recording a partial total.
+func (h *Handlers) sampleLag(ctx context.Context, cluster *config.Cluster, groupID string) (LagSnapshot, map[topicPartition]partitionOffsets, error) {
+	admClient, err := h.pool.get(cluster)
+	if err != nil {
+		return LagSnapshot{}, nil, err
+	}
+	// Before fetching, so the timestamp matches the offsets as closely as possible.
+	sampledAt := time.Now().UnixMilli()
+
+	groupResp := admClient.FetchManyOffsets(ctx, groupID)[groupID]
+	if groupResp.Err != nil {
+		return LagSnapshot{}, nil, fmt.Errorf("fetch committed offsets: %w", groupResp.Err)
+	}
+	described, err := admClient.DescribeGroups(ctx, groupID)
+	if err != nil {
+		return LagSnapshot{}, nil, fmt.Errorf("describe group: %w", err)
+	}
+
+	topics := map[string]struct{}{}
+	for topic := range groupResp.Fetched {
+		topics[topic] = struct{}{}
+	}
+	if g, ok := described[groupID]; ok && g.Err == nil {
+		for _, m := range g.Members {
+			if asgn, ok := m.Assigned.AsConsumer(); ok {
+				for _, t := range asgn.Topics {
+					topics[t.Topic] = struct{}{}
+				}
+			}
+		}
+	}
+	snap := LagSnapshot{Ts: sampledAt, ByTopic: map[string]int64{}}
+	offsets := map[topicPartition]partitionOffsets{}
+	if len(topics) == 0 {
+		// ListEndOffsets with no topics lists every topic in the cluster.
+		return snap, offsets, nil
+	}
+	topicList := make([]string, 0, len(topics))
+	for topic := range topics {
+		topicList = append(topicList, topic)
+	}
+	leos, err := admClient.ListEndOffsets(ctx, topicList...)
+	if err != nil {
+		return LagSnapshot{}, nil, fmt.Errorf("list end offsets: %w", err)
+	}
+
+	var failed int
+	for topic, parts := range leos {
+		for partID, leo := range parts {
+			if leo.Err != nil {
+				if errors.Is(leo.Err, kerr.UnknownTopicOrPartition) {
+					continue // deleted topic with stale commits
+				}
+				failed++
+				continue
+			}
+			committed := int64(-1)
+			if off, ok := groupResp.Fetched[topic][partID]; ok {
+				if off.Err != nil {
+					failed++
+					continue
+				}
+				committed = off.At
+				lag := lagFromOff(off.At, leo.Offset)
+				snap.TotalLag += lag
+				snap.ByTopic[topic] += lag
+			}
+			offsets[topicPartition{topic, partID}] = partitionOffsets{committed: committed, end: leo.Offset}
+		}
+	}
+	if failed > 0 {
+		return LagSnapshot{}, nil, fmt.Errorf("offsets unavailable for %d partition(s)", failed)
+	}
+	return snap, offsets, nil
+}
+
+// GetLagHistory returns the group's sampled lag history. The first call starts
+// a background sampler, which keeps running for lagWatchTTL after the last call.
 //
 // GET /api/connections/:id/groups/:name/lag-history
 func (h *Handlers) GetLagHistory(w http.ResponseWriter, r *http.Request) {
@@ -169,65 +364,9 @@ func (h *Handlers) GetLagHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	groupID := chi.URLParam(r, "name")
-
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-	admClient, err := h.pool.get(cluster)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
+	s, created := h.lagStore.watch(cluster.ID, groupID, time.Now())
+	if created {
+		go h.runLagSampler(cluster.ID, groupID, s)
 	}
-
-	// Before fetching, so a slow poll can't land after a newer one.
-	sampledAt := time.Now().UnixMilli()
-
-	// Batch-fetch committed offsets for this group.
-	fetchedOffsets := admClient.FetchManyOffsets(ctx, groupID)
-	groupResp := fetchedOffsets[groupID]
-	if groupResp.Err != nil {
-		writeError(w, http.StatusBadGateway, fmt.Sprintf("fetch committed offsets: %v", groupResp.Err))
-		return
-	}
-
-	topicList := make([]string, 0, len(groupResp.Fetched))
-	for topic := range groupResp.Fetched {
-		topicList = append(topicList, topic)
-	}
-	leos, err := admClient.ListEndOffsets(ctx, topicList...)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "list end offsets: "+err.Error())
-		return
-	}
-
-	// Compute the current lag snapshot.
-	byTopic := map[string]int64{}
-	offsets := map[topicPartition]partitionOffsets{}
-	var totalLag int64
-	for topic, partOffsets := range groupResp.Fetched {
-		topicEnd := leos[topic]
-		for partID, off := range partOffsets {
-			if off.Err != nil {
-				continue
-			}
-			if leo, ok2 := topicEnd[partID]; ok2 && leo.Err == nil {
-				offsets[topicPartition{topic, partID}] = partitionOffsets{committed: off.At, end: leo.Offset}
-				lag := lagFromOff(off.At, leo.Offset)
-				totalLag += lag
-				byTopic[topic] += lag
-			}
-		}
-	}
-
-	snap := LagSnapshot{
-		Ts:       sampledAt,
-		TotalLag: totalLag,
-		ByTopic:  byTopic,
-	}
-
-	minGapMs := int64(lagPollInterval / 2 / time.Millisecond)
-	history := h.lagStore.appendIfNew(cluster.ID, groupID, snap, offsets, minGapMs)
-	if history == nil {
-		history = []LagSnapshot{}
-	}
-	writeJSON(w, http.StatusOK, history)
+	writeJSON(w, http.StatusOK, s.view())
 }
