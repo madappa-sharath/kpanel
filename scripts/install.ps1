@@ -56,6 +56,48 @@ try {
     }
     Write-Host "Checksum OK."
 
+    # Verify build provenance. checksums.txt comes from the same release as the
+    # archive, so it cannot detect a swapped release. The GitHub attestation ties
+    # the archive to this repo's release workflow.
+    # gh writes progress to stderr. With 'Stop', Windows PowerShell 5.1 can turn
+    # native stderr into a terminating error, so use exit codes here instead.
+    $GhReady = $false
+    $GhExit = 1
+    $PrevPref = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        if (Get-Command gh -ErrorAction SilentlyContinue) {
+            # Check for a github.com credential (login or GH_TOKEN) rather than
+            # `gh auth status`, which also fails because of unrelated hosts.
+            & gh auth token --hostname github.com *> $null
+            $GhReady = ($LASTEXITCODE -eq 0)
+        }
+        if ($GhReady) {
+            Write-Host "Verifying build provenance with gh attestation verify..."
+            # --source-ref stops an attested archive from an older tag being
+            # passed off as this version.
+            & gh attestation verify $ArchivePath `
+                --hostname github.com `
+                --repo $Repo `
+                --signer-workflow "$Repo/.github/workflows/release.yml" `
+                --source-ref "refs/tags/$Version"
+            $GhExit = $LASTEXITCODE
+        }
+    } finally {
+        $ErrorActionPreference = $PrevPref
+    }
+    if ($GhReady) {
+        if ($GhExit -ne 0) {
+            Write-Error "Build provenance verification failed for $Archive. Aborting."
+            exit 1
+        }
+        Write-Host "Provenance OK."
+    } else {
+        Write-Warning "GitHub CLI (gh) is not installed or not logged in."
+        Write-Warning "Skipping build provenance verification; only the SHA-256 checksum was checked."
+        Write-Warning "Install gh and run 'gh auth login' to verify that this release was built by $Repo."
+    }
+
     Expand-Archive -Path $ArchivePath -DestinationPath $Tmp -Force
 
     if (-not (Test-Path $InstallDir)) {

@@ -156,12 +156,36 @@ Then open `http://localhost:8080`. Add a manual connection (enter broker address
 
 The install script writes only to `~/.local/bin` (or `$KPANEL_INSTALL_DIR`) and never uses sudo. If that directory is not in your `PATH`, the installer prints exact shell commands to add it. Both scripts are in this repo — [`scripts/install.sh`](./scripts/install.sh) and [`scripts/install.ps1`](./scripts/install.ps1) — if you want to read them before running.
 
-Every release includes a `checksums.txt` with SHA-256 hashes. The install script verifies the checksum before extracting. To verify manually:
+### Verifying releases
+
+Every binary archive (`kpanel_*.tar.gz` and `kpanel_*.zip`) in releases published after this change has a [GitHub artifact attestation](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations) (SLSA build provenance). The attestation proves that the archive was built by this repo's [release workflow](./.github/workflows/release.yml) from that release's tag. A `checksums.txt` file only proves that the archive matches a file in the same release, so it cannot detect a release where both files were replaced.
+
+The install scripts verify the archive before they extract it:
+
+- If the [GitHub CLI](https://cli.github.com) (`gh`) is installed and has a github.com login (or `GH_TOKEN`), the script runs `gh attestation verify`. If verification fails, or the release has no attestation, the install stops.
+- If `gh` is not installed or not logged in, the script prints a warning and checks only the SHA-256 checksum.
+- The script always checks the SHA-256 checksum from `checksums.txt`.
+
+Releases published before attestations were added cannot be installed with the install scripts while `gh` is logged in.
+
+To verify an archive manually:
 
 ```bash
-VERSION=v0.1.0
+VERSION=vX.Y.Z   # an attested release tag
+ARCHIVE=kpanel_darwin_arm64.tar.gz
+curl -fLO https://github.com/madappa-sharath/kpanel/releases/download/$VERSION/$ARCHIVE
+gh attestation verify "$ARCHIVE" \
+  --hostname github.com \
+  --repo madappa-sharath/kpanel \
+  --signer-workflow madappa-sharath/kpanel/.github/workflows/release.yml \
+  --source-ref "refs/tags/$VERSION"
+```
+
+You can also check the checksum:
+
+```bash
 curl -fLO https://github.com/madappa-sharath/kpanel/releases/download/$VERSION/checksums.txt
-grep kpanel_darwin_arm64.tar.gz checksums.txt | sha256sum --check
+grep "$ARCHIVE" checksums.txt | sha256sum --check
 ```
 
 kpanel makes no outbound connections except the ones you configure: directly to your Kafka brokers and optionally to AWS APIs. Connection configs are written to `~/.kpanel/connections.json`. Passwords and secret keys are stored in your OS keychain (macOS Keychain, Linux Secret Service, Windows Credential Manager) via `go-keyring`, not in the JSON file.

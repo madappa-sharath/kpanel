@@ -13,7 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write  # goreleaser publishes the GitHub Release
-      id-token: write  # cosign keyless signing via GitHub OIDC
+      id-token: write  # cosign keyless signing + attestation signing via GitHub OIDC
+      attestations: write  # actions/attest-build-provenance stores attestations
     env:
       # Reject runs that would mutate go.mod/go.sum.
       GOFLAGS: -mod=readonly
@@ -63,7 +64,23 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # SLSA build provenance for each release archive. install.sh/install.ps1
+      # check it with `gh attestation verify`, which ties the archive to this
+      # repo and this workflow (checksums.txt alone can be swapped with it).
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-path: |
+            dist/kpanel_*.tar.gz
+            dist/kpanel_*.zip
+
       - name: Upload source tarball to release
         run: gh release upload ${{ github.ref_name }} ${{ env.SRC_TARBALL }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # goreleaser creates the release as a draft. Publish it last, after the
+      # attestations and all assets exist.
+      - name: Publish release
+        run: gh release edit ${{ github.ref_name }} --draft=false
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
