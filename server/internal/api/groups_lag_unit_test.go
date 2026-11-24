@@ -79,6 +79,29 @@ func TestOffsetRates(t *testing.T) {
 	}
 }
 
+func TestOffsetRates_SplitsByTopic(t *testing.T) {
+	a, b := topicPartition{"orders", 0}, topicPartition{"payments", 0}
+	d := offsetRates(
+		offs{a: {committed: 0, end: 0}, b: {committed: 10, end: 10}},
+		offs{a: {committed: 50, end: 100}, b: {committed: 10, end: 30}},
+		10_000,
+	)
+	want := map[string]TopicRate{
+		"orders":   {ProduceRate: 10, ConsumeRate: 5, Commits: 1},
+		"payments": {ProduceRate: 2, ConsumeRate: 0, Commits: 0},
+	}
+	if len(d.byTopic) != len(want) {
+		t.Fatalf("byTopic: got %+v, want %+v", d.byTopic, want)
+	}
+	for topic, w := range want {
+		if d.byTopic[topic] != w {
+			t.Errorf("%s: got %+v, want %+v", topic, d.byTopic[topic], w)
+		}
+	}
+	assertRate(t, "produce", d.produce, ptr(12.0))
+	assertRate(t, "consume", d.consume, ptr(5.0))
+}
+
 func TestLagSeries_FillsRatesFromPreviousSnapshot(t *testing.T) {
 	tp := topicPartition{"orders", 0}
 	s := newLagSeries(time.Hour, time.UnixMilli(0))

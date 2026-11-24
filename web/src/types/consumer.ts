@@ -47,6 +47,13 @@ export interface LagSnapshot {
   produce_rate: number | null
   consume_rate: number | null
   commits: number | null
+  topic_rates?: Record<string, TopicRate>
+}
+
+export interface TopicRate {
+  produce_rate: number
+  consume_rate: number
+  commits: number
 }
 
 export interface LagHistory {

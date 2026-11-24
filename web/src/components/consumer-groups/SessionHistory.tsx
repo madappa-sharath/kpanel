@@ -7,6 +7,7 @@ import type { LagSnapshot } from '../../types/consumer'
 import { LagChart } from './LagChart'
 import { ThroughputChart } from './ThroughputChart'
 import {
+  ARROWS,
   chartRows,
   computeStats,
   diagnose,
@@ -15,6 +16,9 @@ import {
   fmtDuration,
   fmtEta,
   fmtRate,
+  pacePct,
+  topicVerdicts,
+  type TopicVerdict,
   type Diagnosis,
   type Fact,
   type RateStats,
@@ -37,6 +41,7 @@ export function SessionHistory({ clusterId, groupId }: SessionHistoryProps) {
   const snapshots = data?.snapshots
 
   const stats = useMemo(() => (snapshots ? computeStats(snapshots, windowMs) : null), [snapshots, windowMs])
+  const verdicts = useMemo(() => (snapshots ? topicVerdicts(snapshots, windowMs) : []), [snapshots, windowMs])
 
   const lastTs = snapshots?.length ? snapshots[snapshots.length - 1].ts : null
   const staleMs = data && lastTs !== null ? dataUpdatedAt - lastTs : 0
@@ -54,15 +59,15 @@ export function SessionHistory({ clusterId, groupId }: SessionHistoryProps) {
       <div className="flex min-w-0 flex-col gap-4">
         {stale ? (
           <StatusStrip
-            diagnosis={{ tone: 'bad', state: 'No data', headline: `last sample ${fmtDuration(staleMs / 1000)} ago` }}
+            diagnosis={{ tone: 'idle', state: 'No data', headline: `last sample ${fmtDuration(staleMs / 1000)} ago` }}
             facts={[
               { label: 'showing up to', value: fmtTime(lastTs!) },
-              ...(data?.last_error ? [{ label: 'error', value: data.last_error, tone: 'bad' as const }] : []),
+              ...(data?.last_error ? [{ label: 'error', value: data.last_error, tone: 'warn' as const }] : []),
             ]}
           />
         ) : stats ? (
           <>
-            <StatusStrip diagnosis={diagnose(stats)} stats={stats} />
+            <GroupStatus stats={stats} verdicts={verdicts} />
             <StatTiles stats={stats} windowKey={windowKey} intervalMs={data!.interval_ms} />
           </>
         ) : (
@@ -166,6 +171,73 @@ function StatusStrip({ diagnosis, stats, facts }: StatusStripProps) {
           ))}
         </dl>
       )}
+    </div>
+  )
+}
+
+// With several topics the strip leads with the worst one, unless they're all
+// fine, and a table shows each topic's own verdict.
+function GroupStatus({ stats, verdicts }: { stats: WindowStats; verdicts: TopicVerdict[] }) {
+  const worst = verdicts[0]
+  if (verdicts.length < 2 || !worst) return <StatusStrip diagnosis={diagnose(stats)} stats={stats} />
+  const allFine = worst.diagnosis.state === 'Caught up' || worst.diagnosis.state === 'Idle'
+  const flagged = verdicts.filter((v) => v.diagnosis.tone === 'bad' || v.diagnosis.tone === 'warn').length
+  return (
+    <>
+      {allFine ? (
+        <StatusStrip diagnosis={diagnose(stats)} stats={stats} />
+      ) : (
+        <StatusStrip
+          diagnosis={worst.diagnosis}
+          facts={[
+            { label: 'topic', value: worst.topic },
+            ...(flagged > 1 ? [{ label: 'also', value: `${flagged - 1} more topic${flagged > 2 ? 's' : ''}` }] : []),
+            ...evidence(worst.stats, worst.diagnosis),
+          ]}
+        />
+      )}
+      <TopicTable verdicts={verdicts} />
+    </>
+  )
+}
+
+function TopicTable({ verdicts }: { verdicts: TopicVerdict[] }) {
+  return (
+    <div className="min-w-0 overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead className="text-left text-[11px] text-muted-foreground">
+          <tr className="border-b">
+            {['Topic', 'State', '', 'Backlog', 'In', 'Out', 'Pace', 'Cause'].map((h, i) => (
+              <th key={i} className={cn('py-1.5 pr-4 font-normal', i >= 3 && i <= 6 && 'text-right')}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="font-mono tabular-nums">
+          {verdicts.map(({ topic, stats, diagnosis: d }) => {
+            const pct = d.state !== 'Caught up' && stats.lag.now > 0 && stats.processing.now > 0 ? pacePct(stats) : null
+            return (
+              <tr key={topic} className="border-b last:border-0">
+                <td className="max-w-64 truncate py-1.5 pr-4" title={topic}>
+                  {topic}
+                </td>
+                <td className={cn('py-1.5 pr-4 font-sans text-[11px] font-semibold uppercase tracking-wider whitespace-nowrap', TONES[d.tone].className)}>
+                  {d.state}
+                </td>
+                <td className={cn('py-1.5 pr-4 whitespace-nowrap', TONES[d.tone].className)}>{d.headline}</td>
+                <td className="py-1.5 pr-4 text-right whitespace-nowrap">
+                  {stats.lag.now > 0 ? `${fmtCount(stats.lag.now)}${d.trend ? ` ${ARROWS[d.trend]}` : ''}` : '0'}
+                </td>
+                <td className="py-1.5 pr-4 text-right">{fmtRate(stats.incoming.now)}</td>
+                <td className="py-1.5 pr-4 text-right">{fmtRate(stats.processing.now)}</td>
+                <td className="py-1.5 pr-4 text-right">{pct === null ? '—' : `${pct}%`}</td>
+                <td className={cn('py-1.5 pr-4', d.cause && TONES.warn.className)}>{d.cause ?? '—'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { LagSnapshot } from '../../types/consumer'
-import { computeStats, diagnose, evidence } from './lagStats'
+import { computeStats, diagnose, evidence, topicVerdicts } from './lagStats'
 
 interface Phase {
   secs: number
@@ -39,6 +39,7 @@ describe('diagnose with a backlog', () => {
   test('consumer stopped, nothing arriving: no progress, no cause', () => {
     const d = verdict([{ secs: 600, inRate: 100, outRate: 50 }, { secs: 30, inRate: 0, outRate: 0 }])
     expect(d.state).toBe('No progress')
+    expect(d.tone).toBe('warn')
     expect(d.trend).toBe('flat')
     expect(d.cause).toBeUndefined()
     expect(d.facts.in).toBe('0/s')
@@ -48,7 +49,7 @@ describe('diagnose with a backlog', () => {
 
   test('consumer stopped for over a minute: stalled', () => {
     const d = verdict([{ secs: 600, inRate: 100, outRate: 50 }, { secs: 90, inRate: 0, outRate: 0 }])
-    expect(d.tone).toBe('bad')
+    expect(d.tone).toBe('warn')
     expect(d.state).toBe('Stalled')
     expect(d.headline).toBe('no commit in 1m 30s')
   })
@@ -68,6 +69,7 @@ describe('diagnose with a backlog', () => {
   test('backlog after an idle spell: stall clock starts with the backlog', () => {
     const d = verdict([{ secs: 120, inRate: 0, outRate: 0 }, { secs: 20, inRate: 500, outRate: 0 }])
     expect(d.state).toBe('No progress')
+    expect(d.tone).toBe('bad')
     expect(d.trend).toBe('up')
   })
 
@@ -116,9 +118,51 @@ describe('diagnose without a backlog', () => {
     expect(verdict([{ secs: 300, inRate: 100, outRate: 100 }]).state).toBe('Caught up')
   })
 
+  test('lag from messages in flight is caught up, not a backlog', () => {
+    const d = verdict([{ secs: 300, inRate: 100, outRate: 100 }], 300)
+    expect(d.state).toBe('Caught up')
+    expect(d.headline).toBe('lag 300')
+  })
+
   test('idle', () => {
     const d = verdict([{ secs: 300, inRate: 0, outRate: 0 }])
     expect(d.state).toBe('Idle')
     expect(d.facts.incoming).toBe('none')
+  })
+})
+
+describe('topicVerdicts', () => {
+  // orders drains fast; payments has a backlog, gets new messages and no commits.
+  function group() {
+    const snaps: LagSnapshot[] = []
+    for (let i = 0; i <= 120; i++) {
+      const orders = Math.max(0, 50_000 - i * 1_000)
+      const payments = 1_000 + i * 25
+      snaps.push({
+        ts: i * 5_000,
+        total_lag: orders + payments,
+        by_topic: { orders, payments },
+        produce_rate: i ? 5 : null,
+        consume_rate: i ? (orders > 0 ? 200 : 0) : null,
+        commits: i ? 1 : null,
+        topic_rates: i
+          ? {
+              orders: { produce_rate: 0, consume_rate: orders > 0 ? 200 : 0, commits: orders > 0 ? 1 : 0 },
+              payments: { produce_rate: 5, consume_rate: 0, commits: 0 },
+            }
+          : undefined,
+      })
+    }
+    return snaps.slice(0, 40)
+  }
+
+  test('a stuck topic leads even when the group total is draining', () => {
+    const snaps = group()
+    expect(diagnose(computeStats(snaps, 60 * 60_000)!).state).toBe('Draining')
+    const v = topicVerdicts(snaps, 60 * 60_000)
+    expect(v.map((x) => [x.topic, x.diagnosis.state, x.diagnosis.tone])).toEqual([
+      ['payments', 'Stalled', 'bad'],
+      ['orders', 'Draining', 'ok'],
+    ])
   })
 })

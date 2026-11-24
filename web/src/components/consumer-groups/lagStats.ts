@@ -173,9 +173,12 @@ export function diagnose(stats: WindowStats): Diagnosis {
   const outRate = stats.processing.now
   const lag = stats.lag.now
   const noCommit = `no commit in ${fmtDuration(stats.stalledMs / 1000)}`
+  // Red only when the backlog is growing; an old backlog on a group nobody is
+  // feeding is worth a look, not an alarm.
+  const stuckTone: Tone = inRate > 0 ? 'bad' : 'warn'
 
   if (lag > 0 && stats.stalledMs >= Math.max(STALL_MS, 2 * stats.nowWindowMs)) {
-    return { tone: 'bad', state: 'Stalled', headline: noCommit, trend: inRate > 0 ? 'up' : 'flat' }
+    return { tone: stuckTone, state: 'Stalled', headline: noCommit, trend: inRate > 0 ? 'up' : 'flat' }
   }
   if (lag === 0 && inRate < IDLE_RATE && outRate < IDLE_RATE) {
     return { tone: 'idle', state: 'Idle', headline: 'lag 0' }
@@ -184,13 +187,15 @@ export function diagnose(stats: WindowStats): Diagnosis {
     if (stats.ratedMs < stats.nowWindowMs) {
       return { tone: 'idle', state: 'Measuring', headline: 'waiting for first commit' }
     }
-    return { tone: 'bad', state: 'No progress', headline: noCommit, trend: inRate > 0 ? 'up' : 'flat' }
+    return { tone: stuckTone, state: 'No progress', headline: noCommit, trend: inRate > 0 ? 'up' : 'flat' }
   }
 
   const net = outRate - inRate
   // With nothing arriving, any processing shrinks the backlog.
   const tolerance = inRate === 0 ? 0 : Math.max(Math.max(inRate, outRate) * PACE_TOLERANCE, MIN_PACE_TOLERANCE)
-  if (lag === 0) return { tone: 'ok', state: 'Caught up', headline: 'lag 0' }
+  // A busy consumer always trails by whatever arrived since its last commit;
+  // that's in flight, not a backlog.
+  if (lag <= (inRate * stats.nowWindowMs) / 1000) return { tone: 'ok', state: 'Caught up', headline: `lag ${fmtCount(lag)}` }
   if (Math.abs(net) <= tolerance) {
     return { tone: 'warn', state: 'Not shrinking', headline: 'net ≈ 0', trend: 'flat', cause: cause(stats) }
   }
@@ -198,6 +203,50 @@ export function diagnose(stats: WindowStats): Diagnosis {
     return { tone: 'ok', state: 'Draining', headline: `clears ~${fmtEta(lag / net)}`, trend: 'down' }
   }
   return { tone: 'warn', state: 'Falling behind', headline: `+${fmtRate(-net)}`, trend: 'up', cause: cause(stats) }
+}
+
+const TONE_RANK: Record<Tone, number> = { bad: 0, warn: 1, ok: 2, idle: 3 }
+const STATE_RANK = ['Stalled', 'No progress', 'Falling behind', 'Not shrinking', 'Draining', 'Measuring', 'Caught up', 'Idle']
+
+export interface TopicVerdict {
+  topic: string
+  stats: WindowStats
+  diagnosis: Diagnosis
+}
+
+// One snapshot series per topic, from the per-topic lag and rates.
+export function topicSnapshots(snapshots: LagSnapshot[], topic: string): LagSnapshot[] {
+  return snapshots.map((s) => {
+    const r = s.topic_rates?.[topic]
+    return {
+      ts: s.ts,
+      total_lag: s.by_topic[topic] ?? 0,
+      by_topic: {},
+      produce_rate: r ? r.produce_rate : null,
+      consume_rate: r ? r.consume_rate : null,
+      commits: r ? r.commits : null,
+    }
+  })
+}
+
+// Each topic's verdict, worst first, so one stuck topic can't hide behind
+// a busy one in the group totals.
+export function topicVerdicts(snapshots: LagSnapshot[], windowMs: number): TopicVerdict[] {
+  const last = snapshots[snapshots.length - 1]
+  if (!last) return []
+  const topics = new Set([...Object.keys(last.by_topic), ...Object.keys(last.topic_rates ?? {})])
+  const out: TopicVerdict[] = []
+  for (const topic of topics) {
+    const stats = computeStats(topicSnapshots(snapshots, topic), windowMs)
+    if (stats) out.push({ topic, stats, diagnosis: diagnose(stats) })
+  }
+  return out.sort(
+    (a, b) =>
+      TONE_RANK[a.diagnosis.tone] - TONE_RANK[b.diagnosis.tone] ||
+      STATE_RANK.indexOf(a.diagnosis.state) - STATE_RANK.indexOf(b.diagnosis.state) ||
+      b.stats.lag.now - a.stats.lag.now ||
+      a.topic.localeCompare(b.topic),
+  )
 }
 
 // Current processing as a share of the consumer's own observed p95; null
@@ -224,13 +273,13 @@ export interface Fact {
   tone?: Tone
 }
 
-const ARROWS: Record<Trend, string> = { up: '↑', down: '↓', flat: '→' }
+export const ARROWS: Record<Trend, string> = { up: '↑', down: '↓', flat: '→' }
 
 // The evidence behind a verdict, so it can be checked at a glance.
 export function evidence(stats: WindowStats, d: Diagnosis): Fact[] {
   const lag = stats.lag.now
   const facts: Fact[] = []
-  if (lag > 0) facts.push({ label: 'backlog', value: `${fmtCount(lag)}${d.trend ? ` ${ARROWS[d.trend]}` : ''}` })
+  if (lag > 0 && d.state !== 'Caught up') facts.push({ label: 'backlog', value: `${fmtCount(lag)}${d.trend ? ` ${ARROWS[d.trend]}` : ''}` })
   if (d.state === 'Idle') {
     facts.push({ label: 'incoming', value: 'none' })
     return facts
@@ -239,7 +288,7 @@ export function evidence(stats: WindowStats, d: Diagnosis): Fact[] {
   const pct = pacePct(stats)
   if (lag > 0 && pct !== null && stats.processing.now > 0) facts.push({ label: 'pace', value: `${pct}% of p95` })
   if (d.cause) facts.push({ label: 'cause', value: d.cause, tone: 'warn' })
-  if (lag > 0 && stats.sinceCommitMs !== null && d.tone === 'bad') {
+  if (lag > 0 && stats.sinceCommitMs !== null && (d.state === 'Stalled' || d.state === 'No progress')) {
     facts.push({ label: 'last commit', value: `${fmtDuration(stats.sinceCommitMs / 1000)} ago` })
   }
   if (stats.commitGapMs > 10_000) facts.push({ label: 'commits every', value: `~${fmtDuration(stats.commitGapMs / 1000)}` })

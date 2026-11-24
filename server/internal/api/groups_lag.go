@@ -30,6 +30,14 @@ type LagSnapshot struct {
 	ConsumeRate *float64         `json:"consume_rate"`
 	// Partitions whose committed offset moved since the previous snapshot.
 	Commits *int `json:"commits"`
+	// The same rates per topic, so one stuck topic can't hide behind a busy one.
+	TopicRates map[string]TopicRate `json:"topic_rates,omitempty"`
+}
+
+type TopicRate struct {
+	ProduceRate float64 `json:"produce_rate"`
+	ConsumeRate float64 `json:"consume_rate"`
+	Commits     int     `json:"commits"`
 }
 
 type lagHistoryResponse struct {
@@ -55,6 +63,7 @@ type partitionOffsets struct {
 type offsetDelta struct {
 	produce, consume *float64
 	commits          *int
+	byTopic          map[string]TopicRate
 }
 
 // offsetRates counts production on every partition, since all of it adds to
@@ -63,31 +72,46 @@ func offsetRates(prev, cur map[topicPartition]partitionOffsets, dtMs int64) offs
 	if dtMs <= 0 {
 		return offsetDelta{}
 	}
-	var produced, consumed int64
-	var n, commits int
+	type counts struct {
+		produced, consumed int64
+		commits            int
+	}
+	topics := map[string]*counts{}
 	for tp, c := range cur {
 		p, ok := prev[tp]
 		if !ok {
 			continue
 		}
-		n++
+		t := topics[tp.topic]
+		if t == nil {
+			t = &counts{}
+			topics[tp.topic] = t
+		}
 		if dEnd := c.end - p.end; dEnd > 0 {
-			produced += dEnd
+			t.produced += dEnd
 		}
 		if p.committed < 0 || c.committed < 0 {
 			continue
 		}
 		if dCommit := c.committed - p.committed; dCommit > 0 {
-			consumed += dCommit
-			commits++
+			t.consumed += dCommit
+			t.commits++
 		}
 	}
-	if n == 0 {
+	if len(topics) == 0 {
 		return offsetDelta{}
 	}
 	secs := float64(dtMs) / 1000
-	pr, cr := float64(produced)/secs, float64(consumed)/secs
-	return offsetDelta{produce: &pr, consume: &cr, commits: &commits}
+	var total counts
+	byTopic := make(map[string]TopicRate, len(topics))
+	for topic, t := range topics {
+		total.produced += t.produced
+		total.consumed += t.consumed
+		total.commits += t.commits
+		byTopic[topic] = TopicRate{float64(t.produced) / secs, float64(t.consumed) / secs, t.commits}
+	}
+	pr, cr := float64(total.produced)/secs, float64(total.consumed)/secs
+	return offsetDelta{produce: &pr, consume: &cr, commits: &total.commits, byTopic: byTopic}
 }
 
 // lagSeries is the sampled history of one consumer group.
@@ -123,7 +147,7 @@ func (s *lagSeries) record(snap LagSnapshot, offsets map[topicPartition]partitio
 		}
 		if s.lastOffsets != nil && dt <= lagRateMaxGap.Milliseconds() {
 			d := offsetRates(s.lastOffsets, offsets, dt)
-			snap.ProduceRate, snap.ConsumeRate, snap.Commits = d.produce, d.consume, d.commits
+			snap.ProduceRate, snap.ConsumeRate, snap.Commits, snap.TopicRates = d.produce, d.consume, d.commits, d.byTopic
 		}
 	}
 	s.lastOffsets = offsets
