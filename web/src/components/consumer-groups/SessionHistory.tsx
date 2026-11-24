@@ -26,7 +26,7 @@ import {
 } from './lagStats'
 import { fmtTime } from './sessionChart'
 
-const WINDOWS = { '15m': 15 * 60_000, '1h': 60 * 60_000, '6h': 6 * 60 * 60_000 } as const
+const WINDOWS = { '15m': 15 * 60_000, '1h': 60 * 60_000, '2h': 2 * 60 * 60_000 } as const
 type WindowKey = keyof typeof WINDOWS
 
 interface SessionHistoryProps {

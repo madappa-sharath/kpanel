@@ -15,8 +15,8 @@ import (
 
 const (
 	lagSampleInterval = 5 * time.Second
-	lagRetention      = 6 * time.Hour
-	lagWatchTTL       = 6 * time.Hour // keep sampling this long after the last view
+	lagRetention      = 2 * time.Hour
+	lagWatchTTL       = 2 * time.Hour // keep sampling this long after the last view
 	lagRateMaxGap     = 4 * lagSampleInterval
 )
 
