@@ -28,6 +28,10 @@ export interface WindowStats {
   capacity: number | null
   // Time the backlog has gone without the committed offsets moving.
   stalledMs: number
+  // Time since the committed offsets last moved; null if they never have.
+  sinceCommitMs: number | null
+  // Typical time between commits; 0 until there are two.
+  commitGapMs: number
   ratedMs: number
 }
 
@@ -114,7 +118,8 @@ export function computeStats(snapshots: LagSnapshot[], windowMs: number): Window
   const last = snapshots[snapshots.length - 1]
   if (!last || last.produce_rate === null || last.consume_rate === null) return null
   const all = intervals(snapshots)
-  const nowWindowMs = Math.min(MAX_NOW_WINDOW_MS, Math.max(NOW_WINDOW_MS, 2 * commitGapMs(all)))
+  const gapMs = commitGapMs(all)
+  const nowWindowMs = Math.min(MAX_NOW_WINDOW_MS, Math.max(NOW_WINDOW_MS, 2 * gapMs))
   const win = all.filter((x) => x.ts > last.ts - windowMs)
   const recent = all.filter((x) => x.ts > last.ts - nowWindowMs)
   if (!recent.length) return null
@@ -143,92 +148,106 @@ export function computeStats(snapshots: LagSnapshot[], windowMs: number): Window
     nowWindowMs,
     capacity: allMs >= MIN_BASELINE_MS ? p95(rollingAvgs(all, nowWindowMs, (x) => x.consume)) : null,
     stalledMs: last.total_lag > 0 ? last.ts - Math.max(backlogTs, lastProgress?.ts ?? 0) : 0,
+    sinceCommitMs: lastProgress ? last.ts - lastProgress.ts : null,
+    commitGapMs: gapMs,
     ratedMs: allMs,
   }
 }
 
 export type Tone = 'ok' | 'warn' | 'bad' | 'idle'
+export type Trend = 'up' | 'down' | 'flat'
+export type Cause = 'incoming' | 'consumer'
 
 export interface Diagnosis {
   tone: Tone
-  title: string
-  detail?: string
+  state: string
+  // The one number that matters for this state.
+  headline: string
+  trend?: Trend
+  // Set only when the consumer's own baseline can separate the two.
+  cause?: Cause
 }
 
 export function diagnose(stats: WindowStats): Diagnosis {
   const inRate = stats.incoming.now
   const outRate = stats.processing.now
   const lag = stats.lag.now
+  const noCommit = `no commit in ${fmtDuration(stats.stalledMs / 1000)}`
 
-  const window = fmtDuration(stats.nowWindowMs / 1000)
-  const stalledMs = stats.stalledMs
-  if (lag > 0 && stalledMs >= Math.max(STALL_MS, 2 * stats.nowWindowMs)) {
-    return {
-      tone: 'bad',
-      title: `Stalled — ${fmtCount(lag)} waiting, no commits for ${fmtDuration(stalledMs / 1000)}`,
-      detail: 'Check that the consumers are running and committing.',
-    }
+  if (lag > 0 && stats.stalledMs >= Math.max(STALL_MS, 2 * stats.nowWindowMs)) {
+    return { tone: 'bad', state: 'Stalled', headline: noCommit, trend: inRate > 0 ? 'up' : 'flat' }
   }
   if (lag === 0 && inRate < IDLE_RATE && outRate < IDLE_RATE) {
-    return { tone: 'idle', title: 'Idle — caught up, nothing arriving' }
+    return { tone: 'idle', state: 'Idle', headline: 'lag 0' }
   }
-
   if (lag > 0 && outRate === 0) {
     if (stats.ratedMs < stats.nowWindowMs) {
-      return { tone: 'idle', title: `Measuring — ${fmtCount(lag)} waiting, no commit seen yet` }
+      return { tone: 'idle', state: 'Measuring', headline: 'waiting for first commit' }
     }
-    return {
-      tone: 'warn',
-      title: `No progress — ${fmtCount(lag)} waiting, nothing committed in the last ${window}`,
-      detail:
-        inRate === 0
-          ? 'Nothing is arriving, so the lag is messages already in the topic that the consumer hasn’t worked through.'
-          : `${fmtRate(inRate)} is still arriving, so the backlog is growing.`,
-    }
+    return { tone: 'bad', state: 'No progress', headline: noCommit, trend: inRate > 0 ? 'up' : 'flat' }
   }
 
   const net = outRate - inRate
   // With nothing arriving, any processing shrinks the backlog.
   const tolerance = inRate === 0 ? 0 : Math.max(Math.max(inRate, outRate) * PACE_TOLERANCE, MIN_PACE_TOLERANCE)
+  if (lag === 0) return { tone: 'ok', state: 'Caught up', headline: 'lag 0' }
   if (Math.abs(net) <= tolerance) {
-    return lag === 0
-      ? { tone: 'ok', title: 'Keeping up — processing as fast as messages arrive' }
-      : { tone: 'warn', title: `Holding steady — ${fmtCount(lag)} behind, not shrinking`, detail: capacityDetail(stats, 'steady') }
+    return { tone: 'warn', state: 'Not shrinking', headline: 'net ≈ 0', trend: 'flat', cause: cause(stats) }
   }
-  if (lag === 0) return { tone: 'ok', title: 'Keeping up — no backlog' }
   if (net > 0) {
-    return {
-      tone: 'ok',
-      title: `Catching up by ${fmtRate(net)} — clears in ~${fmtDuration(lag / net)}`,
-      detail: capacityDetail(stats, 'shrinking'),
-    }
+    return { tone: 'ok', state: 'Draining', headline: `clears ~${fmtEta(lag / net)}`, trend: 'down' }
   }
-  return {
-    tone: 'warn',
-    title: `Falling behind by ${fmtRate(-net)} — incoming is ${fmtRatio(inRate / outRate)} processing`,
-    detail: capacityDetail(stats, 'growing'),
-  }
+  return { tone: 'warn', state: 'Falling behind', headline: `+${fmtRate(-net)}`, trend: 'up', cause: cause(stats) }
 }
 
-// Compares current processing with the consumer's own observed p95, which is
-// what separates "more is arriving" from "we got slower". Only meaningful
-// while there is a backlog; otherwise the consumer just matches incoming.
-function capacityDetail(stats: WindowStats, backlog: 'growing' | 'steady' | 'shrinking') {
+// Current processing as a share of the consumer's own observed p95; null
+// without a baseline worth comparing against.
+export function pacePct(stats: WindowStats) {
   const cap = stats.capacity
-  if (cap === null) return 'Needs a few minutes of history to compare against the consumer’s normal pace.'
-  if (cap < IDLE_RATE) return 'The consumer hasn’t processed at a steady rate this session, so there’s no normal pace to compare against.'
-  const pct = Math.round((stats.processing.now / cap) * 100)
-  const of = `Processing at ${pct}% of its fastest ${fmtDuration(stats.nowWindowMs / 1000)} pace this session (p95, ${fmtRate(cap)})`
-  if (pct >= 85) {
-    if (backlog === 'growing') return `${of}: the consumer is at full speed, so more is arriving than it can handle.`
-    if (backlog === 'steady') return `${of}: the consumer is at full speed and only matching incoming, so the backlog isn’t shrinking.`
-    return `${of}: the consumer is at full speed, working through messages that arrived earlier.`
+  if (cap === null || cap < IDLE_RATE) return null
+  return Math.round((stats.processing.now / cap) * 100)
+}
+
+// At its usual top pace and still not gaining: more is arriving than it can
+// handle. Well below it: the consumer got slower.
+function cause(stats: WindowStats): Cause | undefined {
+  const pct = pacePct(stats)
+  if (pct === null) return undefined
+  if (pct >= 85) return 'incoming'
+  if (pct < 60) return 'consumer'
+  return undefined
+}
+
+export interface Fact {
+  label: string
+  value: string
+  tone?: Tone
+}
+
+const ARROWS: Record<Trend, string> = { up: '↑', down: '↓', flat: '→' }
+
+// The evidence behind a verdict, so it can be checked at a glance.
+export function evidence(stats: WindowStats, d: Diagnosis): Fact[] {
+  const lag = stats.lag.now
+  const facts: Fact[] = []
+  if (lag > 0) facts.push({ label: 'backlog', value: `${fmtCount(lag)}${d.trend ? ` ${ARROWS[d.trend]}` : ''}` })
+  if (d.state === 'Idle') {
+    facts.push({ label: 'incoming', value: 'none' })
+    return facts
   }
-  if (pct < 60) return `${of}: the consumer looks slower than it has been.`
-  return `${of}.`
+  facts.push({ label: 'in', value: fmtRate(stats.incoming.now) }, { label: 'out', value: fmtRate(stats.processing.now) })
+  const pct = pacePct(stats)
+  if (lag > 0 && pct !== null && stats.processing.now > 0) facts.push({ label: 'pace', value: `${pct}% of p95` })
+  if (d.cause) facts.push({ label: 'cause', value: d.cause, tone: 'warn' })
+  if (lag > 0 && stats.sinceCommitMs !== null && d.tone === 'bad') {
+    facts.push({ label: 'last commit', value: `${fmtDuration(stats.sinceCommitMs / 1000)} ago` })
+  }
+  if (stats.commitGapMs > 10_000) facts.push({ label: 'commits every', value: `~${fmtDuration(stats.commitGapMs / 1000)}` })
+  return facts
 }
 
 export function fmtRate(v: number) {
+  if (v === 0) return '0/s'
   if (v > 0 && v < 0.1) return '<0.1/s'
   return `${fmtCount(v, v < 10 ? 1 : 0)}/s`
 }
@@ -239,13 +258,18 @@ export function fmtCount(v: number, digits = 0) {
   return v.toFixed(digits)
 }
 
-function fmtRatio(r: number) {
-  if (r >= 100) return 'over 100×'
-  return `${r >= 10 ? Math.round(r) : r.toFixed(1)}×`
+// An estimate, so whole minutes once it's over a minute.
+export function fmtEta(seconds: number) {
+  return fmtDuration(seconds < 60 ? seconds : Math.ceil(seconds / 60) * 60)
 }
 
 export function fmtDuration(seconds: number) {
   if (seconds < 60) return `${Math.ceil(seconds)}s`
+  if (seconds < 600) {
+    const m = Math.floor(seconds / 60)
+    const sec = Math.round(seconds % 60)
+    return sec ? `${m}m ${sec}s` : `${m}m`
+  }
   if (seconds < 3600) return `${Math.ceil(seconds / 60)}m`
   if (seconds >= 48 * 3600) return `${Math.round(seconds / 86_400)}d`
   const h = Math.floor(seconds / 3600)

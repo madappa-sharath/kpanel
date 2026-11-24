@@ -10,10 +10,13 @@ import {
   chartRows,
   computeStats,
   diagnose,
+  evidence,
   fmtCount,
   fmtDuration,
+  fmtEta,
   fmtRate,
   type Diagnosis,
+  type Fact,
   type RateStats,
   type WindowStats,
 } from './lagStats'
@@ -50,16 +53,16 @@ export function SessionHistory({ clusterId, groupId }: SessionHistoryProps) {
     body = (
       <div className="flex min-w-0 flex-col gap-4">
         {stale ? (
-          <DiagnosisBanner
-            diagnosis={{
-              tone: 'bad',
-              title: `No sample for ${fmtDuration(staleMs / 1000)} — showing history up to ${fmtTime(lastTs!)}`,
-              detail: data?.last_error ? `Last error: ${data.last_error}` : undefined,
-            }}
+          <StatusStrip
+            diagnosis={{ tone: 'bad', state: 'No data', headline: `last sample ${fmtDuration(staleMs / 1000)} ago` }}
+            facts={[
+              { label: 'showing up to', value: fmtTime(lastTs!) },
+              ...(data?.last_error ? [{ label: 'error', value: data.last_error, tone: 'bad' as const }] : []),
+            ]}
           />
         ) : stats ? (
           <>
-            <DiagnosisBanner diagnosis={diagnose(stats)} />
+            <StatusStrip diagnosis={diagnose(stats)} stats={stats} />
             <StatTiles stats={stats} windowKey={windowKey} intervalMs={data!.interval_ms} />
           </>
         ) : (
@@ -110,32 +113,59 @@ export function SessionHistory({ clusterId, groupId }: SessionHistoryProps) {
 
 const TONES: Record<Diagnosis['tone'], { className: string; icon: ReactNode }> = {
   ok: {
-    className: 'border-green-600/30 bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400',
+    className: 'text-green-700 dark:text-green-400',
     icon: <CheckCircle2 className="size-4 shrink-0" />,
   },
   warn: {
-    className: 'border-amber-600/30 bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
+    className: 'text-amber-700 dark:text-amber-400',
     icon: <AlertTriangle className="size-4 shrink-0" />,
   },
   bad: {
-    className: 'border-destructive/30 bg-destructive/10 text-destructive',
+    className: 'text-destructive',
     icon: <OctagonAlert className="size-4 shrink-0" />,
   },
   idle: {
-    className: 'border-border bg-muted/50 text-muted-foreground',
+    className: 'text-muted-foreground',
     icon: <PauseCircle className="size-4 shrink-0" />,
   },
 }
 
-function DiagnosisBanner({ diagnosis }: { diagnosis: Diagnosis }) {
+const STRIP_TONES: Record<Diagnosis['tone'], string> = {
+  ok: 'border-green-600/30 bg-green-50 dark:bg-green-950/60',
+  warn: 'border-amber-600/30 bg-amber-50 dark:bg-amber-950/60',
+  bad: 'border-destructive/30 bg-destructive/10',
+  idle: 'border-border bg-muted/50',
+}
+
+type StatusStripProps = { diagnosis: Diagnosis } & ({ stats: WindowStats; facts?: never } | { facts: Fact[]; stats?: never })
+
+function StatusStrip({ diagnosis, stats, facts }: StatusStripProps) {
   const tone = TONES[diagnosis.tone]
+  const shown = facts ?? evidence(stats!, diagnosis)
   return (
-    <div className={cn('flex items-start gap-2 rounded-md border px-3 py-2', tone.className)}>
-      <span className="mt-0.5">{tone.icon}</span>
-      <div className="min-w-0 text-sm">
-        <p className="font-medium">{diagnosis.title}</p>
-        {diagnosis.detail && <p className="text-xs opacity-90">{diagnosis.detail}</p>}
+    <div
+      className={cn(
+        'flex min-w-0 flex-wrap items-center gap-x-6 gap-y-2 rounded-md border px-3 py-2',
+        STRIP_TONES[diagnosis.tone],
+      )}
+    >
+      <div className={cn('flex items-baseline gap-2.5', tone.className)}>
+        <span className="flex items-center gap-1.5 self-center text-xs font-semibold uppercase tracking-wider">
+          {tone.icon}
+          {diagnosis.state}
+        </span>
+        <span className="text-lg font-semibold tabular-nums">{diagnosis.headline}</span>
       </div>
+      {shown.length > 0 && (
+        <dl className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1">
+          {shown.map((f) => (
+            <div key={f.label} className="flex min-w-0 items-baseline gap-1.5">
+              <dt className="text-[11px] text-muted-foreground">{f.label}</dt>
+              <dd className={cn('truncate font-mono text-xs tabular-nums', f.tone && TONES[f.tone].className)}>{f.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
     </div>
   )
 }
@@ -151,7 +181,7 @@ function StatTiles({ stats, windowKey, intervalMs }: { stats: WindowStats; windo
         label="Lag"
         dotClassName="bg-red-500"
         value={formatNumber(lag.now)}
-        suffix={lag.now > 0 && net > 0 ? `clears in ~${fmtDuration(lag.now / net)}` : undefined}
+        suffix={lag.now > 0 && net > 0 ? `clears in ~${fmtEta(lag.now / net)}` : undefined}
       >
         <Cell label={`Δ ${windowKey}`} value={`${lag.delta > 0 ? '+' : lag.delta < 0 ? '−' : ''}${fmtCount(Math.abs(lag.delta))}`} />
         <Cell label={`peak ${windowKey}`} value={fmtCount(lag.peak)} />
