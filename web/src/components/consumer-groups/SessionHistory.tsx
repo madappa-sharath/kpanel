@@ -145,8 +145,8 @@ function StatTiles({ stats, windowKey, intervalMs }: { stats: WindowStats; windo
   const { lag, commits } = stats
   return (
     <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <RateTile label="Incoming" dotClassName="bg-amber-500" rate={stats.incoming} windowKey={windowKey} />
-      <RateTile label="Processed" dotClassName="bg-emerald-500" rate={stats.processing} windowKey={windowKey} />
+      <RateTile label="Incoming" dotClassName="bg-amber-500" rate={stats.incoming} windowKey={windowKey} nowMs={stats.nowWindowMs} />
+      <RateTile label="Processed" dotClassName="bg-emerald-500" rate={stats.processing} windowKey={windowKey} nowMs={stats.nowWindowMs} />
       <Tile
         label="Lag"
         dotClassName="bg-red-500"
@@ -170,9 +170,17 @@ function StatTiles({ stats, windowKey, intervalMs }: { stats: WindowStats; windo
   )
 }
 
-function RateTile({ label, dotClassName, rate, windowKey }: { label: string; dotClassName: string; rate: RateStats; windowKey: WindowKey }) {
+interface RateTileProps {
+  label: string
+  dotClassName: string
+  rate: RateStats
+  windowKey: WindowKey
+  nowMs: number
+}
+
+function RateTile({ label, dotClassName, rate, windowKey, nowMs }: RateTileProps) {
   return (
-    <Tile label={label} dotClassName={dotClassName} value={fmtRate(rate.now)} suffix="last 30 s">
+    <Tile label={label} dotClassName={dotClassName} value={fmtRate(rate.now)} suffix={`last ${fmtDuration(nowMs / 1000)}`}>
       <Cell label={`avg ${windowKey}`} value={fmtRate(rate.avg)} />
       <Cell label="p95" value={fmtRate(rate.p95)} />
       <Cell label="peak" value={fmtRate(rate.peak)} />

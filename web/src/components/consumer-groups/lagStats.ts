@@ -1,6 +1,7 @@
 import type { LagSnapshot } from '../../types/consumer'
 
 const NOW_WINDOW_MS = 30_000
+const MAX_NOW_WINDOW_MS = 5 * 60_000
 const IDLE_RATE = 0.5
 const PACE_TOLERANCE = 0.05
 const MIN_PACE_TOLERANCE = 0.2
@@ -19,12 +20,15 @@ export interface WindowStats {
   processing: RateStats
   lag: { now: number; peak: number; delta: number }
   commits: { perMinute: number; msgsPerCommit: number | null } | null
-  // p95 of 30 s processing averages over everything retained: the consumer's
-  // observed capacity, on the same footing as "now".
+  // What "now" averages over: 30 s, or two commit gaps for a consumer that
+  // commits less often, so the time between commits doesn't read as zero.
+  nowWindowMs: number
+  // p95 of nowWindowMs processing averages over everything retained: the
+  // consumer's observed capacity, on the same footing as "now".
   capacity: number | null
-  // Time since the committed offsets last moved; null if they never have.
-  sinceProgressMs: number | null
-  historyMs: number
+  // Time the backlog has gone without the committed offsets moving.
+  stalledMs: number
+  ratedMs: number
 }
 
 interface Interval {
@@ -67,19 +71,33 @@ function p95(values: number[]) {
   return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)]
 }
 
-// Trailing NOW_WINDOW_MS average ending at each interval, so a value is
+// Trailing windowMs average ending at each interval, so a value is
 // comparable with "now" whatever the commit cadence.
-function rollingAvgs(xs: Interval[], pick: (x: Interval) => number) {
+function rollingAvgs(xs: Interval[], windowMs: number, pick: (x: Interval) => number) {
   return xs.map((x, i) => {
     let sum = 0
     let ms = 0
-    for (let j = i; j >= 0 && xs[j].ts > x.ts - NOW_WINDOW_MS; j--) {
+    for (let j = i; j >= 0 && xs[j].ts > x.ts - windowMs; j--) {
       if (j < i && xs[j].ts !== xs[j + 1].ts - xs[j + 1].dt) break
       sum += pick(xs[j]) * xs[j].dt
       ms += xs[j].dt
     }
     return ms ? sum / ms : 0
   })
+}
+
+// Median time between samples where the committed offsets moved, ignoring
+// pauses long enough to be outages rather than cadence.
+function commitGapMs(xs: Interval[]) {
+  const progress = xs.filter((x) => x.consume > 0).map((x) => x.ts)
+  const gaps: number[] = []
+  for (let i = 1; i < progress.length; i++) {
+    const gap = progress[i] - progress[i - 1]
+    if (gap <= MAX_NOW_WINDOW_MS) gaps.push(gap)
+  }
+  if (!gaps.length) return 0
+  gaps.sort((a, b) => a - b)
+  return gaps[Math.floor(gaps.length / 2)]
 }
 
 function rateStats(win: Interval[], recent: Interval[], pick: (x: Interval) => number): RateStats {
@@ -96,8 +114,9 @@ export function computeStats(snapshots: LagSnapshot[], windowMs: number): Window
   const last = snapshots[snapshots.length - 1]
   if (!last || last.produce_rate === null || last.consume_rate === null) return null
   const all = intervals(snapshots)
+  const nowWindowMs = Math.min(MAX_NOW_WINDOW_MS, Math.max(NOW_WINDOW_MS, 2 * commitGapMs(all)))
   const win = all.filter((x) => x.ts > last.ts - windowMs)
-  const recent = win.filter((x) => x.ts > last.ts - NOW_WINDOW_MS)
+  const recent = all.filter((x) => x.ts > last.ts - nowWindowMs)
   if (!recent.length) return null
 
   const winSnaps = snapshots.filter((s) => s.ts > last.ts - windowMs)
@@ -106,6 +125,11 @@ export function computeStats(snapshots: LagSnapshot[], windowMs: number): Window
   const consumed = win.reduce((a, x) => a + x.consume * (x.dt / 1000), 0)
   const allMs = all.reduce((a, x) => a + x.dt, 0)
   const lastProgress = [...all].reverse().find((x) => x.consume > 0)
+  // The stall clock starts when the backlog appeared, so a rewind after an
+  // idle spell isn't reported as stalled for the whole idle time.
+  let backlogFrom = snapshots.length - 1
+  while (backlogFrom > 0 && snapshots[backlogFrom - 1].total_lag > 0) backlogFrom--
+  const backlogTs = snapshots[backlogFrom].ts
 
   return {
     incoming: rateStats(win, recent, (x) => x.produce),
@@ -116,9 +140,10 @@ export function computeStats(snapshots: LagSnapshot[], windowMs: number): Window
       delta: last.total_lag - winSnaps[0].total_lag,
     },
     commits: totalMs ? { perMinute: commits / (totalMs / 60_000), msgsPerCommit: commits ? consumed / commits : null } : null,
-    capacity: allMs >= MIN_BASELINE_MS ? p95(rollingAvgs(all, (x) => x.consume)) : null,
-    sinceProgressMs: lastProgress ? last.ts - lastProgress.ts : null,
-    historyMs: last.ts - snapshots[0].ts,
+    nowWindowMs,
+    capacity: allMs >= MIN_BASELINE_MS ? p95(rollingAvgs(all, nowWindowMs, (x) => x.consume)) : null,
+    stalledMs: last.total_lag > 0 ? last.ts - Math.max(backlogTs, lastProgress?.ts ?? 0) : 0,
+    ratedMs: allMs,
   }
 }
 
@@ -135,8 +160,9 @@ export function diagnose(stats: WindowStats): Diagnosis {
   const outRate = stats.processing.now
   const lag = stats.lag.now
 
-  const stalledMs = stats.sinceProgressMs ?? stats.historyMs
-  if (lag > 0 && stalledMs >= STALL_MS) {
+  const window = fmtDuration(stats.nowWindowMs / 1000)
+  const stalledMs = stats.stalledMs
+  if (lag > 0 && stalledMs >= Math.max(STALL_MS, 2 * stats.nowWindowMs)) {
     return {
       tone: 'bad',
       title: `Stalled — ${fmtCount(lag)} waiting, no commits for ${fmtDuration(stalledMs / 1000)}`,
@@ -148,11 +174,14 @@ export function diagnose(stats: WindowStats): Diagnosis {
   }
 
   if (lag > 0 && outRate === 0) {
+    if (stats.ratedMs < stats.nowWindowMs) {
+      return { tone: 'idle', title: `Measuring — ${fmtCount(lag)} waiting, no commit seen yet` }
+    }
     return {
       tone: 'warn',
-      title: `No progress — ${fmtCount(lag)} waiting, nothing processed in the last 30 s`,
+      title: `No progress — ${fmtCount(lag)} waiting, nothing committed in the last ${window}`,
       detail:
-        inRate < IDLE_RATE
+        inRate === 0
           ? 'Nothing is arriving, so the lag is messages already in the topic that the consumer hasn’t worked through.'
           : `${fmtRate(inRate)} is still arriving, so the backlog is growing.`,
     }
@@ -160,46 +189,47 @@ export function diagnose(stats: WindowStats): Diagnosis {
 
   const net = outRate - inRate
   // With nothing arriving, any processing shrinks the backlog.
-  const tolerance = inRate < IDLE_RATE ? 0 : Math.max(Math.max(inRate, outRate) * PACE_TOLERANCE, MIN_PACE_TOLERANCE)
+  const tolerance = inRate === 0 ? 0 : Math.max(Math.max(inRate, outRate) * PACE_TOLERANCE, MIN_PACE_TOLERANCE)
   if (Math.abs(net) <= tolerance) {
     return lag === 0
       ? { tone: 'ok', title: 'Keeping up — processing as fast as messages arrive' }
-      : { tone: 'warn', title: `Holding steady — ${fmtCount(lag)} behind, not shrinking`, detail: capacityDetail(stats) }
+      : { tone: 'warn', title: `Holding steady — ${fmtCount(lag)} behind, not shrinking`, detail: capacityDetail(stats, 'steady') }
   }
   if (lag === 0) return { tone: 'ok', title: 'Keeping up — no backlog' }
   if (net > 0) {
     return {
       tone: 'ok',
       title: `Catching up by ${fmtRate(net)} — clears in ~${fmtDuration(lag / net)}`,
-      detail: capacityDetail(stats),
+      detail: capacityDetail(stats, 'shrinking'),
     }
   }
   return {
     tone: 'warn',
     title: `Falling behind by ${fmtRate(-net)} — incoming is ${fmtRatio(inRate / outRate)} processing`,
-    detail: capacityDetail(stats),
+    detail: capacityDetail(stats, 'growing'),
   }
 }
 
 // Compares current processing with the consumer's own observed p95, which is
 // what separates "more is arriving" from "we got slower". Only meaningful
 // while there is a backlog; otherwise the consumer just matches incoming.
-function capacityDetail(stats: WindowStats) {
+function capacityDetail(stats: WindowStats, backlog: 'growing' | 'steady' | 'shrinking') {
   const cap = stats.capacity
   if (cap === null) return 'Needs a few minutes of history to compare against the consumer’s normal pace.'
   if (cap < IDLE_RATE) return 'The consumer hasn’t processed at a steady rate this session, so there’s no normal pace to compare against.'
   const pct = Math.round((stats.processing.now / cap) * 100)
-  const of = `Processing at ${pct}% of its fastest 30 s pace this session (p95, ${fmtRate(cap)})`
+  const of = `Processing at ${pct}% of its fastest ${fmtDuration(stats.nowWindowMs / 1000)} pace this session (p95, ${fmtRate(cap)})`
   if (pct >= 85) {
-    return stats.incoming.now >= IDLE_RATE && stats.processing.now <= stats.incoming.now
-      ? `${of}: the consumer is at full speed, so the backlog is from incoming volume.`
-      : `${of}: the consumer is at full speed, working through messages that arrived earlier.`
+    if (backlog === 'growing') return `${of}: the consumer is at full speed, so more is arriving than it can handle.`
+    if (backlog === 'steady') return `${of}: the consumer is at full speed and only matching incoming, so the backlog isn’t shrinking.`
+    return `${of}: the consumer is at full speed, working through messages that arrived earlier.`
   }
   if (pct < 60) return `${of}: the consumer looks slower than it has been.`
   return `${of}.`
 }
 
 export function fmtRate(v: number) {
+  if (v > 0 && v < 0.1) return '<0.1/s'
   return `${fmtCount(v, v < 10 ? 1 : 0)}/s`
 }
 
