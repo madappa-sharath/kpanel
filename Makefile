@@ -4,6 +4,13 @@ SFW ?= sfw
 BUN_INSTALL_CMD = $(SFW) bun install
 BUN_INSTALL_FROZEN_CMD = $(SFW) bun install --frozen-lockfile
 
+# Built frontend assets live here so `go:embed all:public` can reach them.
+# The directory's .gitkeep is tracked: without at least one file the embed
+# pattern matches nothing and the server does not compile. So clear the
+# generated assets out of the directory rather than removing the directory.
+EMBED_DIR = server/cmd/kpanel/public
+CLEAR_EMBED = mkdir -p $(EMBED_DIR) && find $(EMBED_DIR) -mindepth 1 ! -name .gitkeep -delete
+
 .PHONY: dev dev-api dev-server dev-simulate-v01 dev-web setup build build-web build-server build-linux build-darwin clean kafka-dev kafka-up kafka-down kafka-logs kafka-seed kafka-seed-if-empty kafka-seed-reset kafka-produce kafka-consume kafka-consume-all kafka-members kafka-seed-binary kafka-seed-sasl kafka-sasl-users dev-full test test-integration create-dev-msk destroy-dev-msk kafka-sasl-up kafka-sasl-down kafka-sasl-logs
 
 test:
@@ -45,24 +52,25 @@ build: build-web build-server
 
 build-web:
 	cd web && $(BUN_INSTALL_FROZEN_CMD) && bun build.ts
-	rm -rf server/cmd/kpanel/public
-	cp -r web/dist server/cmd/kpanel/public
+	$(CLEAR_EMBED)
+	cp -R web/dist/. $(EMBED_DIR)/
 
 build-server: build-web
 	cd server && CGO_ENABLED=0 go build $(LDFLAGS) -o ../dist/kpanel ./cmd/kpanel
 
 build-linux:
 	cd web && $(BUN_INSTALL_FROZEN_CMD) && bun build.ts
-	rm -rf server/cmd/kpanel/public && cp -r web/dist server/cmd/kpanel/public
+	$(CLEAR_EMBED) && cp -R web/dist/. $(EMBED_DIR)/
 	cd server && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o ../dist/kpanel-linux-amd64 ./cmd/kpanel
 
 build-darwin:
 	cd web && $(BUN_INSTALL_FROZEN_CMD) && bun build.ts
-	rm -rf server/cmd/kpanel/public && cp -r web/dist server/cmd/kpanel/public
+	$(CLEAR_EMBED) && cp -R web/dist/. $(EMBED_DIR)/
 	cd server && GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o ../dist/kpanel-darwin-arm64 ./cmd/kpanel
 
 clean:
-	rm -rf dist server/cmd/kpanel/public web/dist web/node_modules
+	rm -rf dist web/dist web/node_modules
+	$(CLEAR_EMBED)
 
 kafka-dev: kafka-up kafka-seed-if-empty
 

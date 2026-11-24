@@ -30,7 +30,7 @@ Users run kpanel on their local machine. Auth to Kafka uses existing credentials
 | Framework | React 18 + TypeScript |
 | UI | shadcn/ui + Tailwind CSS v4 |
 | Charts | recharts (shadcn-compatible) |
-| Dev server | `Bun.serve()` with HMR — proxies `/api` → Go server |
+| Dev server | `Bun.serve()` — proxies `/api` → Go server (HMR disabled, see `web/dev.ts`) |
 | Bundler | `Bun.build()` JS API + `bun-plugin-tailwind` |
 
 No Vite, no webpack, no PostCSS config. Bun handles everything natively.
@@ -41,7 +41,7 @@ No Vite, no webpack, no PostCSS config. Bun handles everything natively.
 ┌─────────────────────────┐         ┌──────────────────────────────────────┐
 │  React + shadcn/ui      │◄──API──►│  Go HTTP server (single binary)      │
 │  Bun native bundler     │         │                                      │
-│  HMR via Bun.serve()    │         │  ├─ franz-go + kadm (Kafka admin)    │
+│  Bun.serve() dev server │         │  ├─ franz-go + kadm (Kafka admin)    │
 │  localhost:3000 (dev)   │         │  ├─ pkg/sasl/aws (MSK IAM auth)      │
 │                         │         │  ├─ aws-sdk-go-v2 (MSK discovery+CW) │
 │                         │         │  └─ net/http + chi router             │
@@ -66,7 +66,7 @@ kpanel/
 │       ├── kafka/               — franz-go client factory
 │       └── msk/                 — MSK discovery via aws-sdk-go-v2
 └── web/                         — React frontend
-    ├── dev.ts                   — Bun.serve() dev server (HMR + /api proxy)
+    ├── dev.ts                   — Bun.serve() dev server (/api proxy; HMR off)
     ├── build.ts                 — Bun.build() production build script
     ├── bunfig.toml              — registers bun-plugin-tailwind for Bun.serve()
     ├── index.html
@@ -101,7 +101,7 @@ kpanel/
 - Cross-compilation to Linux/macOS is trivial
 
 ### Why Bun's native bundler (not Vite)?
-- As of Bun 1.3, `Bun.serve()` has a full-stack dev server with native HMR and React Fast Refresh
+- As of Bun 1.3, `Bun.serve()` has a full-stack dev server with native HMR and React Fast Refresh (HMR is currently switched off — see the comment in `web/dev.ts`)
 - `bun-plugin-tailwind` provides first-class Tailwind v4 integration
 - Zero config files — no `vite.config.ts`, no `postcss.config.js`, no `tailwind.config.ts`
 - `bun build` CLI doesn't support plugins yet, so production builds use `Bun.build()` JS API in `build.ts`
@@ -120,8 +120,9 @@ import homepage from "./index.html";
 
 Bun.serve({
   port: 3000,
-  routes: { "/": homepage },           // Bun bundles + serves with HMR
-  development: { hmr: true, console: true },
+  routes: { "/": homepage },           // Bun bundles + serves the SPA
+  // HMR is disabled — see the comment in web/dev.ts (oven-sh/bun#40248)
+  development: { hmr: false, console: true },
   async fetch(req) {
     const url = new URL(req.url);
     if (url.pathname.startsWith("/api")) {
