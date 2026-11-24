@@ -16,7 +16,7 @@ import {
   fmtDuration,
   fmtEta,
   fmtRate,
-  pacePct,
+  fmtWait,
   topicVerdicts,
   type TopicVerdict,
   type Diagnosis,
@@ -180,7 +180,7 @@ function StatusStrip({ diagnosis, stats, facts }: StatusStripProps) {
 function GroupStatus({ stats, verdicts }: { stats: WindowStats; verdicts: TopicVerdict[] }) {
   const worst = verdicts[0]
   if (verdicts.length < 2 || !worst) return <StatusStrip diagnosis={diagnose(stats)} stats={stats} />
-  const allFine = worst.diagnosis.state === 'Caught up' || worst.diagnosis.state === 'Idle'
+  const allFine = ['Caught up', 'Keeping up', 'Idle'].includes(worst.diagnosis.state)
   const flagged = verdicts.filter((v) => v.diagnosis.tone === 'bad' || v.diagnosis.tone === 'warn').length
   return (
     <>
@@ -207,8 +207,8 @@ function TopicTable({ verdicts }: { verdicts: TopicVerdict[] }) {
       <table className="w-full text-xs">
         <thead className="text-left text-[11px] text-muted-foreground">
           <tr className="border-b">
-            {['Topic', 'State', '', 'Backlog', 'In', 'Out', 'Pace', 'Cause'].map((h, i) => (
-              <th key={i} className={cn('py-1.5 pr-4 font-normal', i >= 3 && i <= 6 && 'text-right')}>
+            {['Topic', 'State', '', 'Backlog', 'Oldest', 'p95 wait', 'In', 'Out', 'Cause'].map((h, i) => (
+              <th key={i} className={cn('py-1.5 pr-4 font-normal', i >= 3 && i <= 7 && 'text-right')}>
                 {h}
               </th>
             ))}
@@ -216,7 +216,6 @@ function TopicTable({ verdicts }: { verdicts: TopicVerdict[] }) {
         </thead>
         <tbody className="font-mono tabular-nums">
           {verdicts.map(({ topic, stats, diagnosis: d }) => {
-            const pct = d.state !== 'Caught up' && stats.lag.now > 0 && stats.processing.now > 0 ? pacePct(stats) : null
             return (
               <tr key={topic} className="border-b last:border-0">
                 <td className="max-w-64 truncate py-1.5 pr-4" title={topic}>
@@ -229,9 +228,10 @@ function TopicTable({ verdicts }: { verdicts: TopicVerdict[] }) {
                 <td className="py-1.5 pr-4 text-right whitespace-nowrap">
                   {stats.lag.now > 0 ? `${fmtCount(stats.lag.now)}${d.trend ? ` ${ARROWS[d.trend]}` : ''}` : '0'}
                 </td>
+                <td className="py-1.5 pr-4 text-right">{stats.lag.now > 0 && stats.waitNow ? fmtWait(stats.waitNow) : '—'}</td>
+                <td className="py-1.5 pr-4 text-right">{stats.waitP95 ? fmtWait(stats.waitP95) : '—'}</td>
                 <td className="py-1.5 pr-4 text-right">{fmtRate(stats.incoming.now)}</td>
                 <td className="py-1.5 pr-4 text-right">{fmtRate(stats.processing.now)}</td>
-                <td className="py-1.5 pr-4 text-right">{pct === null ? '—' : `${pct}%`}</td>
                 <td className={cn('py-1.5 pr-4', d.cause && TONES.warn.className)}>{d.cause ?? '—'}</td>
               </tr>
             )
@@ -253,11 +253,12 @@ function StatTiles({ stats, windowKey, intervalMs }: { stats: WindowStats; windo
         label="Lag"
         dotClassName="bg-red-500"
         value={formatNumber(lag.now)}
-        suffix={lag.now > 0 && net > 0 ? `clears in ~${fmtEta(lag.now / net)}` : undefined}
+        suffix={lag.now > 0 && stats.waitNow ? `oldest ${fmtWait(stats.waitNow)}` : undefined}
       >
+        <Cell label={`p95 wait ${windowKey}`} value={stats.waitP95 ? fmtWait(stats.waitP95) : '—'} />
         <Cell label={`Δ ${windowKey}`} value={`${lag.delta > 0 ? '+' : lag.delta < 0 ? '−' : ''}${fmtCount(Math.abs(lag.delta))}`} />
         <Cell label={`peak ${windowKey}`} value={fmtCount(lag.peak)} />
-        <Cell label="net" value={`${net >= 0 ? '+' : '−'}${fmtRate(Math.abs(net))}`} />
+        {lag.now > 0 && net > 0 && <Cell label="clears in" value={`~${fmtEta(lag.now / net)}`} />}
       </Tile>
       <Tile
         label="Commits"
@@ -266,7 +267,7 @@ function StatTiles({ stats, windowKey, intervalMs }: { stats: WindowStats; windo
         hint={`Partition commits seen per ${intervalMs / 1000} s sample. Commits more frequent than that are counted once, so msgs/commit is an upper bound.`}
       >
         <Cell label="commits/min" value={commits ? fmtCount(commits.perMinute, 1) : '—'} />
-        <Cell label="capacity p95" value={stats.capacity ? fmtRate(stats.capacity) : '—'} />
+        <Cell label="best out" value={stats.capacity ? fmtRate(stats.capacity) : '—'} />
       </Tile>
     </div>
   )
@@ -284,7 +285,6 @@ function RateTile({ label, dotClassName, rate, windowKey, nowMs }: RateTileProps
   return (
     <Tile label={label} dotClassName={dotClassName} value={fmtRate(rate.now)} suffix={`last ${fmtDuration(nowMs / 1000)}`}>
       <Cell label={`avg ${windowKey}`} value={fmtRate(rate.avg)} />
-      <Cell label="p95" value={fmtRate(rate.p95)} />
       <Cell label="peak" value={fmtRate(rate.peak)} />
     </Tile>
   )

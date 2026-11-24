@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { LagSnapshot } from '../../types/consumer'
-import { computeStats, diagnose, evidence, topicVerdicts } from './lagStats'
+import { computeStats, diagnose, evidence, topicVerdicts, type Wait } from './lagStats'
 
 interface Phase {
   secs: number
@@ -35,6 +35,46 @@ function verdict(phases: Phase[], startLag = 0) {
   return { ...d, facts: Object.fromEntries(evidence(stats, d).map((f) => [f.label, f.value])) }
 }
 
+function stats(phases: Phase[], startLag = 0) {
+  const snaps: LagSnapshot[] = [{ ts: 0, total_lag: startLag, by_topic: {}, produce_rate: null, consume_rate: null, commits: null }]
+  let lag = startLag
+  for (const [i, p] of phases.flatMap((p) => Array.from({ length: p.secs / 5 }, () => p)).entries()) {
+    const out = Math.min(p.outRate * 5, lag + p.inRate * 5)
+    lag += p.inRate * 5 - out
+    snaps.push({ ts: (i + 1) * 5_000, total_lag: lag, by_topic: {}, produce_rate: p.inRate, consume_rate: out / 5, commits: 1 })
+  }
+  return computeStats(snaps, 60 * 60_000)!
+}
+
+const secs = (w: Wait | null) => (w ? Math.round(w.ms / 1000) : null)
+
+describe('message waits', () => {
+  test('steady queue: each message waits backlog / rate', () => {
+    const s = stats([{ secs: 60, inRate: 200, outRate: 0 }, { secs: 600, inRate: 50, outRate: 50 }])
+    // 12,000 queued at 50/s: 240 s each, once the pre-queue messages are through.
+    expect(secs(s.waitNow)).toBe(240)
+    // Waits are measured to the sample that saw the commit: ±5 s.
+    expect(Math.abs(secs(s.waitP95)! - 240)).toBeLessThanOrEqual(5)
+  })
+
+  test('falling behind: waits grow, p95 near the latest', () => {
+    const s = stats([{ secs: 600, inRate: 200, outRate: 100 }])
+    // At 600 s the consumer is on the message produced at 300 s.
+    expect(secs(s.waitNow)).toBe(300)
+    expect(secs(s.waitP95)!).toBeGreaterThan(270)
+  })
+
+  test('backlog older than the history is a lower bound', () => {
+    const s = stats([{ secs: 120, inRate: 0, outRate: 10 }], 50_000)
+    expect(s.waitNow?.atLeast).toBe(true)
+    expect(secs(s.waitNow)).toBe(120)
+  })
+
+  test('no backlog: no wait', () => {
+    expect(secs(stats([{ secs: 120, inRate: 50, outRate: 50 }]).waitNow)).toBe(0)
+  })
+})
+
 describe('diagnose with a backlog', () => {
   test('consumer stopped, nothing arriving: no progress, no cause', () => {
     const d = verdict([{ secs: 600, inRate: 100, outRate: 50 }, { secs: 30, inRate: 0, outRate: 0 }])
@@ -43,7 +83,6 @@ describe('diagnose with a backlog', () => {
     expect(d.trend).toBe('flat')
     expect(d.cause).toBeUndefined()
     expect(d.facts.in).toBe('0/s')
-    expect(d.facts.pace).toBeUndefined()
     expect(d.facts['last commit']).toBe('30s ago')
   })
 
@@ -83,13 +122,12 @@ describe('diagnose with a backlog', () => {
     const d = verdict([{ secs: 600, inRate: 100, outRate: 50 }, { secs: 120, inRate: 0, outRate: 50 }])
     expect(d.state).toBe('Draining')
     expect(d.cause).toBeUndefined()
-    expect(d.facts.pace).toBe('100% of p95')
+    expect(d.facts['best out']).toBeUndefined()
   })
 
   test('trickle with nothing arriving: draining, no pace or cause', () => {
     const d = verdict([{ secs: 600, inRate: 0, outRate: 0.1, commitEvery: 10 }], 50_000)
     expect(d.state).toBe('Draining')
-    expect(d.facts.pace).toBeUndefined()
     expect(d.cause).toBeUndefined()
   })
 
@@ -118,10 +156,11 @@ describe('diagnose without a backlog', () => {
     expect(verdict([{ secs: 300, inRate: 100, outRate: 100 }]).state).toBe('Caught up')
   })
 
-  test('lag from messages in flight is caught up, not a backlog', () => {
+  test('lag from messages in flight: keeping up, not caught up', () => {
     const d = verdict([{ secs: 300, inRate: 100, outRate: 100 }], 300)
-    expect(d.state).toBe('Caught up')
-    expect(d.headline).toBe('lag 300')
+    expect(d.state).toBe('Keeping up')
+    expect(d.headline).toBe('3s behind')
+    expect(d.facts.backlog).toStartWith('300')
   })
 
   test('idle', () => {

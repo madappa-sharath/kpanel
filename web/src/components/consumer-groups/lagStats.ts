@@ -11,20 +11,30 @@ const STALL_MS = 60_000
 export interface RateStats {
   now: number
   avg: number
-  p95: number
   peak: number
+}
+
+// A message wait in ms. atLeast: the message arrived before the sampled
+// history (or a gap in it), so the true wait is longer.
+export interface Wait {
+  ms: number
+  atLeast: boolean
 }
 
 export interface WindowStats {
   incoming: RateStats
   processing: RateStats
   lag: { now: number; peak: number; delta: number }
+  // How long the oldest unprocessed message has been waiting.
+  waitNow: Wait | null
+  // p95 of how long the messages processed in the window waited.
+  waitP95: Wait | null
   commits: { perMinute: number; msgsPerCommit: number | null } | null
   // What "now" averages over: 30 s, or two commit gaps for a consumer that
   // commits less often, so the time between commits doesn't read as zero.
   nowWindowMs: number
-  // p95 of nowWindowMs processing averages over everything retained: the
-  // consumer's observed capacity, on the same footing as "now".
+  // The consumer's best sustained processing rate this session (p95 of
+  // nowWindowMs averages), on the same footing as "now".
   capacity: number | null
   // Time the backlog has gone without the committed offsets moving.
   stalledMs: number
@@ -105,13 +115,89 @@ function commitGapMs(xs: Interval[]) {
 }
 
 function rateStats(win: Interval[], recent: Interval[], pick: (x: Interval) => number): RateStats {
-  const values = win.map(pick)
   return {
     now: weightedAvg(recent, pick),
     avg: weightedAvg(win, pick),
-    p95: p95(values),
-    peak: Math.max(0, ...values),
+    peak: Math.max(0, ...win.map(pick)),
   }
+}
+
+// Message waits from offsets alone. Treats the topic as one FIFO queue:
+// `arrived` counts messages produced (integrated incoming), `done` counts
+// messages processed (arrived minus lag). A message at position n waited from
+// when `arrived` passed n until `done` passed it.
+interface FlowPoint {
+  ts: number
+  arrived: number
+  done: number
+  // Index of the first point of this unbroken run of samples.
+  from: number
+}
+
+function flow(snapshots: LagSnapshot[]): FlowPoint[] {
+  const pts: FlowPoint[] = []
+  for (const [i, s] of snapshots.entries()) {
+    const prev = pts[i - 1]
+    if (!prev || s.produce_rate === null) {
+      // Start of a run: everything already waiting arrived before it.
+      pts.push({ ts: s.ts, arrived: s.total_lag, done: 0, from: i })
+      continue
+    }
+    const arrived = prev.arrived + (s.produce_rate * (s.ts - prev.ts)) / 1000
+    const done = Math.max(prev.done, arrived - s.total_lag)
+    pts.push({ ts: s.ts, arrived: Math.max(arrived, done), done, from: prev.from })
+  }
+  return pts
+}
+
+// When message n arrived, or null if before the run began.
+function arrivedAt(pts: FlowPoint[], i: number, n: number) {
+  const from = pts[i].from
+  if (n < pts[from].arrived) return null
+  let lo = from
+  let hi = i
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (pts[mid].arrived > n) hi = mid
+    else lo = mid + 1
+  }
+  const a = pts[lo - 1] ?? pts[lo]
+  const b = pts[lo]
+  const span = b.arrived - a.arrived
+  return span > 0 ? a.ts + ((n - a.arrived) / span) * (b.ts - a.ts) : b.ts
+}
+
+function waitOf(pts: FlowPoint[], i: number, n: number, doneAt: number): Wait {
+  const t = arrivedAt(pts, i, n)
+  return t === null ? { ms: doneAt - pts[pts[i].from].ts, atLeast: true } : { ms: Math.max(0, doneAt - t), atLeast: false }
+}
+
+function waitNow(pts: FlowPoint[]): Wait | null {
+  const i = pts.length - 1
+  const p = pts[i]
+  if (!p) return null
+  if (p.arrived - p.done < 0.5) return { ms: 0, atLeast: false }
+  return waitOf(pts, i, p.done, p.ts)
+}
+
+// p95 over messages, not samples: each interval's waits count once per
+// message processed in it.
+function waitP95(pts: FlowPoint[], since: number): Wait | null {
+  const waits: { w: Wait; n: number }[] = []
+  for (let i = 1; i < pts.length; i++) {
+    const n = pts[i].done - pts[i - 1].done
+    if (pts[i].ts <= since || pts[i].from !== pts[i - 1].from || n <= 0) continue
+    waits.push({ w: waitOf(pts, i, pts[i - 1].done + n / 2, pts[i].ts), n })
+  }
+  if (!waits.length) return null
+  waits.sort((a, b) => a.w.ms - b.w.ms)
+  const total = waits.reduce((a, x) => a + x.n, 0)
+  let seen = 0
+  for (const x of waits) {
+    seen += x.n
+    if (seen >= total * 0.95) return x.w
+  }
+  return waits[waits.length - 1].w
 }
 
 export function computeStats(snapshots: LagSnapshot[], windowMs: number): WindowStats | null {
@@ -135,6 +221,7 @@ export function computeStats(snapshots: LagSnapshot[], windowMs: number): Window
   let backlogFrom = snapshots.length - 1
   while (backlogFrom > 0 && snapshots[backlogFrom - 1].total_lag > 0) backlogFrom--
   const backlogTs = snapshots[backlogFrom].ts
+  const pts = flow(snapshots)
 
   return {
     incoming: rateStats(win, recent, (x) => x.produce),
@@ -144,6 +231,8 @@ export function computeStats(snapshots: LagSnapshot[], windowMs: number): Window
       peak: Math.max(...winSnaps.map((s) => s.total_lag)),
       delta: last.total_lag - winSnaps[0].total_lag,
     },
+    waitNow: waitNow(pts),
+    waitP95: waitP95(pts, last.ts - windowMs),
     commits: totalMs ? { perMinute: commits / (totalMs / 60_000), msgsPerCommit: commits ? consumed / commits : null } : null,
     nowWindowMs,
     capacity: allMs >= MIN_BASELINE_MS ? p95(rollingAvgs(all, nowWindowMs, (x) => x.consume)) : null,
@@ -193,9 +282,13 @@ export function diagnose(stats: WindowStats): Diagnosis {
   const net = outRate - inRate
   // With nothing arriving, any processing shrinks the backlog.
   const tolerance = inRate === 0 ? 0 : Math.max(Math.max(inRate, outRate) * PACE_TOLERANCE, MIN_PACE_TOLERANCE)
-  // A busy consumer always trails by whatever arrived since its last commit;
-  // that's in flight, not a backlog.
-  if (lag <= (inRate * stats.nowWindowMs) / 1000) return { tone: 'ok', state: 'Caught up', headline: `lag ${fmtCount(lag)}` }
+  if (lag === 0) return { tone: 'ok', state: 'Caught up', headline: 'lag 0' }
+  // A busy consumer always trails by whatever arrived since its last commit.
+  // That's fine as long as nothing waits long and it isn't growing.
+  const w = stats.waitNow
+  if (w && !w.atLeast && w.ms <= stats.nowWindowMs && net >= -tolerance) {
+    return { tone: 'ok', state: 'Keeping up', headline: `${fmtWait(w)} behind`, trend: 'flat' }
+  }
   if (Math.abs(net) <= tolerance) {
     return { tone: 'warn', state: 'Not shrinking', headline: 'net ≈ 0', trend: 'flat', cause: cause(stats) }
   }
@@ -206,7 +299,7 @@ export function diagnose(stats: WindowStats): Diagnosis {
 }
 
 const TONE_RANK: Record<Tone, number> = { bad: 0, warn: 1, ok: 2, idle: 3 }
-const STATE_RANK = ['Stalled', 'No progress', 'Falling behind', 'Not shrinking', 'Draining', 'Measuring', 'Caught up', 'Idle']
+const STATE_RANK = ['Stalled', 'No progress', 'Falling behind', 'Not shrinking', 'Draining', 'Keeping up', 'Measuring', 'Caught up', 'Idle']
 
 export interface TopicVerdict {
   topic: string
@@ -249,9 +342,9 @@ export function topicVerdicts(snapshots: LagSnapshot[], windowMs: number): Topic
   )
 }
 
-// Current processing as a share of the consumer's own observed p95; null
+// Current processing as a share of the consumer's best sustained rate; null
 // without a baseline worth comparing against.
-export function pacePct(stats: WindowStats) {
+function pacePct(stats: WindowStats) {
   const cap = stats.capacity
   if (cap === null || cap < IDLE_RATE) return null
   return Math.round((stats.processing.now / cap) * 100)
@@ -284,15 +377,20 @@ export function evidence(stats: WindowStats, d: Diagnosis): Fact[] {
     facts.push({ label: 'incoming', value: 'none' })
     return facts
   }
+  if (lag > 0 && stats.waitNow) facts.push({ label: 'oldest waiting', value: fmtWait(stats.waitNow) })
+  if (stats.waitP95 && stats.waitP95.ms > 0) facts.push({ label: 'p95 wait', value: fmtWait(stats.waitP95) })
   facts.push({ label: 'in', value: fmtRate(stats.incoming.now) }, { label: 'out', value: fmtRate(stats.processing.now) })
-  const pct = pacePct(stats)
-  if (lag > 0 && pct !== null && stats.processing.now > 0) facts.push({ label: 'pace', value: `${pct}% of p95` })
+  if (d.cause && stats.capacity) facts.push({ label: 'best out', value: fmtRate(stats.capacity) })
   if (d.cause) facts.push({ label: 'cause', value: d.cause, tone: 'warn' })
   if (lag > 0 && stats.sinceCommitMs !== null && (d.state === 'Stalled' || d.state === 'No progress')) {
     facts.push({ label: 'last commit', value: `${fmtDuration(stats.sinceCommitMs / 1000)} ago` })
   }
   if (stats.commitGapMs > 10_000) facts.push({ label: 'commits every', value: `~${fmtDuration(stats.commitGapMs / 1000)}` })
   return facts
+}
+
+export function fmtWait(w: Wait) {
+  return `${w.atLeast ? '>' : ''}${fmtDuration(w.ms / 1000)}`
 }
 
 export function fmtRate(v: number) {
