@@ -44,6 +44,25 @@ export interface LagSnapshot {
   ts: number
   total_lag: number
   by_topic: Record<string, number>
+  produce_rate: number | null
+  consume_rate: number | null
+  commits: number | null
+  topic_rates?: Record<string, TopicRate>
+}
+
+export interface TopicRate {
+  produce_rate: number
+  consume_rate: number
+  commits: number
+}
+
+export interface LagHistory {
+  interval_ms: number
+  retention_ms: number
+  watch_ttl_ms: number
+  sampling_since: number
+  last_error?: string
+  snapshots: LagSnapshot[]
 }
 
 export interface ResetOffsetsDiff {

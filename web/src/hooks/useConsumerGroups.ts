@@ -24,7 +24,11 @@ export function useLagHistory(clusterId: string, groupId: string) {
     queryKey: queryKeys.groups.lagHistory(clusterId, groupId),
     queryFn: () => api.groups.lagHistory(clusterId, groupId),
     enabled: !!clusterId && !!groupId,
-    refetchInterval: 15_000,
+    // Poll fast until the server has a baseline, then at its sample interval.
+    refetchInterval: (query) => {
+      const data = query.state.data
+      return data && data.snapshots.length >= 2 ? data.interval_ms : 1_000
+    },
   })
 }
 

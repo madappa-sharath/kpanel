@@ -13,7 +13,7 @@ import type {
   SearchRequest,
   SearchResponse,
 } from '../types/topic'
-import type { ConsumerGroup, GroupDetail, LagSnapshot, ResetOffsetsRequest, ResetOffsetsResult } from '../types/consumer'
+import type { ConsumerGroup, GroupDetail, LagHistory, ResetOffsetsRequest, ResetOffsetsResult } from '../types/consumer'
 import type { Broker, ClusterStatus, ClusterOverview } from '../types/broker'
 
 const BASE = '/api'
@@ -117,7 +117,7 @@ export const api = {
     get: (clusterId: string, groupId: string) =>
       request<GroupDetail>(`/connections/${clusterId}/groups/${encodeURIComponent(groupId)}`),
     lagHistory: (clusterId: string, groupId: string) =>
-      request<LagSnapshot[]>(`/connections/${clusterId}/groups/${encodeURIComponent(groupId)}/lag-history`),
+      request<LagHistory>(`/connections/${clusterId}/groups/${encodeURIComponent(groupId)}/lag-history`),
     resetOffsets: (clusterId: string, groupId: string, body: ResetOffsetsRequest) =>
       request<ResetOffsetsResult>(`/connections/${clusterId}/groups/${encodeURIComponent(groupId)}/reset-offsets`, {
         method: 'POST',
