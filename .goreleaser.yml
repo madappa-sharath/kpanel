@@ -2,7 +2,11 @@ version: 2
 
 before:
   hooks:
-    - bash -c "cd web && bun install && bun build.ts"
+    # web/dist is built by the release workflow (sfw bun install
+    # --frozen-lockfile && bun build.ts). Do not install or rebuild here: a
+    # second install would bypass sfw and the lockfile check. Locally, run
+    # `make build` (or `cd web && bun build.ts`) before goreleaser.
+    - bash -c "test -f web/dist/index.html || { echo 'web/dist not found, build the frontend first' >&2; exit 1; }"
     - bash -c "rm -rf server/cmd/kpanel/public && cp -r web/dist server/cmd/kpanel/public"
 
 builds:
@@ -50,7 +54,10 @@ signs:
     artifacts: checksum
 
 release:
-  draft: false
+  # Created as a draft; the release workflow publishes it only after the
+  # attestations and the source tarball exist, so no user can download an
+  # archive that has no attestation yet.
+  draft: true
   prerelease: auto
   extra_files:
     - glob: scripts/install.sh

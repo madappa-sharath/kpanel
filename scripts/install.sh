@@ -64,6 +64,30 @@ if [ "$ACTUAL" != "$EXPECTED" ]; then
 fi
 echo "Checksum OK."
 
+# Verify build provenance. checksums.txt comes from the same release as the
+# archive, so it cannot detect a swapped release. The GitHub attestation ties
+# the archive to this repo's release workflow.
+# Check for a github.com credential (login or GH_TOKEN) rather than `gh auth
+# status`, which also fails because of unrelated hosts.
+if command -v gh > /dev/null 2>&1 && gh auth token --hostname github.com > /dev/null 2>&1; then
+  echo "Verifying build provenance with gh attestation verify..."
+  # --source-ref stops an attested archive from an older tag being passed
+  # off as this version.
+  if ! gh attestation verify "$TMP/$ARCHIVE" \
+      --hostname github.com \
+      --repo "$REPO" \
+      --signer-workflow "$REPO/.github/workflows/release.yml" \
+      --source-ref "refs/tags/$VERSION"; then
+    echo "Build provenance verification failed for $ARCHIVE. Aborting." >&2
+    exit 1
+  fi
+  echo "Provenance OK."
+else
+  echo "Warning: GitHub CLI (gh) is not installed or not logged in." >&2
+  echo "Warning: skipping build provenance verification; only the SHA-256 checksum was checked." >&2
+  echo "Warning: install gh and run 'gh auth login' to verify that this release was built by $REPO." >&2
+fi
+
 tar xzf "$TMP/$ARCHIVE" -C "$TMP"
 
 mkdir -p "$INSTALL_DIR"
