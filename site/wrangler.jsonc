@@ -1,0 +1,11 @@
+// Cloudflare Workers config. The site is fully static: `bun run build` writes
+// dist/, and Wrangler serves it as static assets with no Worker script.
+{
+  "name": "kpanel-site",
+  "compatibility_date": "2026-11-20",
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}
