@@ -163,12 +163,15 @@ func clientOpts(opts ...kgo.Opt) ([]kgo.Opt, error) {
 	return opts, nil
 }
 
+// hasSeedData checks a topic only the current seed creates, so a broker
+// seeded by an older version is seeded again rather than skipped.
 func hasSeedData(ctx context.Context, adm *kadm.Client) bool {
-	offsets, err := adm.ListEndOffsets(ctx, "orders")
+	const marker = "user-events"
+	offsets, err := adm.ListEndOffsets(ctx, marker)
 	if err != nil {
 		return false
 	}
-	for _, partition := range offsets["orders"] {
+	for _, partition := range offsets[marker] {
 		if partition.Offset > 0 {
 			return true
 		}
@@ -341,13 +344,25 @@ func deleteTopics(ctx context.Context, adm *kadm.Client) {
 		}
 	}
 	// Wait until the deletions finish, or creating the same names fails.
+	// Missing topics come back as entries with an error, so count only the
+	// ones that still exist.
+	var remaining []string
 	for i := 0; i < 50; i++ {
 		md, err := adm.ListTopics(ctx, names...)
-		if err == nil && len(md.Names()) == 0 {
-			return
+		if err == nil {
+			remaining = remaining[:0]
+			for _, d := range md {
+				if d.Err == nil {
+					remaining = append(remaining, d.Topic)
+				}
+			}
+			if len(remaining) == 0 {
+				return
+			}
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+	log.Fatalf("topics still exist after delete: %v", remaining)
 }
 
 func createTopics(ctx context.Context, adm *kadm.Client) {

@@ -317,18 +317,27 @@ async function ffmpeg(args: string[]) {
 
 // --- main ---
 
-async function startTraffic() {
-  const proc = Bun.spawn(['sh', '-c', `exec ${TRAFFIC_CMD}`], { stdout: 'ignore', stderr: 'ignore' })
-  // Start lag sampling for the groups shown, so history builds up during warmup.
+function startTraffic() {
+  return Bun.spawn(['sh', '-c', `exec ${TRAFFIC_CMD}`], { stdout: 'ignore', stderr: 'ignore' })
+}
+
+// Start lag sampling for the groups shown, so history builds up during warmup.
+async function watchLag() {
   for (const g of ['clickstream-etl']) {
-    await fetch(`${BASE}/api/connections/${CLUSTER}/groups/${g}/lag-history`)
+    const res = await fetch(`${BASE}/api/connections/${CLUSTER}/groups/${g}/lag-history`)
+    if (!res.ok) throw new Error(`lag-history for ${g}: HTTP ${res.status}`)
   }
-  return proc
 }
 
 await mkdir(SHOTS, { recursive: true })
 const browser = await chromium.launch()
 let traffic: ReturnType<typeof Bun.spawn> | undefined
+for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(sig, () => {
+    traffic?.kill()
+    process.exit(130)
+  })
+}
 try {
   if (ONLY !== 'demo') {
     for (const theme of THEMES) {
@@ -337,7 +346,8 @@ try {
     }
   }
   console.log(`running live traffic for ${WARMUP_MS / 1000}s`)
-  traffic = await startTraffic()
+  traffic = startTraffic()
+  await watchLag()
   await Bun.sleep(WARMUP_MS)
   if (ONLY !== 'demo') {
     for (const theme of THEMES) {

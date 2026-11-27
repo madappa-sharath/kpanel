@@ -23,6 +23,7 @@ cleanup() {
   rm -rf "$WORK"
 }
 trap cleanup EXIT
+trap 'exit 130' INT TERM
 
 cd "$ROOT"
 
@@ -51,16 +52,34 @@ cat >"$WORK/config/config.json" <<JSON
 JSON
 touch "$WORK/aws-empty"
 
+# kpanel falls back to a free port when $PORT is taken, and this script would
+# then capture whatever else is listening there. Refuse to start instead.
+if curl -s -o /dev/null "http://localhost:$PORT/"; then
+  echo "port $PORT is in use; stop that process or set KPANEL_PORT" >&2
+  exit 1
+fi
+
 echo "==> starting kpanel on :$PORT"
 env -u AWS_PROFILE -u AWS_REGION -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
   AWS_CONFIG_FILE="$WORK/aws-empty" AWS_SHARED_CREDENTIALS_FILE="$WORK/aws-empty" \
   KPANEL_CONFIG_DIR="$WORK/config" KPANEL_PORT="$PORT" KPANEL_NO_BROWSER=1 \
   ./dist/kpanel >"$WORK/kpanel.log" 2>&1 &
-PIDS+=($!)
+KPANEL_PID=$!
+PIDS+=("$KPANEL_PID")
+ready=
 for _ in $(seq 1 50); do
-  curl -fsS "http://localhost:$PORT/api/connections" >/dev/null 2>&1 && break
+  kill -0 "$KPANEL_PID" 2>/dev/null || break
+  if curl -fsS "http://localhost:$PORT/api/connections" 2>/dev/null | grep -q "$BROKER"; then
+    ready=1
+    break
+  fi
   sleep 0.2
 done
+if [ -z "$ready" ]; then
+  echo "kpanel did not come up on :$PORT" >&2
+  cat "$WORK/kpanel.log" >&2
+  exit 1
+fi
 
 # Live traffic and running consumers for the lag pages and the demo. shoot.ts
 # takes the static screenshots first, so it starts the traffic itself through
@@ -69,7 +88,12 @@ export KPANEL_URL="http://localhost:$PORT"
 export KPANEL_CLUSTER="prod-eu-west"
 export TRAFFIC_CMD="$WORK/kafkaseed --broker $BROKER --traffic 15m"
 export OUT_DIR="$ROOT/docs/assets"
-export FFMPEG="$(command -v ffmpeg || (cd "$HERE" && bun -e 'console.log(require("@ffmpeg-installer/ffmpeg").path)'))"
+# Always the pinned ffmpeg, so encodes do not depend on what the host has.
+export FFMPEG="$(cd "$HERE" && bun -e 'console.log(require("@ffmpeg-installer/ffmpeg").path)')"
 
 echo "==> capturing"
-(cd "$HERE" && bun shoot.ts)
+# In the background so a signal reaches the trap, which then stops it (and
+# through its own handler, the traffic process) before Kafka goes away.
+(cd "$HERE" && exec bun shoot.ts) &
+PIDS+=($!)
+wait $!
