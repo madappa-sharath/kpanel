@@ -115,6 +115,17 @@ irm https://raw.githubusercontent.com/madappa-sharath/kpanel/main/scripts/instal
 
 Installs to `%LOCALAPPDATA%\kpanel\kpanel.exe` and adds it to your user PATH. No admin rights required.
 
+**Docker:**
+
+```bash
+mkdir -p ~/.kpanel
+docker run --rm -p 127.0.0.1:8080:8080 --user "$(id -u):$(id -g)" \
+  -v ~/.kpanel:/config -v ~/.aws:/home/nonroot/.aws -e AWS_PROFILE -e AWS_REGION \
+  ghcr.io/madappa-sharath/kpanel:latest
+```
+
+Multi-arch (amd64/arm64), distroless, non-root. `latest` moves to a release only after the release has been public for 72 hours. To pass credentials without a mount, to verify the image, or to read the limits (SASL passwords cannot be saved in the container), see [docs/docker.md](./docs/docker.md).
+
 **Or download directly:**
 
 ```bash

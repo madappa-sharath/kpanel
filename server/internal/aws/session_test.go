@@ -76,3 +76,24 @@ func TestCheckSession_AccountAndARNEmptyOnFailure(t *testing.T) {
 		t.Errorf("UserARN should be empty on failure, got %q", got.UserARN)
 	}
 }
+
+func TestProfileOptions(t *testing.T) {
+	cases := []struct {
+		name, profile, envProfile string
+		want                      int
+	}{
+		{"empty", "", "", 0},
+		{"default, no env profile", "default", "", 0},
+		{"default, other env profile", "default", "prod", 1},
+		{"named", "prod", "", 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AWS_PROFILE", tc.envProfile)
+			t.Setenv("AWS_DEFAULT_PROFILE", "")
+			if got := len(ProfileOptions(tc.profile)); got != tc.want {
+				t.Errorf("ProfileOptions(%q) with AWS_PROFILE=%q: %d options, want %d", tc.profile, tc.envProfile, got, tc.want)
+			}
+		})
+	}
+}

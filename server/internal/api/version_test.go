@@ -135,6 +135,13 @@ func TestVersionInfo(t *testing.T) {
 		t.Errorf("windows installCmd = %q, want %q", later.InstallCmd, wantPs)
 	}
 
+	// In the container image the offer is the image tag for that release.
+	uc.installMethod = "docker"
+	if got := uc.versionInfo("linux", "arm64").InstallCmd; got != "docker pull ghcr.io/madappa-sharath/kpanel:v1.2.0" {
+		t.Errorf("docker installCmd = %q", got)
+	}
+	uc.installMethod = ""
+
 	// Up to date: no update and no install command.
 	uc.current = "v1.2.0"
 	if cur := uc.versionInfo("linux", "amd64"); cur.UpdateAvailable || cur.InstallCmd != "" || cur.Pending != "" {
