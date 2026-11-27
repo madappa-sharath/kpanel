@@ -19,6 +19,7 @@ export default defineConfig({
       logo: { src: './src/assets/logo.svg', replacesTitle: false },
       favicon: '/favicon.svg',
       social: [{ icon: 'github', label: 'GitHub', href: REPO }],
+      editLink: { baseUrl: `${REPO}/edit/main/site/` },
       lastUpdated: false,
       pagination: true,
       customCss: [
