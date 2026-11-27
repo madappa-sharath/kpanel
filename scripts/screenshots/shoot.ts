@@ -2,32 +2,23 @@
 // demo recording. run.sh sets up Kafka, the seed data and the server first;
 // see that file for the environment this expects.
 
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
+import { chromium, type Browser, type Locator, type Page } from 'playwright'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const BASE = need('KPANEL_URL')
-const CLUSTER = need('KPANEL_CLUSTER')
-const OUT = need('OUT_DIR')
-const TRAFFIC_CMD = need('TRAFFIC_CMD')
-const FFMPEG = need('FFMPEG')
-const ONLY = process.env.ONLY ?? '' // "", "shots" or "demo"
-// How long consumers and producers run before the lag pages are captured. The
-// server samples lag every 5s, so this sets how much history the charts show.
-const WARMUP_MS = Number(process.env.WARMUP_SECONDS ?? 150) * 1000
+const { KPANEL_URL: BASE, OUT_DIR: OUT, TRAFFIC_CMD, FFMPEG } = process.env as Record<string, string>
+if (!BASE || !OUT || !TRAFFIC_CMD || !FFMPEG) throw new Error('run this through run.sh')
+const CLUSTER = 'prod-eu-west'
+// Live traffic runs this long before the lag pages are captured. The server
+// samples lag every 5s, so this sets how much history the charts show.
+const WARMUP_MS = 150_000
 
 const SHOTS = join(OUT, 'screenshots')
 const VIEWPORT = { width: 1440, height: 900 }
 const DEMO_VIEWPORT = { width: 1280, height: 800 }
 const THEMES = ['light', 'dark'] as const
 type Theme = (typeof THEMES)[number]
-
-function need(name: string): string {
-  const v = process.env[name]
-  if (!v) throw new Error(`${name} is not set; run this through run.sh`)
-  return v
-}
 
 const url = (path: string) => `${BASE}/clusters/${CLUSTER}${path}`
 
@@ -206,27 +197,16 @@ function fakeCursor() {
   })
 }
 
-let mouse = { x: 640, y: 400 }
-
-async function moveTo(page: Page, target: ReturnType<Page['locator']>) {
+// Glide the pointer to the target, then click it.
+async function click(page: Page, target: Locator, pause = 500) {
   await target.scrollIntoViewIfNeeded()
   const box = await target.boundingBox()
   if (!box) throw new Error('target has no bounding box')
-  const to = { x: box.x + Math.min(box.width / 2, 60), y: box.y + box.height / 2 }
-  const steps = 18
-  for (let i = 1; i <= steps; i++) {
-    const t = i / steps
-    const e = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2 // ease in-out
-    await page.mouse.move(mouse.x + (to.x - mouse.x) * e, mouse.y + (to.y - mouse.y) * e)
-    await page.waitForTimeout(16)
-  }
-  mouse = to
-}
-
-async function click(page: Page, target: ReturnType<Page['locator']>, pause = 500) {
-  await moveTo(page, target)
+  const x = box.x + Math.min(box.width / 2, 60)
+  const y = box.y + box.height / 2
+  await page.mouse.move(x, y, { steps: 20 })
   await page.waitForTimeout(150)
-  await page.mouse.click(mouse.x, mouse.y)
+  await page.mouse.click(x, y)
   await page.waitForTimeout(pause)
 }
 
@@ -240,7 +220,7 @@ async function recordDemo(browser: Browser) {
   await page.goto(url('/topics'))
   await page.getByRole('cell', { name: 'app-logs', exact: true }).waitFor()
   await settle(page)
-  await page.mouse.move(mouse.x, mouse.y)
+  await page.mouse.move(640, 400)
 
   const frames: { data: Buffer; ts: number }[] = []
   const cdp = await ctx.newCDPSession(page)
@@ -258,12 +238,12 @@ async function recordDemo(browser: Browser) {
   await click(page, page.getByRole('cell', { name: 'user-events', exact: true }), 1200)
 
   // Browse its latest messages.
-  await click(page, page.getByRole('tab', { name: 'Messages' }).or(page.getByRole('link', { name: 'Messages' })).first(), 600)
+  await click(page, page.getByRole('tab', { name: 'Messages' }), 600)
   await click(page, page.getByRole('button', { name: 'Fetch', exact: true }), 1000)
   await click(page, page.getByRole('listbox', { name: 'Messages' }).getByRole('option').nth(1), 1800)
 
   // Search by a JSON field.
-  await click(page, page.getByRole('tab', { name: 'Search' }).or(page.getByRole('link', { name: 'Search' })).first(), 600)
+  await click(page, page.getByRole('tab', { name: 'Search' }), 600)
   await click(page, page.getByPlaceholder(/Find text anywhere/), 200)
   await type(page, 'type == "purchase"')
   await page.keyboard.press('Enter')
@@ -274,7 +254,7 @@ async function recordDemo(browser: Browser) {
   // Check the lag of the group that reads this topic.
   await click(page, page.getByRole('link', { name: 'Consumer Groups' }).first(), 1000)
   await click(page, page.getByText('clickstream-etl', { exact: true }).first(), 800)
-  await click(page, page.getByRole('tab', { name: 'Lag' }).or(page.getByRole('link', { name: 'Lag' })).first(), 600)
+  await click(page, page.getByRole('tab', { name: 'Lag' }), 600)
   await click(page, page.getByRole('button', { name: '15m', exact: true }), 3000)
 
   await cdp.send('Page.stopScreencast')
@@ -317,48 +297,27 @@ async function ffmpeg(args: string[]) {
 
 // --- main ---
 
-function startTraffic() {
-  return Bun.spawn(['sh', '-c', `exec ${TRAFFIC_CMD}`], { stdout: 'ignore', stderr: 'ignore' })
-}
-
-// Start lag sampling for the groups shown, so history builds up during warmup.
-async function watchLag() {
-  for (const g of ['clickstream-etl']) {
-    const res = await fetch(`${BASE}/api/connections/${CLUSTER}/groups/${g}/lag-history`)
-    if (!res.ok) throw new Error(`lag-history for ${g}: HTTP ${res.status}`)
-  }
-}
-
 await mkdir(SHOTS, { recursive: true })
 const browser = await chromium.launch()
 let traffic: ReturnType<typeof Bun.spawn> | undefined
-for (const sig of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(sig, () => {
-    traffic?.kill()
-    process.exit(130)
-  })
-}
 try {
-  if (ONLY !== 'demo') {
-    for (const theme of THEMES) {
-      console.log(`static pages (${theme})`)
-      await staticShots(browser, theme)
-    }
+  for (const theme of THEMES) {
+    console.log(`static pages (${theme})`)
+    await staticShots(browser, theme)
   }
+
   console.log(`running live traffic for ${WARMUP_MS / 1000}s`)
-  traffic = startTraffic()
-  await watchLag()
+  traffic = Bun.spawn(['sh', '-c', `exec ${TRAFFIC_CMD}`], { stdout: 'ignore', stderr: 'ignore' })
+  // Viewing a group's lag history starts the server sampling it.
+  await fetch(`${BASE}/api/connections/${CLUSTER}/groups/clickstream-etl/lag-history`)
   await Bun.sleep(WARMUP_MS)
-  if (ONLY !== 'demo') {
-    for (const theme of THEMES) {
-      console.log(`live pages (${theme})`)
-      await liveShots(browser, theme)
-    }
+
+  for (const theme of THEMES) {
+    console.log(`live pages (${theme})`)
+    await liveShots(browser, theme)
   }
-  if (ONLY !== 'shots') {
-    console.log('demo')
-    await recordDemo(browser)
-  }
+  console.log('demo')
+  await recordDemo(browser)
 } finally {
   traffic?.kill()
   await browser.close()

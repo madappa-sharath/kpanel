@@ -26,7 +26,7 @@ var (
 	broker        = flag.String("broker", "localhost:9092", "Kafka bootstrap broker")
 	count         = flag.Int("count", 0, "messages per topic (default: each topic's own volume when seeding, 50 for --produce and --binary)")
 	seed          = flag.Int64("seed", 42, "random seed; the same seed produces the same keys and payloads")
-	reset         = flag.Bool("reset", false, "delete seed topics and groups (including ones from older seeds) before seeding")
+	reset         = flag.Bool("reset", false, "delete and recreate topics before seeding")
 	ifEmpty       = flag.Bool("if-empty", false, "skip seeding when the dev topics already contain data")
 	consume       = flag.Bool("consume", false, "advance consumer group offsets (reduce lag)")
 	step          = flag.Int64("step", 5, "messages to advance per partition (consume mode)")
@@ -39,23 +39,6 @@ var (
 	saslUser      = flag.String("sasl-user", "", "SASL username")
 	saslPassword  = flag.String("sasl-password", "", "SASL password")
 )
-
-// Names used by earlier versions of the seed. --reset deletes them too, so a
-// broker seeded by an older checkout ends up with only the current data set.
-var legacyTopics = []string{
-	"events", "dead-letter", "email-queue", "sms-queue", "push-notifications",
-	"analytics-raw", "analytics-aggregated", "data-pipeline-errors", "logs-aggregated",
-	"cdc-users", "cdc-products", "binary-test",
-}
-
-var legacyGroups = []string{
-	"orders-processor", "analytics-pipeline", "notification-service", "reporting-etl",
-	"payments-processor", "fraud-detection", "shipping-service", "review-aggregator",
-	"session-tracker", "audit-service", "promo-engine", "email-sender", "sms-sender",
-	"push-sender", "fraud-analyst", "analytics-consumer", "data-pipeline", "config-watcher",
-	"metrics-collector", "cdc-processor", "compliance-monitor", "ops-dashboard",
-	"event-archiver", "global-consumer",
-}
 
 func main() {
 	flag.Parse()
@@ -121,7 +104,6 @@ func main() {
 	}
 
 	if *reset {
-		deleteGroups(ctx, adm)
 		deleteTopics(ctx, adm)
 	}
 
@@ -309,60 +291,12 @@ func sortHeaders(h []kgo.RecordHeader) {
 	}
 }
 
-func deleteGroups(ctx context.Context, adm *kadm.Client) {
-	names := append([]string{}, legacyGroups...)
-	for _, g := range groups {
-		names = append(names, g.name)
-	}
-	resp, err := adm.DeleteGroups(ctx, names...)
-	if err != nil {
-		log.Printf("delete groups request error: %v", err)
-		return
-	}
-	for _, r := range resp {
-		if r.Err != nil && r.Err != kerr.GroupIDNotFound {
-			log.Printf("  delete group %s: %v", r.Group, r.Err)
-		}
-	}
-}
-
 func deleteTopics(ctx context.Context, adm *kadm.Client) {
-	names := append(topicNames(), legacyTopics...)
-	resp, err := adm.DeleteTopics(ctx, names...)
-	if err != nil {
-		log.Printf("delete topics request error: %v", err)
-		return
+	if _, err := adm.DeleteTopics(ctx, topicNames()...); err != nil {
+		log.Printf("delete topics: %v", err)
 	}
-	for _, r := range resp {
-		if r.Err == kerr.UnknownTopicOrPartition {
-			continue
-		}
-		if r.Err != nil {
-			log.Printf("  delete %s: %v", r.Topic, r.Err)
-		} else {
-			log.Printf("  deleted topic %s", r.Topic)
-		}
-	}
-	// Wait until the deletions finish, or creating the same names fails.
-	// Missing topics come back as entries with an error, so count only the
-	// ones that still exist.
-	var remaining []string
-	for i := 0; i < 50; i++ {
-		md, err := adm.ListTopics(ctx, names...)
-		if err == nil {
-			remaining = remaining[:0]
-			for _, d := range md {
-				if d.Err == nil {
-					remaining = append(remaining, d.Topic)
-				}
-			}
-			if len(remaining) == 0 {
-				return
-			}
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	log.Fatalf("topics still exist after delete: %v", remaining)
+	// Deletion is async; creating the same names too soon fails.
+	time.Sleep(2 * time.Second)
 }
 
 func createTopics(ctx context.Context, adm *kadm.Client) {

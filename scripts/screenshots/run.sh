@@ -1,99 +1,50 @@
 #!/usr/bin/env bash
 # Regenerates docs/assets/screenshots/*.png and docs/assets/demo.{mp4,gif}.
 # Run from the repo root via `make screenshots`. Needs Docker, Go and Bun.
-#
-#   SKIP_BUILD=1     reuse ./dist/kpanel
-#   ONLY=demo|shots  run one half of shoot.ts
-#   KEEP_KAFKA=1     leave the throwaway broker running afterwards
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 HERE="$ROOT/scripts/screenshots"
 SFW="${SFW-sfw}"
 BROKER="localhost:19092"
-PORT="${KPANEL_PORT:-18080}"
+PORT=18080
 COMPOSE=(docker compose -p kpanel-screenshots -f "$HERE/compose.yml")
-
 WORK="$(mktemp -d)"
-PIDS=()
+
 cleanup() {
-  for pid in ${PIDS[@]+"${PIDS[@]}"}; do kill "$pid" 2>/dev/null || true; done
-  wait 2>/dev/null || true
-  [ -n "${KEEP_KAFKA:-}" ] || "${COMPOSE[@]}" down -v >/dev/null 2>&1 || true
+  kill $(jobs -p) 2>/dev/null && wait 2>/dev/null || true
+  "${COMPOSE[@]}" down -v >/dev/null 2>&1 || true
   rm -rf "$WORK"
 }
 trap cleanup EXIT
-trap 'exit 130' INT TERM
 
 cd "$ROOT"
 
-if [ -z "${SKIP_BUILD:-}" ]; then
-  echo "==> building kpanel"
-  # Pin the version so nothing version-dependent changes between runs.
-  make build SFW="$SFW" VERSION=v0.0.0-docs >/dev/null
-fi
-
-echo "==> installing screenshot tooling"
+echo "==> building"
+make build SFW="$SFW" VERSION=v0.0.0-docs >/dev/null
+(cd server/cmd/kafkaseed && go build -o "$WORK/kafkaseed" .)
 (cd "$HERE" && $SFW bun install --frozen-lockfile >/dev/null && bun x playwright install chromium >/dev/null)
 
-echo "==> starting throwaway Kafka on $BROKER"
-"${COMPOSE[@]}" down -v >/dev/null 2>&1 || true
+echo "==> starting Kafka on $BROKER and seeding"
 "${COMPOSE[@]}" up -d --wait >/dev/null
+"$WORK/kafkaseed" --broker "$BROKER" >/dev/null 2>&1
 
-echo "==> seeding"
-(cd server/cmd/kafkaseed && go build -o "$WORK/kafkaseed" .)
-"$WORK/kafkaseed" --broker "$BROKER" >"$WORK/seed.log" 2>&1 || { cat "$WORK/seed.log"; exit 1; }
-
-# One generic connection; no AWS config so nothing from the host's
-# ~/.aws shows up in the UI.
+# One connection, and no AWS config so nothing from ~/.aws shows up.
 mkdir -p "$WORK/config"
-cat >"$WORK/config/config.json" <<JSON
-{"version":1,"clusters":[{"id":"prod-eu-west","name":"prod-eu-west","platform":"generic","color":"blue","brokers":["$BROKER"]}]}
-JSON
+echo '{"version":1,"clusters":[{"id":"prod-eu-west","name":"prod-eu-west","platform":"generic","color":"blue","brokers":["'$BROKER'"]}]}' >"$WORK/config/config.json"
 touch "$WORK/aws-empty"
-
-# kpanel falls back to a free port when $PORT is taken, and this script would
-# then capture whatever else is listening there. Refuse to start instead.
-if curl -s -o /dev/null "http://localhost:$PORT/"; then
-  echo "port $PORT is in use; stop that process or set KPANEL_PORT" >&2
-  exit 1
-fi
 
 echo "==> starting kpanel on :$PORT"
 env -u AWS_PROFILE -u AWS_REGION -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
   AWS_CONFIG_FILE="$WORK/aws-empty" AWS_SHARED_CREDENTIALS_FILE="$WORK/aws-empty" \
   KPANEL_CONFIG_DIR="$WORK/config" KPANEL_PORT="$PORT" KPANEL_NO_BROWSER=1 \
-  ./dist/kpanel >"$WORK/kpanel.log" 2>&1 &
-KPANEL_PID=$!
-PIDS+=("$KPANEL_PID")
-ready=
-for _ in $(seq 1 50); do
-  kill -0 "$KPANEL_PID" 2>/dev/null || break
-  if curl -fsS "http://localhost:$PORT/api/connections" 2>/dev/null | grep -q "$BROKER"; then
-    ready=1
-    break
-  fi
-  sleep 0.2
-done
-if [ -z "$ready" ]; then
-  echo "kpanel did not come up on :$PORT" >&2
-  cat "$WORK/kpanel.log" >&2
-  exit 1
-fi
-
-# Live traffic and running consumers for the lag pages and the demo. shoot.ts
-# takes the static screenshots first, so it starts the traffic itself through
-# this command once those are done.
-export KPANEL_URL="http://localhost:$PORT"
-export KPANEL_CLUSTER="prod-eu-west"
-export TRAFFIC_CMD="$WORK/kafkaseed --broker $BROKER --traffic 15m"
-export OUT_DIR="$ROOT/docs/assets"
-# Always the pinned ffmpeg, so encodes do not depend on what the host has.
-export FFMPEG="$(cd "$HERE" && bun -e 'console.log(require("@ffmpeg-installer/ffmpeg").path)')"
+  ./dist/kpanel >/dev/null 2>&1 &
+# Checking for our broker also catches another kpanel already on $PORT.
+until curl -fsS "http://localhost:$PORT/api/connections" 2>/dev/null | grep -q "$BROKER"; do sleep 0.2; done
 
 echo "==> capturing"
-# In the background so a signal reaches the trap, which then stops it (and
-# through its own handler, the traffic process) before Kafka goes away.
-(cd "$HERE" && exec bun shoot.ts) &
-PIDS+=($!)
-wait $!
+KPANEL_URL="http://localhost:$PORT" \
+TRAFFIC_CMD="$WORK/kafkaseed --broker $BROKER --traffic 15m" \
+OUT_DIR="$ROOT/docs/assets" \
+FFMPEG="$(cd "$HERE" && bun -e 'console.log(require("@ffmpeg-installer/ffmpeg").path)')" \
+  bash -c 'cd "$0" && bun shoot.ts' "$HERE"
