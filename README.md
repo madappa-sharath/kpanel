@@ -154,6 +154,8 @@ Then open `http://localhost:8080`. Add a manual connection (enter broker address
 
 ## Security
 
+To report a vulnerability, see [SECURITY.md](./SECURITY.md).
+
 The install script writes only to `~/.local/bin` (or `$KPANEL_INSTALL_DIR`) and never uses sudo. If that directory is not in your `PATH`, the installer prints exact shell commands to add it. Both scripts are in this repo — [`scripts/install.sh`](./scripts/install.sh) and [`scripts/install.ps1`](./scripts/install.ps1) — if you want to read them before running.
 
 ### Verifying releases
