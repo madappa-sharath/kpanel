@@ -44,6 +44,16 @@ async function newContext(
     { theme, cluster: CLUSTER, writeMode: !!opts.writeMode },
   )
   if (opts.cursor) await ctx.addInitScript(fakeCursor)
+  // Schemas and ACLs are not finished, so keep them out of the docs images.
+  await ctx.addInitScript(() => {
+    const add = () => {
+      const style = document.createElement('style')
+      style.textContent = 'a[href$="/schemas"], a[href$="/acls"] { display: none !important; }'
+      document.head.appendChild(style)
+    }
+    if (document.head) add()
+    else document.addEventListener('DOMContentLoaded', add)
+  })
   // Pin the version endpoint so the update banner never shows and the output
   // does not depend on what is on GitHub today.
   await ctx.route('**/api/version', (route) =>
