@@ -1,7 +1,7 @@
 ---
-title: Security model
-seoTitle: kpanel security model — local Kafka GUI, keychain credentials, signed releases
-description: How kpanel handles your Kafka and AWS credentials. It runs on your machine, keeps passwords in the OS keychain, uses your own AWS identity, and ships releases with build provenance.
+title: "Security model"
+seoTitle: "kpanel security: local Kafka GUI, OS keychain, releases"
+description: "How kpanel handles credentials: it runs on your machine, keeps passwords in the OS keychain, uses your own AWS identity, and ships attested releases."
 ---
 
 kpanel is a program you run on your own machine. There is no kpanel service, account or sign-up, and nothing is sent to the kpanel project.
@@ -35,8 +35,8 @@ kpanel starts read-only. Actions that change a cluster appear only after you tur
 ## Releases
 
 - Release archives published since attestations were added have [GitHub artifact attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations) (SLSA build provenance). They prove an archive was built by the repository's release workflow from the release tag.
-- The install scripts verify the attestation with `gh` when it is available, and always check the SHA-256 checksum. See [Verify a release](/docs/installation/#verify-a-release).
-- Each archive has an SBOM file.
+- The install scripts check the SHA-256 checksum, and verify the attestation when `gh` is installed and logged in. See [Verify a release](/docs/installation/#verify-a-release).
+- Each archive has an SBOM file. The install scripts do not check it.
 - kpanel offers a new release only after it has been public for 72 hours. See [Updates](/docs/updates/).
 - The install scripts write only to your user directories and never use `sudo` or admin rights.
 

@@ -1,12 +1,12 @@
 ---
-title: Building from source
-seoTitle: Build kpanel from source
-description: Build the kpanel Kafka GUI from source with Go, Bun and Socket Firewall, run the development environment with a local Kafka broker, and cross-compile for Linux and macOS.
+title: "Building from source"
+seoTitle: "Build the kpanel Kafka GUI from source"
+description: "Build kpanel from source with Go and Bun, run the dev environment with a local Kafka broker, and cross-compile for Linux and macOS."
 ---
 
 ## Requirements
 
-- [Go](https://go.dev/dl/) 1.22 or later
+- [Go](https://go.dev/dl/) 1.26.6 or later (see `server/go.mod`)
 - [Bun](https://bun.sh)
 - [Socket Firewall](https://docs.socket.dev/docs/socket-firewall-free) (`sfw`)
 - Docker, for the local Kafka broker used by `make dev`

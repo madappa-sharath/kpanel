@@ -1,7 +1,7 @@
 ---
-title: Troubleshooting
-seoTitle: Troubleshooting kpanel — Kafka connection, TLS and AWS MSK IAM errors
-description: Fix common kpanel problems — command not found after install, port in use, broker connection failures, TLS errors, expired AWS SSO credentials, MSK IAM access denied and empty CloudWatch metrics.
+title: "Troubleshooting"
+seoTitle: "Troubleshooting kpanel: Kafka, TLS and MSK IAM errors"
+description: "Fix common kpanel problems: command not found, port in use, broker connection failures, TLS errors, expired AWS SSO, MSK IAM denied, no metrics."
 ---
 
 ## `kpanel: command not found` after install

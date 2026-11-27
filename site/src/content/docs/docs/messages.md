@@ -1,7 +1,7 @@
 ---
-title: Messages
-seoTitle: Browse, tail and produce Kafka messages in kpanel
-description: Read Kafka messages by offset or timestamp, tail a topic live, inspect keys, values and headers, and produce messages with keys, headers and a chosen partition.
+title: "Messages"
+seoTitle: "Browse, tail and produce Kafka messages in kpanel"
+description: "Read Kafka messages by offset or timestamp, tail a topic live, inspect keys, values and headers, and produce messages with headers and a partition."
 ---
 
 The **Messages** tab of a topic browses its messages. To find messages anywhere in the topic, use [Search](/docs/search/).

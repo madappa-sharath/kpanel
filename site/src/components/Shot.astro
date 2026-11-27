@@ -1,34 +1,53 @@
 ---
-// A light/dark screenshot pair from public/screenshots/<name>-{light,dark}.png,
-// copied there from docs/assets/screenshots by scripts/copy-screenshots.ts.
-// When the files are missing, renders a labelled placeholder instead.
+// A screenshot with light and dark variants, as WebP in several widths.
+// scripts/copy-screenshots.ts writes public/screenshots/<name>-{light,dark}-<w>.webp
+// and manifest.json. The dark source follows the system theme; the landing
+// page's theme script retargets it when the reader picks a theme. When the
+// files are missing, renders a labelled placeholder instead.
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 interface Props {
   name: string
   alt: string
-  eager?: boolean
+  sizes?: string
+  priority?: boolean
 }
-const { name, alt, eager = false } = Astro.props
-const dir = resolve(process.cwd(), 'public/screenshots')
+const { name, alt, sizes = '(min-width: 980px) 760px, 100vw', priority = false } = Astro.props
 
-function size(file: string): { width: number; height: number } | null {
-  const path = resolve(dir, file)
-  if (!existsSync(path)) return null
-  const b = readFileSync(path)
-  // PNG IHDR: width and height are big-endian u32 at bytes 16 and 20.
-  return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) }
-}
+type Entry = { width: number; height: number; widths: number[] }
+const manifestPath = resolve(process.cwd(), 'public/screenshots/manifest.json')
+const manifest: Record<string, Entry> = existsSync(manifestPath)
+  ? JSON.parse(readFileSync(manifestPath, 'utf8'))
+  : {}
 
-const light = size(`${name}-light.png`)
-const dark = size(`${name}-dark.png`)
-const loading = eager ? 'eager' : 'lazy'
+const light = manifest[`${name}-light`]
+const dark = manifest[`${name}-dark`]
+const srcset = (key: string, e: Entry) => e.widths.map((w) => `/screenshots/${key}-${w}.webp ${w}w`).join(', ')
+const fallback = (key: string, e: Entry) => `/screenshots/${key}-${e.widths[Math.min(1, e.widths.length - 1)]}.webp`
 ---
 {light && dark ? (
   <figure class="shot">
-    <img class="shot-light" src={`/screenshots/${name}-light.png`} alt={alt} width={light.width} height={light.height} loading={loading} decoding="async" />
-    <img class="shot-dark" src={`/screenshots/${name}-dark.png`} alt={alt} width={dark.width} height={dark.height} loading={loading} decoding="async" />
+    <picture>
+      <source
+        data-theme-source="dark"
+        media="(prefers-color-scheme: dark)"
+        type="image/webp"
+        srcset={srcset(`${name}-dark`, dark)}
+        sizes={sizes}
+      />
+      <img
+        src={fallback(`${name}-light`, light)}
+        srcset={srcset(`${name}-light`, light)}
+        sizes={sizes}
+        alt={alt}
+        width={light.width}
+        height={light.height}
+        loading={priority ? 'eager' : 'lazy'}
+        fetchpriority={priority ? 'high' : undefined}
+        decoding="async"
+      />
+    </picture>
   </figure>
 ) : (
   <figure class="shot shot-pending" role="img" aria-label={`Screenshot pending: ${alt}`}>

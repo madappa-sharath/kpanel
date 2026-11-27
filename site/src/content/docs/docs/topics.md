@@ -1,7 +1,7 @@
 ---
-title: Topics
-seoTitle: Browse Kafka topics, partitions and configs in kpanel
-description: List Kafka topics with partitions, message counts, size and ISR health. View partition leaders, replicas and offsets, edit topic configs, create and delete topics, and add partitions.
+title: "Topics"
+seoTitle: "Browse Kafka topics, partitions and configs in kpanel"
+description: "List Kafka topics with partitions, message counts, size and ISR health. View partitions and offsets, edit configs, create and delete topics."
 ---
 
 ## Topic list

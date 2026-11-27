@@ -1,7 +1,7 @@
 ---
-title: Configuration
-seoTitle: kpanel configuration — environment variables and config directory
-description: kpanel environment variables (KPANEL_PORT, KPANEL_CONFIG_DIR, AWS_PROFILE, AWS_REGION) and the files in its config directory.
+title: "Configuration"
+seoTitle: "kpanel configuration: environment variables and files"
+description: "kpanel environment variables (KPANEL_PORT, KPANEL_CONFIG_DIR, AWS_PROFILE, AWS_REGION) and the files in its config directory."
 ---
 
 kpanel has no config file to write by hand. You add connections in the UI. A few environment variables change how it starts.

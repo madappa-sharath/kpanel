@@ -53,11 +53,11 @@ const tree = h(
      h('div', { fontFamily: 'Plex Mono', fontSize: 24, color: '#71717a' }, 'kpanel.sharath.xyz'),
     ]),
     h('div', { display: 'flex', flexDirection: 'column', gap: 20 }, [
-      h('div', { fontSize: 66, fontWeight: 600, lineHeight: 1.05, letterSpacing: -1.5, maxWidth: 900 }, 'A Kafka GUI that runs on your machine'),
+      h('div', { fontSize: 66, fontWeight: 600, lineHeight: 1.05, letterSpacing: -1.5, maxWidth: 900 }, 'A local Kafka GUI that signs in to AWS MSK as you'),
       h(
         'div',
         { fontSize: 30, color: '#a1a1aa', lineHeight: 1.35, maxWidth: 960 },
-        'One binary. Works with any Kafka cluster. AWS MSK IAM auth with your own credentials.',
+        'Finds your MSK clusters and shows their CloudWatch metrics. One binary. Works with any Kafka cluster.',
       ),
     ]),
   ],

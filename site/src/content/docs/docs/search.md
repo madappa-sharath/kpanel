@@ -1,10 +1,10 @@
 ---
-title: Search
-seoTitle: Search Kafka messages by text or JSON field in kpanel
-description: Search a Kafka topic on the broker in kpanel. Match plain text in keys and values, or query JSON fields with ==, !=, >, <, ~= and field-exists checks.
+title: "Search"
+seoTitle: "Search Kafka messages by text or JSON field in kpanel"
+description: "Search Kafka messages in kpanel. Match plain text in keys and values, or query JSON fields with ==, !=, >, <, ~= and field-exists checks."
 ---
 
-The **Search** tab scans a topic on the broker and returns the messages that match a query. It finds messages you have not fetched. Browsing, paging and live tail are on the [Messages](/docs/messages/) tab.
+The **Search** tab reads messages from the topic and returns the ones that match a query. kpanel reads the messages from Kafka and does the matching itself, up to 50,000 messages per search. It finds messages you have not fetched. Browsing, paging and live tail are on the [Messages](/docs/messages/) tab.
 
 ## Controls
 

@@ -1,7 +1,7 @@
 ---
-title: Consumer groups
-seoTitle: Kafka consumer group lag, lag history and offset reset in kpanel
-description: View Kafka consumer group members, committed offsets and per-partition lag in kpanel, watch a sampled lag and throughput history, and reset offsets to earliest, latest, a timestamp or an offset.
+title: "Consumer groups"
+seoTitle: "Kafka consumer lag history and offset reset | kpanel"
+description: "Kafka consumer group members, offsets and per-partition lag in kpanel, with a sampled lag and throughput history and offset reset with a preview."
 ---
 
 ## Group list

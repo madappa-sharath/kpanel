@@ -1,7 +1,7 @@
 ---
-title: Write mode
-seoTitle: Write mode — read-only by default in the kpanel Kafka GUI
-description: kpanel opens read-only. Turn on write mode in a browser tab to create, delete or change topics, produce messages and reset consumer group offsets.
+title: "Write mode"
+seoTitle: "Write mode \u2014 read-only by default in the kpanel Kafka GUI"
+description: "kpanel opens read-only. Turn on write mode in a browser tab to create, delete or change topics, produce messages and reset consumer group offsets."
 ---
 
 kpanel opens read-only. Buttons that change the cluster are hidden until you turn on write mode.

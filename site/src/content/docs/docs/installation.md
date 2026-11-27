@@ -1,7 +1,7 @@
 ---
-title: Installation
-seoTitle: Install kpanel — Kafka GUI for macOS, Linux and Windows
-description: Install the kpanel Kafka GUI on macOS, Linux or Windows with the install script or a direct download, and verify the release with GitHub artifact attestations.
+title: "Installation"
+seoTitle: "Install kpanel \u2014 Kafka GUI for macOS, Linux and Windows"
+description: "Install the kpanel Kafka GUI on macOS, Linux or Windows with the install script or a direct download, and verify releases with GitHub attestations."
 ---
 
 kpanel ships as one binary for macOS, Linux and Windows. There is no runtime to install and no server to deploy.
@@ -71,7 +71,7 @@ kpanel prints its URL and config directory, then opens the URL in your default b
 
 `kpanel --version` prints the version and exits.
 
-For AWS MSK, sign in to AWS first:
+For AWS MSK, sign in to AWS first. See [AWS MSK](/docs/aws-msk/) for discovery and IAM permissions.
 
 ```bash
 aws sso login   # or aws configure, or set AWS_PROFILE / AWS_ACCESS_KEY_ID
@@ -90,7 +90,7 @@ The scripts verify the archive before they extract it:
 
 - If the [GitHub CLI](https://cli.github.com) (`gh`) is installed and logged in to github.com (or `GH_TOKEN` is set), the script runs `gh attestation verify`. If verification fails, or the release has no attestation, the install stops.
 - If `gh` is not installed or not logged in, the script prints a warning and checks only the SHA-256 checksum.
-- The script always checks the SHA-256 checksum from `checksums.txt`.
+- The script checks the SHA-256 checksum from `checksums.txt`. On macOS and Linux, if neither `shasum` nor `sha256sum` is installed, it prints a warning and skips this check.
 
 Releases published before attestations were added cannot be installed with the install scripts while `gh` is logged in.
 

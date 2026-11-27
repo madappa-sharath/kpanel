@@ -1,7 +1,7 @@
 ---
-title: Updates
-seoTitle: Updating kpanel
-description: How kpanel checks for new releases, why it waits 72 hours before offering one, and how to update with the pinned install command.
+title: "Updates"
+seoTitle: "Updating kpanel: release checks and the 72-hour delay"
+description: "How kpanel checks for new releases, why it waits 72 hours before offering one, and how to update with the pinned install command."
 ---
 
 kpanel does not update itself. It tells you when a new release is available and gives you the command to install it.

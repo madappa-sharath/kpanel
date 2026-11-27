@@ -1,7 +1,7 @@
 ---
-title: FAQ
-seoTitle: kpanel FAQ — local Kafka GUI and AWS MSK client
-description: Common questions about kpanel, a free and open source Kafka GUI that runs locally, supports any Kafka cluster and connects to AWS MSK with IAM auth.
+title: "FAQ"
+seoTitle: "kpanel FAQ \u2014 local Kafka GUI and AWS MSK client"
+description: "Common questions about kpanel, a free and open source Kafka GUI that runs locally, supports any Kafka cluster and connects to AWS MSK with IAM auth."
 ---
 
 ## What is kpanel?
@@ -24,9 +24,9 @@ No. Download the binary and run it. Docker is only needed to run the development
 
 Yes. kpanel is open source under the MIT license. There is no license key, account, or limit on clusters or users.
 
-## Is it a desktop app?
+## Is kpanel a Kafka desktop client?
 
-It is a local web app. The binary runs a small server on your machine and opens the UI in your default browser. There is no separate window or installer.
+Yes. It runs on your machine and opens the Kafka UI in your default browser. The binary runs a small HTTP server locally. There is no separate app window.
 
 ## Can my team share one kpanel?
 

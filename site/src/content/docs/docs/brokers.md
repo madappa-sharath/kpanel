@@ -1,7 +1,7 @@
 ---
-title: Cluster overview and brokers
-seoTitle: Kafka cluster overview and broker metadata in kpanel
-description: The kpanel Kafka UI dashboard shows controller, Kafka version, partition health and key broker configs, and lists brokers with leader partitions, replicas, rack and disk usage.
+title: "Cluster overview and brokers"
+seoTitle: "Kafka cluster overview and broker metadata | kpanel"
+description: "The kpanel Kafka UI dashboard: controller, Kafka version, partition health and key broker configs, plus each broker's partitions, replicas and disk."
 ---
 
 ## Cluster overview

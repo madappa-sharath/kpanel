@@ -1,10 +1,10 @@
 ---
-title: AWS MSK
-seoTitle: AWS MSK IAM auth, cluster discovery and CloudWatch metrics in kpanel
-description: Use kpanel as an AWS MSK GUI. Discover MSK clusters in your account, connect with AWS_MSK_IAM using your own AWS credentials, view CloudWatch metrics, and set the IAM permissions it needs.
+title: "Connect to AWS MSK with IAM"
+seoTitle: "AWS MSK GUI: IAM auth, discovery and CloudWatch | kpanel"
+description: "Use kpanel as an AWS MSK GUI. Find MSK clusters, connect with AWS_MSK_IAM using your own credentials, view CloudWatch metrics, and set IAM permissions."
 ---
 
-kpanel signs in to MSK as you. It reads AWS credentials from the standard AWS SDK chain on your machine: SSO, `~/.aws/config` and `~/.aws/credentials` profiles, environment variables, or an instance profile. No shared service account is involved. Each person runs their own kpanel and gets the access their own IAM identity has.
+Use kpanel as an AWS MSK GUI with your own AWS profile. kpanel signs in to MSK as you. It reads AWS credentials from the standard AWS SDK chain on your machine: SSO, `~/.aws/config` and `~/.aws/credentials` profiles, environment variables, or an instance profile. No shared service account is involved. Each person runs their own kpanel and gets the access their own IAM identity has.
 
 If kpanel finds no AWS credentials, the AWS panel on the start page says so. Everything that is not MSK-specific still works.
 
@@ -17,7 +17,9 @@ The start page has an **AWS MSK** panel.
 3. Click **Discover**. kpanel lists the MSK clusters in that account and region.
 4. Click **Import** next to a cluster. If the cluster has public endpoints, choose to connect through the private or public brokers.
 
-Import saves a connection with the cluster's bootstrap brokers, AWS IAM auth, the profile, the region, and the cluster name for CloudWatch. kpanel picks the IAM bootstrap brokers when the cluster has them, then TLS, then plaintext.
+Import saves a connection with the cluster's bootstrap brokers, AWS IAM auth, the profile, the region, and the cluster name for CloudWatch.
+
+Import always sets up IAM auth over TLS, so the cluster needs IAM access control turned on, and your machine must be able to reach its brokers. For a cluster that uses SASL/SCRAM or no auth, [add the connection by hand](/docs/connecting/) instead.
 
 You can also add an MSK cluster by hand. See [Connecting](/docs/connecting/#aws-iam).
 

@@ -1,7 +1,7 @@
 ---
-title: Connecting to Kafka
-seoTitle: Connect kpanel to Kafka — SASL PLAIN, SCRAM, TLS and AWS MSK IAM
-description: Add a Kafka connection in kpanel. Supported auth is none, SASL PLAIN, SASL SCRAM-SHA-256, SASL SCRAM-SHA-512, TLS with an optional CA certificate, and AWS MSK IAM.
+title: "Connecting to Kafka"
+seoTitle: "Connect to Kafka with SASL, SCRAM, TLS or MSK IAM | kpanel"
+description: "Add a Kafka connection in kpanel: no auth, SASL PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, TLS with an optional CA certificate, or AWS MSK IAM."
 ---
 
 A connection is a name, a list of bootstrap brokers and the auth settings for one cluster. kpanel saves connections in `~/.kpanel/config.json` and saves passwords in your OS keychain. See [Configuration](/docs/configuration/).

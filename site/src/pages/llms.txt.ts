@@ -11,7 +11,9 @@ export const GET: APIRoute = async () => {
     '',
     '> kpanel is a local Kafka GUI: a single binary that serves a web UI on your machine. It works with any Kafka-compatible cluster (SASL PLAIN, SCRAM, TLS or no auth), and for AWS MSK it authenticates with AWS_MSK_IAM using your own AWS credentials, discovers clusters, and shows CloudWatch metrics.',
     '',
-    'kpanel is open source (MIT) and has no account or server component. Changes to a cluster are locked until write mode is turned on in the UI. The full docs as one file are at ' + SITE + '/llms-full.txt.',
+    'kpanel is open source (MIT) with no account. There is no separate server to deploy: the binary runs an HTTP server on your machine and opens the UI in your browser. Changes to a cluster are locked until write mode is turned on in the UI.',
+    '',
+    'kpanel does not support client-certificate TLS (mTLS), Avro or Protobuf decoding, message export, consumer group deletion, or Kafka Connect.',
     '',
   ]
   for (const group of docsNav) {
@@ -26,6 +28,7 @@ export const GET: APIRoute = async () => {
   lines.push(
     '## Optional',
     '',
+    `- [Full docs](${SITE}/llms-full.txt): every docs page in one Markdown file`,
     '- [Source code](https://github.com/madappa-sharath/kpanel): Go server and React UI',
     '- [Releases](https://github.com/madappa-sharath/kpanel/releases): binaries for macOS, Linux and Windows',
     '',

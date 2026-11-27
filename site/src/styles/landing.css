@@ -205,9 +205,9 @@ dd code {
 
 @media (min-width: 980px) {
   .hero {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
     align-items: center;
-    gap: 56px;
+    gap: 48px;
     padding-top: 88px;
   }
 }
@@ -218,7 +218,7 @@ h1 {
   letter-spacing: -0.025em;
   font-weight: 600;
   margin: 0 0 20px;
-  max-width: 16ch;
+  max-width: 18ch;
 }
 
 .hero-copy,
@@ -230,12 +230,30 @@ h1 {
   font-size: 1.125rem;
   line-height: 1.6;
   color: var(--ink-2);
-  margin: 0 0 32px;
+  margin: 0 0 12px;
   max-width: 34em;
 }
 
+.support {
+  margin: 0 0 28px;
+  color: var(--muted);
+  max-width: 34em;
+}
+
+.cmd {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  margin: 0 0 12px;
+}
+
+.cmd pre {
+  flex: 1;
+  min-width: 0;
+}
+
 .install pre {
-  margin: 0 0 14px;
+  margin: 0;
   padding: 10px 12px;
   background: var(--code-bg);
   border: 1px solid var(--rule);
@@ -246,10 +264,32 @@ h1 {
   white-space: pre;
 }
 
-.install-label {
-  margin: 0 0 6px;
-  font-size: 0.875rem;
-  color: var(--muted);
+.copy {
+  flex: none;
+  padding: 0 12px;
+  font: 500 0.8125rem var(--sans);
+  color: var(--ink-2);
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.copy:hover {
+  color: var(--ink);
+}
+.copy[hidden] {
+  display: none;
+}
+
+.install-win {
+  margin: 0 0 12px;
+}
+
+.install-win summary {
+  cursor: pointer;
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+  margin-bottom: 10px;
 }
 
 .install-more {
@@ -279,26 +319,6 @@ h1 {
   display: block;
   width: 100%;
   height: auto;
-}
-
-.shot-dark {
-  display: none !important;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .shot-light {
-    display: none !important;
-  }
-  :root:not([data-theme='light']) .shot-dark {
-    display: block !important;
-  }
-}
-
-:root[data-theme='dark'] .shot-light {
-  display: none !important;
-}
-:root[data-theme='dark'] .shot-dark {
-  display: block !important;
 }
 
 .shot-pending {
@@ -487,8 +507,115 @@ h1 {
   color: var(--ink);
 }
 
-@media (max-width: 520px) {
-  .top nav a[href='/docs/installation/'] {
-    display: none;
+@media (max-width: 420px) {
+  .top nav a {
+    padding: 6px 7px;
+  }
+}
+
+/* Proof strip under the hero */
+
+.strip dl {
+  margin: 0;
+  display: grid;
+  border-top: 1px solid var(--rule);
+}
+
+.strip dl div {
+  padding: 20px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+@media (min-width: 760px) {
+  .strip dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 40px;
+  }
+}
+
+@media (min-width: 1100px) {
+  .strip dl {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-bottom: 1px solid var(--rule);
+  }
+  .strip dl div {
+    border-bottom: 0;
+    padding: 24px 0;
+  }
+}
+
+.strip dt {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.strip dd {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 0.9375rem;
+}
+
+.strip + .feature {
+  border-top: 0;
+  margin-top: 24px;
+}
+
+/* Everyday features */
+
+.core {
+  padding-top: 56px;
+  padding-bottom: 56px;
+  border-top: 1px solid var(--rule);
+}
+
+.core h2 {
+  font-size: 1.5rem;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  font-weight: 600;
+  margin: 0 0 24px;
+}
+
+.core-grid {
+  display: grid;
+  gap: 8px 40px;
+  margin-bottom: 32px;
+}
+
+@media (min-width: 760px) {
+  .core-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.core h3 {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+
+.core h3 a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.core h3 a:hover {
+  text-decoration: underline;
+}
+
+.core-grid p {
+  margin: 0 0 16px;
+  color: var(--ink-2);
+  max-width: 36em;
+}
+
+.core-shots {
+  display: grid;
+  gap: 24px;
+}
+
+@media (min-width: 980px) {
+  .core-shots {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
