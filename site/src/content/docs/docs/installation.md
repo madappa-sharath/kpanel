@@ -67,7 +67,7 @@ Expand-Archive kpanel.zip -DestinationPath .; .\kpanel.exe
 kpanel
 ```
 
-kpanel prints its URL and config directory, then opens the URL in your default browser. The default URL is `http://localhost:8080`. If port 8080 is in use, kpanel picks a free port and prints it. Stop it with `Ctrl+C`.
+kpanel prints its URL and config directory, then opens the URL in your default browser. The default URL is `http://localhost:8080`. If port 8080 is in use, kpanel picks a free port and prints it. Set `KPANEL_NO_BROWSER=1` to skip opening the browser. Stop it with `Ctrl+C`.
 
 `kpanel --version` prints the version and exits.
 

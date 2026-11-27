@@ -12,6 +12,7 @@ kpanel has no config file to write by hand. You add connections in the UI. A few
 |---|---|---|
 | `KPANEL_PORT` | `8080` | HTTP port. If the port is in use, kpanel picks a free one and prints it. |
 | `KPANEL_CONFIG_DIR` | `~/.kpanel` | Config directory. |
+| `KPANEL_NO_BROWSER` | unset | Set to any value to stop kpanel from opening your browser at startup. |
 | `AWS_PROFILE` | `default` | AWS profile for MSK discovery and for imported MSK connections. `AWS_DEFAULT_PROFILE` also works. |
 | `AWS_REGION` | the profile's region | Default region for MSK discovery. `AWS_DEFAULT_REGION` also works. |
 | `AWS_CONFIG_FILE` | `~/.aws/config` | Where kpanel reads the list of AWS profiles. |
