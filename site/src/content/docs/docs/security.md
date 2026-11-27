@@ -30,7 +30,7 @@ It sends no telemetry or analytics.
 
 ## Changes to your clusters
 
-kpanel starts read-only. Actions that change a cluster appear only after you turn on [write mode](/docs/write-mode/). Write mode is a UI guard, not access control. The permissions on your Kafka credentials decide what can be changed.
+kpanel starts read-only. Actions that change a cluster appear only after you turn on [write mode](/docs/write-mode/).
 
 ## Releases
 

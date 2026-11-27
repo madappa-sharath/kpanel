@@ -22,7 +22,3 @@ Destructive actions also ask for confirmation. Deleting a topic needs you to typ
 Click **Read-only** in the header and choose **Enable write mode**, or click **Enable** on the read-only notice on a page. The header then shows **Write mode**.
 
 Write mode applies to the current browser tab only. It survives a page refresh in that tab. A new tab, or a new browser session, starts read-only again. To turn it off, click **Write mode** in the header and choose **Disable write mode**.
-
-## What it is not
-
-Write mode is a guard in the UI against changes made by mistake. It is not access control. The kpanel server does not check it. What you can change on a cluster is decided by your Kafka credentials: the IAM policy for MSK, or the broker's authorization for other clusters. To make kpanel truly read-only for a cluster, connect with credentials that only have read permissions.
