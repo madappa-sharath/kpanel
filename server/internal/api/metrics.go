@@ -12,6 +12,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	awssession "github.com/kpanel/kpanel/internal/aws"
 )
 
 type cwRange struct {
@@ -85,9 +86,7 @@ func (h *Handlers) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	loadOpts := []func(*awsconfig.LoadOptions) error{
 		awsconfig.WithRegion(awsCfg.Region),
 	}
-	if awsCfg.Profile != "" {
-		loadOpts = append(loadOpts, awsconfig.WithSharedConfigProfile(awsCfg.Profile))
-	}
+	loadOpts = append(loadOpts, awssession.ProfileOptions(awsCfg.Profile)...)
 
 	sdkCfg, err := awsconfig.LoadDefaultConfig(ctx, loadOpts...)
 	if err != nil {

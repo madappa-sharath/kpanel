@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -30,9 +31,7 @@ func CheckSession(ctx context.Context, profile, region string) SessionStatus {
 	if region != "" {
 		loadOpts = append(loadOpts, config.WithRegion(region))
 	}
-	if profile != "" {
-		loadOpts = append(loadOpts, config.WithSharedConfigProfile(profile))
-	}
+	loadOpts = append(loadOpts, ProfileOptions(profile)...)
 
 	awsCfg, err := config.LoadDefaultConfig(ctx, loadOpts...)
 	if err != nil {
@@ -83,4 +82,17 @@ func recoveryHint(profile string, err error) string {
 		return "aws sso login"
 	}
 	return ""
+}
+
+// ProfileOptions returns the LoadDefaultConfig option that selects profile.
+// It returns none when the SDK picks that profile anyway: profile is empty,
+// or it is "default" and no other profile is set in the environment. Naming
+// a profile makes the SDK require it in ~/.aws/config, so passing "default"
+// explicitly breaks credentials that come only from environment variables
+// (AWS_ACCESS_KEY_ID etc.), as in the container image.
+func ProfileOptions(profile string) []func(*config.LoadOptions) error {
+	if profile == "" || (profile == "default" && os.Getenv("AWS_PROFILE") == "" && os.Getenv("AWS_DEFAULT_PROFILE") == "") {
+		return nil
+	}
+	return []func(*config.LoadOptions) error{config.WithSharedConfigProfile(profile)}
 }

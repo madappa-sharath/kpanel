@@ -9,6 +9,7 @@ import (
 	"time"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	awssession "github.com/kpanel/kpanel/internal/aws"
 	"github.com/kpanel/kpanel/internal/config"
 	"github.com/kpanel/kpanel/internal/credentials"
 	"github.com/twmb/franz-go/pkg/kadm"
@@ -87,9 +88,7 @@ func buildOpts(ctx context.Context, cluster *config.Cluster) ([]kgo.Opt, error) 
 			loadOpts := []func(*awsconfig.LoadOptions) error{
 				awsconfig.WithRegion(awsCfg.Region),
 			}
-			if awsCfg.Profile != "" {
-				loadOpts = append(loadOpts, awsconfig.WithSharedConfigProfile(awsCfg.Profile))
-			}
+			loadOpts = append(loadOpts, awssession.ProfileOptions(awsCfg.Profile)...)
 			cfg, err := awsconfig.LoadDefaultConfig(ctx, loadOpts...)
 			if err != nil {
 				return nil, fmt.Errorf("load AWS config: %w", err)

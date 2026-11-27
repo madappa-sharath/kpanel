@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kafka"
+	awssession "github.com/kpanel/kpanel/internal/aws"
 )
 
 // ClusterName resolves the human-readable MSK cluster name for the given ARN
@@ -17,9 +18,7 @@ func ClusterName(ctx context.Context, region, profile, arn string) (string, erro
 	loadOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(region),
 	}
-	if profile != "" {
-		loadOpts = append(loadOpts, config.WithSharedConfigProfile(profile))
-	}
+	loadOpts = append(loadOpts, awssession.ProfileOptions(profile)...)
 	awsCfg, err := config.LoadDefaultConfig(ctx, loadOpts...)
 	if err != nil {
 		return "", fmt.Errorf("load aws config: %w", err)
@@ -40,8 +39,8 @@ func ClusterName(ctx context.Context, region, profile, arn string) (string, erro
 type ClusterInfo struct {
 	ARN           string   `json:"arn"`
 	Name          string   `json:"name"`
-	Brokers       []string `json:"brokers"`        // private VPC (port 9098)
-	PublicBrokers []string `json:"publicBrokers"`  // public access (port 9198), nil if not enabled
+	Brokers       []string `json:"brokers"`       // private VPC (port 9098)
+	PublicBrokers []string `json:"publicBrokers"` // public access (port 9198), nil if not enabled
 	State         string   `json:"state"`
 	Region        string   `json:"region"`
 }
@@ -55,9 +54,7 @@ func DiscoverClusters(ctx context.Context, region, profile string) ([]ClusterInf
 	if region != "" {
 		loadOpts = append(loadOpts, config.WithRegion(region))
 	}
-	if profile != "" {
-		loadOpts = append(loadOpts, config.WithSharedConfigProfile(profile))
-	}
+	loadOpts = append(loadOpts, awssession.ProfileOptions(profile)...)
 	awsCfg, err := config.LoadDefaultConfig(ctx, loadOpts...)
 	if err != nil {
 		log.Printf("msk discovery: failed to load AWS config: %v", err)

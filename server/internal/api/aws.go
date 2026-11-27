@@ -45,11 +45,7 @@ func (h *Handlers) AWSContext(w http.ResponseWriter, r *http.Request) {
 		region = ""
 	}
 	if region == "" {
-		var loadOpts []func(*config.LoadOptions) error
-		if profile != "" {
-			loadOpts = append(loadOpts, config.WithSharedConfigProfile(profile))
-		}
-		if awsCfg, err := config.LoadDefaultConfig(r.Context(), loadOpts...); err == nil && awsCfg.Region != "" {
+		if awsCfg, err := config.LoadDefaultConfig(r.Context(), awssession.ProfileOptions(profile)...); err == nil && awsCfg.Region != "" {
 			region = awsCfg.Region
 		}
 	}
