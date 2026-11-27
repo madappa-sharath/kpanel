@@ -1,0 +1,84 @@
+name: Promote image
+
+# Moves ghcr.io/<repo>:latest to the newest stable release that has been
+# public for at least 72h. The release workflow pushes only the version tag,
+# so `docker pull ...:latest` gets the same delay as the in-app update offer
+# (releaseAgingPeriod in server/internal/api/version.go): a release that is
+# pulled or marked prerelease in that window never becomes :latest.
+
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-image
+
+jobs:
+  latest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write  # retag :latest
+      attestations: read  # gh attestation verify
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550  # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pick release
+        id: pick
+        run: |
+          tag=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=20" --jq '
+            [ .[]
+              | select((.draft | not) and (.prerelease | not))
+              | select(.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))
+              | select(.published_at != null)
+              | select((now - (.published_at | fromdateiso8601)) >= 259200) ]
+            | sort_by(.tag_name | ltrimstr("v") | split(".") | map(tonumber))
+            | last | .tag_name // empty')
+          if [ -z "$tag" ]; then
+            echo "No stable release older than 72h."
+            exit 0
+          fi
+          digest=$(docker buildx imagetools inspect "$IMAGE:$tag" --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"' || true)
+          if [ -z "$digest" ]; then
+            echo "No image for $tag (released before images were published)."
+            exit 0
+          fi
+          current=$(docker buildx imagetools inspect "$IMAGE:latest" --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"' || true)
+          if [ "$digest" = "$current" ]; then
+            echo ":latest is already $tag ($digest)."
+            exit 0
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Verify image attestation
+        if: steps.pick.outputs.tag != ''
+        env:
+          TAG: ${{ steps.pick.outputs.tag }}
+          DIGEST: ${{ steps.pick.outputs.digest }}
+        run: |
+          gh attestation verify "oci://$IMAGE@$DIGEST" \
+            --hostname github.com \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --source-ref "refs/tags/$TAG"
+
+      - name: Move :latest
+        if: steps.pick.outputs.tag != ''
+        env:
+          TAG: ${{ steps.pick.outputs.tag }}
+          DIGEST: ${{ steps.pick.outputs.digest }}
+        run: |
+          docker buildx imagetools create --tag "$IMAGE:latest" "$IMAGE@$DIGEST"
+          echo "Moved :latest to $TAG ($DIGEST)."
