@@ -2,6 +2,8 @@
 
 A Kafka GUI built for AWS MSK. It runs on your workstation and authenticates via IAM using your own AWS credentials — `aws sso login` and you're in. Works with any Kafka cluster too, but MSK with IAM auth is what it was designed for.
 
+Website and docs: [kpanel.sharath.xyz](https://kpanel.sharath.xyz)
+
 ![Status](https://img.shields.io/badge/status-under%20development-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 

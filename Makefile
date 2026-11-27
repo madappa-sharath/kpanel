@@ -11,7 +11,7 @@ BUN_INSTALL_FROZEN_CMD = $(SFW) bun install --frozen-lockfile
 EMBED_DIR = server/cmd/kpanel/public
 CLEAR_EMBED = mkdir -p $(EMBED_DIR) && find $(EMBED_DIR) -mindepth 1 ! -name .gitkeep -delete
 
-.PHONY: dev dev-api dev-server dev-simulate-v01 dev-web setup build build-web build-server build-linux build-darwin clean kafka-dev kafka-up kafka-down kafka-logs kafka-seed kafka-seed-if-empty kafka-seed-reset kafka-produce kafka-consume kafka-consume-all kafka-members kafka-seed-binary kafka-seed-sasl kafka-sasl-users dev-full test test-integration create-dev-msk destroy-dev-msk kafka-sasl-up kafka-sasl-down kafka-sasl-logs screenshots
+.PHONY: site-setup site-dev site-build dev dev-api dev-server dev-simulate-v01 dev-web setup build build-web build-server build-linux build-darwin clean kafka-dev kafka-up kafka-down kafka-logs kafka-seed kafka-seed-if-empty kafka-seed-reset kafka-produce kafka-consume kafka-consume-all kafka-members kafka-seed-binary kafka-seed-sasl kafka-sasl-users dev-full test test-integration create-dev-msk destroy-dev-msk kafka-sasl-up kafka-sasl-down kafka-sasl-logs screenshots
 
 test:
 	cd server && go test ./...
@@ -73,8 +73,18 @@ build-darwin:
 screenshots:
 	SFW="$(SFW)" bash scripts/screenshots/run.sh
 
+# Website and docs (site/, Astro + Starlight).
+site-setup:
+	cd site && $(BUN_INSTALL_CMD)
+
+site-dev:
+	cd site && bun run dev
+
+site-build:
+	cd site && $(BUN_INSTALL_FROZEN_CMD) && bun run build
+
 clean:
-	rm -rf dist web/dist web/node_modules
+	rm -rf dist web/dist web/node_modules site/dist site/node_modules
 	$(CLEAR_EMBED)
 
 kafka-dev: kafka-up kafka-seed-if-empty
