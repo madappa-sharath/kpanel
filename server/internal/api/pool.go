@@ -6,12 +6,14 @@ import (
 	"sync"
 
 	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/kpanel/kpanel/internal/config"
 	"github.com/kpanel/kpanel/internal/kafka"
 )
 
 type poolEntry struct {
 	client      *kadm.Client
+	raw         *kgo.Client // the client behind `client`, for requests kadm does not expose
 	fingerprint string // JSON of the cluster config used to build this client
 }
 
@@ -39,13 +41,31 @@ func clusterFingerprint(cluster *config.Cluster) string {
 // update: the fingerprint mismatch is caught on the next get and the client is
 // replaced.
 func (p *clientPool) get(cluster *config.Cluster) (*kadm.Client, error) {
+	e, err := p.entry(cluster)
+	if err != nil {
+		return nil, err
+	}
+	return e.client, nil
+}
+
+// getRaw returns the cached kgo client for the cluster, for issuing kmsg
+// requests directly. It shares the connection with the admin client.
+func (p *clientPool) getRaw(cluster *config.Cluster) (*kgo.Client, error) {
+	e, err := p.entry(cluster)
+	if err != nil {
+		return nil, err
+	}
+	return e.raw, nil
+}
+
+func (p *clientPool) entry(cluster *config.Cluster) (poolEntry, error) {
 	fp := clusterFingerprint(cluster)
 
 	p.mu.RLock()
 	entry, ok := p.entries[cluster.ID]
 	p.mu.RUnlock()
 	if ok && entry.fingerprint == fp {
-		return entry.client, nil
+		return entry, nil
 	}
 
 	p.mu.Lock()
@@ -53,17 +73,18 @@ func (p *clientPool) get(cluster *config.Cluster) (*kadm.Client, error) {
 	// Re-read under write lock — another goroutine may have already built the entry.
 	if cur, exists := p.entries[cluster.ID]; exists {
 		if cur.fingerprint == fp {
-			return cur.client, nil
+			return cur, nil
 		}
 		// Stale entry (fingerprint mismatch) — close before replacing.
 		cur.client.Close()
 	}
-	cl, err := kafka.NewClient(context.Background(), cluster)
+	raw, err := kafka.NewRawClient(context.Background(), cluster)
 	if err != nil {
-		return nil, err
+		return poolEntry{}, err
 	}
-	p.entries[cluster.ID] = poolEntry{client: cl, fingerprint: fp}
-	return cl, nil
+	e := poolEntry{client: kadm.NewClient(raw), raw: raw, fingerprint: fp}
+	p.entries[cluster.ID] = e
+	return e, nil
 }
 
 // evict removes and closes the cached client for the given cluster ID.

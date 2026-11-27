@@ -11,7 +11,7 @@ BUN_INSTALL_FROZEN_CMD = $(SFW) bun install --frozen-lockfile
 EMBED_DIR = server/cmd/kpanel/public
 CLEAR_EMBED = mkdir -p $(EMBED_DIR) && find $(EMBED_DIR) -mindepth 1 ! -name .gitkeep -delete
 
-.PHONY: dev dev-api dev-server dev-simulate-v01 dev-web setup build build-web build-server build-linux build-darwin clean kafka-dev kafka-up kafka-down kafka-logs kafka-seed kafka-seed-if-empty kafka-seed-reset kafka-produce kafka-consume kafka-consume-all kafka-members kafka-seed-binary kafka-seed-sasl kafka-sasl-users dev-full test test-integration create-dev-msk destroy-dev-msk kafka-sasl-up kafka-sasl-down kafka-sasl-logs
+.PHONY: dev dev-api dev-server dev-simulate-v01 dev-web setup build build-web build-server build-linux build-darwin clean kafka-dev kafka-up kafka-down kafka-logs kafka-seed kafka-seed-if-empty kafka-seed-reset kafka-produce kafka-consume kafka-consume-all kafka-members kafka-seed-binary kafka-seed-sasl kafka-sasl-users kafka-acls kafka-acls-verify dev-full test test-integration create-dev-msk destroy-dev-msk kafka-sasl-up kafka-sasl-down kafka-sasl-logs
 
 test:
 	cd server && go test ./...
@@ -77,6 +77,7 @@ kafka-dev: kafka-up kafka-seed-if-empty
 kafka-up:
 	docker compose up -d --wait
 	$(MAKE) kafka-sasl-users
+	$(MAKE) kafka-acls
 	@echo "Kafka ready:"
 	@echo "  PLAINTEXT      localhost:9092"
 	@echo "  SASL_PLAINTEXT localhost:9094"
@@ -112,7 +113,7 @@ kafka-seed-binary:
 	cd server/cmd/kafkaseed && go run . --binary
 
 kafka-seed-sasl:
-	cd server/cmd/kafkaseed && go run . --broker localhost:9094 --sasl-mechanism plain --sasl-user alice --sasl-password alice-secret --if-empty
+	cd server/cmd/kafkaseed && go run . --broker localhost:9094 --sasl-mechanism plain --sasl-user admin --sasl-password admin-secret --if-empty
 
 dev-full: kafka-up
 	$(MAKE) dev
@@ -125,7 +126,9 @@ destroy-dev-msk:
 
 # SASL test environment — same broker/data as PLAINTEXT, exposed on localhost:9094.
 # Supports PLAIN (static) and SCRAM-SHA-256/512.
-# Credentials: admin/admin-secret  and  alice/alice-secret
+# Credentials: admin/admin-secret, alice/alice-secret, bob/bob-secret
+# The broker enforces ACLs. admin is a super user; alice and bob get only the
+# bindings from `make kafka-acls`.
 kafka-sasl-users:
 	@echo "Seeding SCRAM users..."
 	docker exec kpanel-kafka /opt/kafka/bin/kafka-configs.sh \
@@ -148,6 +151,24 @@ kafka-sasl-users:
 		--command-config /etc/kafka/client.properties \
 		--alter --add-config 'SCRAM-SHA-512=[password=alice-secret]' \
 		--entity-type users --entity-name alice
+	docker exec kpanel-kafka /opt/kafka/bin/kafka-configs.sh \
+		--bootstrap-server localhost:9094 \
+		--command-config /etc/kafka/client.properties \
+		--alter --add-config 'SCRAM-SHA-256=[password=bob-secret]' \
+		--entity-type users --entity-name bob
+	docker exec kpanel-kafka /opt/kafka/bin/kafka-configs.sh \
+		--bootstrap-server localhost:9094 \
+		--command-config /etc/kafka/client.properties \
+		--alter --add-config 'SCRAM-SHA-512=[password=bob-secret]' \
+		--entity-type users --entity-name bob
+
+# Seeds the dev ACL bindings (safe to re-run). See server/cmd/kafkaseed/acls.go.
+kafka-acls:
+	cd server/cmd/kafkaseed && go run . --acls
+
+# Connects as alice and bob and checks each seeded ACL is enforced.
+kafka-acls-verify:
+	cd server/cmd/kafkaseed && go run . --verify-acls
 
 kafka-sasl-up: kafka-up
 	@echo ""
@@ -155,6 +176,8 @@ kafka-sasl-up: kafka-up
 	@echo "  SASL/PLAIN:         admin/admin-secret  or  alice/alice-secret"
 	@echo "  SASL/SCRAM-SHA-256: admin/admin-secret  or  alice/alice-secret"
 	@echo "  SASL/SCRAM-SHA-512: admin/admin-secret  or  alice/alice-secret"
+	@echo "  bob/bob-secret works for all three mechanisms"
+	@echo "  ACLs enforced: admin is a super user; see make kafka-acls-verify"
 
 kafka-sasl-down: kafka-down
 

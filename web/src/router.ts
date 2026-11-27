@@ -227,6 +227,9 @@ const aclsRoute = createRoute({
   getParentRoute: () => clusterRoute,
   path: '/acls',
   component: AclsPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    resource: typeof search.resource === 'string' ? search.resource : undefined,
+  }),
 })
 
 // ─── Route tree ───────────────────────────────────────────────────────────────

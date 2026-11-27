@@ -19,6 +19,10 @@ export const queryKeys = {
     lagHistory: (clusterId: string, groupId: string) => ['groups', clusterId, groupId, 'lag-history'] as const,
   },
 
+  acls: {
+    all: (clusterId: string) => ['acls', clusterId] as const,
+  },
+
   brokers: {
     all: (clusterId: string) => ['brokers', clusterId] as const,
   },

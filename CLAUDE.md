@@ -185,6 +185,9 @@ type AuthConfig struct {
 | GET | `/api/connections/:id/groups/:name` | Group detail with per-partition lag |
 | POST | `/api/connections/:id/topics/:name/peek` | Peek last N messages |
 | GET | `/api/connections/:id/brokers` | List brokers with metadata |
+| GET | `/api/connections/:id/acls` | List ACL bindings (`security_disabled` / `unauthorized` / `iam_managed` error codes) |
+| POST | `/api/connections/:id/acls` | Create ACL bindings `{bindings: [...]}` |
+| POST | `/api/connections/:id/acls/delete` | Delete exact ACL bindings `{bindings: [...]}` |
 
 ### MSK-specific (AWS credentials required)
 | Method | Path | Description |
@@ -312,6 +315,8 @@ make dev-server   # Kafka + seed data + Go API only; does not start Bun
 make dev-web      # Bun dev server only; proxies /api to Go
 make kafka-up     # one local broker: PLAINTEXT :9092, SASL_PLAINTEXT :9094
 make kafka-seed   # seed topics, messages, and consumer group offsets
+make kafka-acls   # seed dev ACLs for alice/bob (run by kafka-up)
+make kafka-acls-verify # check the seeded ACLs are enforced on :9094
 make build        # production build → ./dist/kpanel
 make build-linux  # cross-compile for Linux amd64
 make build-darwin # cross-compile for macOS arm64

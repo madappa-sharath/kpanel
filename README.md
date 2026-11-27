@@ -213,7 +213,16 @@ Socket Firewall Free officially supports npm, yarn, pnpm, pip, uv, and cargo; kp
 
 In development, open `http://localhost:3000`. The Bun dev server proxies `/api` to the Go server at `:8080`.
 
-`make dev-server` automatically starts the local Docker Kafka broker and seeds it if empty. The same broker exposes unauthenticated Kafka on `localhost:9092` and SASL Kafka on `localhost:9094` with `admin/admin-secret` or `alice/alice-secret`.
+`make dev-server` automatically starts the local Docker Kafka broker and seeds it if empty. The same broker exposes unauthenticated Kafka on `localhost:9092` and SASL Kafka on `localhost:9094` with `admin/admin-secret`, `alice/alice-secret` or `bob/bob-secret`.
+
+The broker enforces ACLs and denies anything no ACL allows. Clients on `localhost:9092` and `admin` are super users; both ports listen on loopback only. `make kafka-up` seeds ACLs for alice and bob:
+
+| User | Allowed | Denied |
+|---|---|---|
+| alice | produce and consume `orders` with group `orders-processor`; read topics prefixed `logs-` | everything else, including listing ACLs |
+| bob | read any topic | reading `orders` (an explicit deny) and producing |
+
+`make kafka-acls-verify` connects as each user and checks those rules against the broker. It reads seeded messages, so run it after `make dev` or `make kafka-dev`. To see ACL management end to end, add a connection to `localhost:9094` as `admin` (SASL/PLAIN), change a binding on the ACLs page, and run the verify target again. A connection as `alice` shows the not-authorized state, and one to `localhost:9092` lists everything without restriction.
 
 ## Configuration
 

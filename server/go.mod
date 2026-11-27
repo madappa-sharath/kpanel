@@ -9,6 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/kafka v1.56.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.45.0
 	github.com/go-chi/chi/v5 v5.5.0
+	github.com/testcontainers/testcontainers-go v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/kafka v0.43.0
 	github.com/tidwall/gjson v1.19.0
 	github.com/twmb/franz-go v1.22.3
@@ -73,7 +74,6 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.5 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/stretchr/testify v1.12.1 // indirect
-	github.com/testcontainers/testcontainers-go v0.43.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect

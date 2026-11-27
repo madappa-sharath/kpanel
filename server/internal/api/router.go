@@ -29,6 +29,12 @@ func Mount(r chi.Router, store *config.Store, version string) {
 			r.Get("/brokers", h.ListBrokers)
 			r.Get("/metrics", h.GetMetrics)
 
+			r.Route("/acls", func(r chi.Router) {
+				r.Get("/", h.ListACLs)
+				r.Post("/", h.CreateACLs)
+				r.Post("/delete", h.DeleteACLs)
+			})
+
 			r.Route("/topics", func(r chi.Router) {
 				r.Get("/", h.ListTopics)
 				r.Post("/", h.CreateTopic)

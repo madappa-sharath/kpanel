@@ -2,7 +2,7 @@
 
 import { Link, Outlet, useParams, useRouterState } from '@tanstack/react-router'
 import { useState } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, ShieldCheck } from 'lucide-react'
 import { ResetOffsetsModal } from '../../../../../components/consumer-groups/ResetOffsetsModal'
 import { WriteModeBanner, WriteModeGate } from '../../../../../components/shared/WriteModeControl'
 import { useConsumerGroup, useLagHistory } from '../../../../../hooks/useConsumerGroups'
@@ -53,11 +53,23 @@ export function GroupLayout() {
             <ChevronRight size={13} className="shrink-0" />
             <span className="min-w-0 truncate text-foreground font-mono text-sm">{groupId}</span>
           </div>
-          <WriteModeGate>
-            <Button variant="ghost" size="sm" onClick={() => setShowReset(true)}>
-              Reset offsets ▾
+          <div className="flex shrink-0 items-center gap-2">
+            <Button variant="ghost" size="sm" asChild>
+              <Link
+                to="/clusters/$clusterId/acls"
+                params={{ clusterId }}
+                search={{ resource: `group:${groupId}` }}
+              >
+                <ShieldCheck size={14} />
+                ACLs
+              </Link>
             </Button>
-          </WriteModeGate>
+            <WriteModeGate>
+              <Button variant="ghost" size="sm" onClick={() => setShowReset(true)}>
+                Reset offsets ▾
+              </Button>
+            </WriteModeGate>
+          </div>
         </div>
 
         {/* Stats row */}

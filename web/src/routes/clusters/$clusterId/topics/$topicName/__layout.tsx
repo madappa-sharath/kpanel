@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Link, Outlet, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router'
-import { ChevronRight, Plus, Send, Trash2 } from 'lucide-react'
+import { ChevronRight, Plus, Send, ShieldCheck, Trash2 } from 'lucide-react'
 import { useTopic } from '../../../../../hooks/useTopics'
 import { IncreasePartitionsModal } from '../../../../../components/topics/IncreasePartitionsModal'
 import { DeleteTopicModal } from '../../../../../components/topics/DeleteTopicModal'
@@ -98,39 +98,51 @@ export function TopicLayout() {
             <span className="text-foreground font-mono text-sm">{topicName}</span>
           </div>
 
-          <WriteModeGate>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 min-w-32"
-                onClick={() => setShowProduce(true)}
-                disabled={!topic}
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="h-9" asChild>
+              <Link
+                to="/clusters/$clusterId/acls"
+                params={{ clusterId }}
+                search={{ resource: `topic:${topicName}` }}
               >
-                <Send className="h-4 w-4" />
-                Produce
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 min-w-40"
-                onClick={() => setShowIncrease(true)}
-                disabled={!topic}
-              >
-                <Plus className="h-4 w-4" />
-                Increase Partitions
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                className="h-9 min-w-32"
-                onClick={() => setShowDelete(true)}
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete Topic
-              </Button>
-            </div>
-          </WriteModeGate>
+                <ShieldCheck className="h-4 w-4" />
+                ACLs
+              </Link>
+            </Button>
+            <WriteModeGate>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 min-w-32"
+                  onClick={() => setShowProduce(true)}
+                  disabled={!topic}
+                >
+                  <Send className="h-4 w-4" />
+                  Produce
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 min-w-40"
+                  onClick={() => setShowIncrease(true)}
+                  disabled={!topic}
+                >
+                  <Plus className="h-4 w-4" />
+                  Increase Partitions
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-9 min-w-32"
+                  onClick={() => setShowDelete(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Topic
+                </Button>
+              </div>
+            </WriteModeGate>
+          </div>
         </div>
 
         {/* Tab bar using shadcn Tabs */}

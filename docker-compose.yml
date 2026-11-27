@@ -2,9 +2,10 @@ services:
   kafka:
     image: apache/kafka:3.9.0
     container_name: kpanel-kafka
+    # Loopback only: PLAINTEXT clients are super users on this broker.
     ports:
-      - "9092:9092"
-      - "9094:9094"
+      - "127.0.0.1:9092:9092"
+      - "127.0.0.1:9094:9094"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -21,6 +22,12 @@ services:
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
       KAFKA_SASL_ENABLED_MECHANISMS: PLAIN,SCRAM-SHA-256,SCRAM-SHA-512
       KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAIN
+      # ACLs are enforced, deny-by-default. ANONYMOUS covers the PLAINTEXT and
+      # CONTROLLER listeners (dev tools, tests, inter-broker traffic); admin is
+      # the SASL superuser. alice and bob get only what `make kafka-acls` seeds.
+      KAFKA_AUTHORIZER_CLASS_NAME: org.apache.kafka.metadata.authorizer.StandardAuthorizer
+      KAFKA_SUPER_USERS: User:ANONYMOUS;User:admin
+      KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "false"
       KAFKA_OPTS: -Djava.security.auth.login.config=/etc/kafka/kafka_server_jaas.conf
     volumes:
       - ./docker/sasl/kafka_server_jaas.conf:/etc/kafka/kafka_server_jaas.conf:ro

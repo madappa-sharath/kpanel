@@ -8,6 +8,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/kafka"
 	"github.com/zalando/go-keyring"
 )
@@ -26,7 +27,14 @@ func TestMain(m *testing.M) {
 	}
 
 	ctx := context.Background()
-	c, err := kafka.Run(ctx, "confluentinc/confluent-local:7.5.0")
+	// Run an authorizer so ACL tests exercise create and delete. Every listener
+	// is PLAINTEXT, so tests connect as ANONYMOUS, which is a super user.
+	c, err := kafka.Run(ctx, "confluentinc/confluent-local:7.5.0",
+		testcontainers.WithEnv(map[string]string{
+			"KAFKA_AUTHORIZER_CLASS_NAME": "org.apache.kafka.metadata.authorizer.StandardAuthorizer",
+			"KAFKA_SUPER_USERS":           "User:ANONYMOUS",
+		}),
+	)
 	if err != nil {
 		log.Fatalf("start kafka container: %v", err)
 	}

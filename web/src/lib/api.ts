@@ -15,8 +15,22 @@ import type {
 } from '../types/topic'
 import type { ConsumerGroup, GroupDetail, LagHistory, ResetOffsetsRequest, ResetOffsetsResult } from '../types/consumer'
 import type { Broker, ClusterStatus, ClusterOverview } from '../types/broker'
+import type { AclBinding, AclResultsResponse } from '../types/acl'
 
 const BASE = '/api'
+
+/** An error response from the API. `code` is set when the server classifies the failure. */
+export class ApiError extends Error {
+  status: number
+  code?: string
+
+  constructor(message: string, status: number, code?: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+  }
+}
 
 const DEFAULT_TIMEOUT_MS = 15_000
 
@@ -30,8 +44,8 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = DEFAULT_
       signal: init?.signal ?? controller.signal,
     })
     if (!res.ok) {
-      const body = await res.json().catch(() => ({ error: res.statusText }))
-      throw new Error((body as { error?: string }).error ?? res.statusText)
+      const body = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: string; code?: string }
+      throw new ApiError(body.error ?? res.statusText, res.status, body.code)
     }
     const text = await res.text()
     return (text ? JSON.parse(text) : undefined) as T
@@ -122,6 +136,21 @@ export const api = {
       request<ResetOffsetsResult>(`/connections/${clusterId}/groups/${encodeURIComponent(groupId)}/reset-offsets`, {
         method: 'POST',
         body: JSON.stringify(body),
+      }),
+  },
+
+  acls: {
+    list: (clusterId: string) =>
+      request<AclBinding[]>(`/connections/${clusterId}/acls`),
+    create: (clusterId: string, bindings: AclBinding[]) =>
+      request<AclResultsResponse>(`/connections/${clusterId}/acls`, {
+        method: 'POST',
+        body: JSON.stringify({ bindings }),
+      }),
+    delete: (clusterId: string, bindings: AclBinding[]) =>
+      request<AclResultsResponse>(`/connections/${clusterId}/acls/delete`, {
+        method: 'POST',
+        body: JSON.stringify({ bindings }),
       }),
   },
 

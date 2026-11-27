@@ -35,6 +35,9 @@ var (
 	saslMechanism = flag.String("sasl-mechanism", "", "SASL mechanism: plain, scram-sha-256, or scram-sha-512")
 	saslUser      = flag.String("sasl-user", "", "SASL username")
 	saslPassword  = flag.String("sasl-password", "", "SASL password")
+	acls          = flag.Bool("acls", false, "create the dev ACL bindings for alice and bob")
+	verifyACLsF   = flag.Bool("verify-acls", false, "connect as alice and bob and check that the dev ACLs are enforced")
+	saslBroker    = flag.String("sasl-broker", "localhost:9094", "SASL_PLAINTEXT listener used by --verify-acls")
 )
 
 type topicDef struct {
@@ -153,6 +156,17 @@ func main() {
 	defer cl.Close()
 
 	adm := kadm.NewClient(cl)
+
+	if *verifyACLsF {
+		verifyACLs(ctx, adm)
+		return
+	}
+
+	if *acls {
+		seedACLs(ctx, adm)
+		log.Println("done")
+		return
+	}
 
 	if *binary_ {
 		produceBinaryMessages(ctx, cl, adm)
