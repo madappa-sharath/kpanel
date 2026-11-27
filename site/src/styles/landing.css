@@ -196,12 +196,16 @@ dd code {
   display: grid;
   gap: 40px;
   padding-top: 56px;
-  padding-bottom: 40px;
+  padding-bottom: 72px;
+}
+
+.hero-shot {
+  min-width: 0;
 }
 
 @media (min-width: 980px) {
   .hero {
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
     align-items: center;
     gap: 56px;
     padding-top: 88px;
@@ -254,41 +258,13 @@ h1 {
   color: var(--ink-2);
 }
 
-/* The terminal: kpanel's real startup output. */
+/* Snippets */
 
-.term {
-  margin: 0;
-  min-width: 0;
-  background: var(--term-bg);
-  color: var(--term-ink);
-  border-radius: 10px;
-  border: 1px solid #27272a;
-  overflow: hidden;
-}
-
-.term pre {
-  margin: 0;
-  padding: 22px 24px 24px;
-  font-size: clamp(0.66rem, 0.5rem + 0.55vw, 0.84rem);
-  line-height: 1.5;
-  overflow-x: auto;
-  white-space: pre;
-}
-
-.term .k {
-  color: var(--amber);
-}
-
-.term .dim,
 .snippet .dim {
   color: var(--term-dim);
 }
 
 /* Screenshots */
-
-.hero-shot {
-  padding-bottom: 24px;
-}
 
 .shot {
   margin: 0;
@@ -354,10 +330,6 @@ h1 {
   padding-top: 56px;
   padding-bottom: 56px;
   border-top: 1px solid var(--rule);
-}
-
-.hero-shot + .feature {
-  margin-top: 48px;
 }
 
 @media (min-width: 980px) {

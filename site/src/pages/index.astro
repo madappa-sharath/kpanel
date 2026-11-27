@@ -17,18 +17,7 @@ const canonical = new URL('/', SITE).href
 const installSh = 'curl -fsSL https://raw.githubusercontent.com/madappa-sharath/kpanel/main/scripts/install.sh | sh'
 const installPs = 'irm https://raw.githubusercontent.com/madappa-sharath/kpanel/main/scripts/install.ps1 | iex'
 
-// The startup banner as kpanel prints it (server/cmd/kpanel/main.go).
-const kParts = [' _    ', '| | __', '| |/ /', '|   <', '|_|\\_\\', '      ']
-const panelParts = [
-  '                        _ ',
-  '_ __   __ _ _ __   ___| |',
-  " '_ \\ / _` | '_ \\ / _ \\ |",
-  '| |_) | (_| | | | |  __/ |',
-  ' .__/ \\__,_|_| |_|\\___|_|',
-  '|_|                       ',
-]
-
-// Latest release tag for the banner. The build still works offline.
+// Latest release tag for the JSON-LD. The build still works offline.
 let version = ''
 try {
   const res = await fetch('https://api.github.com/repos/madappa-sharath/kpanel/releases/latest', {
@@ -137,22 +126,10 @@ const jsonLd = {
           </div>
         </div>
 
-        <figure class="term" aria-label="kpanel startup output">
-          <pre><span class="dim">$</span> kpanel
-{kParts.map((k, i) => <><span class="k">{k}</span>{panelParts[i]}{'\n'}</>)}
-  <span class="dim">local kafka GUI</span>{version && `  ·  v${version}`}
-──────────────────────────────────────────
-  URL     http://localhost:8080
-  Config  ~/.kpanel
-
-Opening in browser...
-Press Ctrl+C to stop</pre>
-        </figure>
+        <div class="hero-shot">
+          <Shot name="dashboard" alt="kpanel cluster overview: brokers, topics, partition health and broker configuration" eager />
+        </div>
       </section>
-
-      <div class="wrap hero-shot">
-        <Shot name="dashboard" alt="kpanel cluster overview: brokers, topics, partition health and broker configuration" eager />
-      </div>
 
       <section class="feature wrap" id="connect">
         <div class="feature-copy">
