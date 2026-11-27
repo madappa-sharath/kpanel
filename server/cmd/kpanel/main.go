@@ -119,7 +119,7 @@ func main() {
 	url := "http://localhost:" + port
 	printBanner(url, configDir, preferredPort, portChanged, prod, version)
 
-	if prod {
+	if prod && os.Getenv("KPANEL_NO_BROWSER") == "" {
 		go func() {
 			time.Sleep(100 * time.Millisecond)
 			openBrowser(url)
@@ -213,7 +213,9 @@ func printBanner(url, configDir, preferredPort string, portChanged, prod bool, v
 				preferredPort, strings.TrimPrefix(url, "http://localhost:"))
 		}
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Opening in browser...")
+		if os.Getenv("KPANEL_NO_BROWSER") == "" {
+			fmt.Fprintln(os.Stderr, "Opening in browser...")
+		}
 		fmt.Fprintln(os.Stderr, "Press Ctrl+C to stop")
 	} else {
 		fmt.Fprintf(os.Stderr, "  %sdev server%s  ·  v%s\n", dim, reset, ver)

@@ -329,6 +329,7 @@ Connections stored in `~/.kpanel/connections.json` by default.
 Environment variables:
 - `KPANEL_PORT` — HTTP port (default: `8080`)
 - `KPANEL_CONFIG_DIR` — config directory (default: `~/.kpanel`)
+- `KPANEL_NO_BROWSER` — set to any value to skip opening the browser on start
 - `AWS_REGION` — default region for MSK discovery
 - `AWS_PROFILE` — AWS profile for MSK/CloudWatch access
 - Standard AWS env vars (`AWS_ACCESS_KEY_ID`, etc.) work as expected
