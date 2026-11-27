@@ -6,7 +6,8 @@
     "dev": "bun scripts/copy-screenshots.ts && astro dev",
     "build": "bun scripts/copy-screenshots.ts && astro build",
     "preview": "astro preview",
-    "og": "bun scripts/og.ts"
+    "og": "bun scripts/og.ts",
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
     "@astrojs/sitemap": "3.7.6",
@@ -18,6 +19,7 @@
   "devDependencies": {
     "@resvg/resvg-js": "2.6.2",
     "satori": "0.63.2",
-    "sharp": "0.35.5"
+    "sharp": "0.35.5",
+    "wrangler": "4.167.0"
   }
 }
