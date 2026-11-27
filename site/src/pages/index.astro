@@ -1,0 +1,354 @@
+---
+import '@fontsource/ibm-plex-sans/400.css'
+import '@fontsource/ibm-plex-sans/500.css'
+import '@fontsource/ibm-plex-sans/600.css'
+import '@fontsource/ibm-plex-mono/400.css'
+import '@fontsource/ibm-plex-mono/500.css'
+import '../styles/landing.css'
+import Shot from '../components/Shot.astro'
+
+const SITE = 'https://kpanel.sharath.xyz'
+const REPO = 'https://github.com/madappa-sharath/kpanel'
+const title = 'kpanel — local Kafka GUI with AWS MSK IAM auth'
+const description =
+  'kpanel is a Kafka GUI and Kafka desktop client that runs on your machine as one binary. It works with any Kafka cluster and signs in to AWS MSK with IAM using your own AWS credentials.'
+const canonical = new URL('/', SITE).href
+
+const installSh = 'curl -fsSL https://raw.githubusercontent.com/madappa-sharath/kpanel/main/scripts/install.sh | sh'
+const installPs = 'irm https://raw.githubusercontent.com/madappa-sharath/kpanel/main/scripts/install.ps1 | iex'
+
+// The startup banner as kpanel prints it (server/cmd/kpanel/main.go).
+const kParts = [' _    ', '| | __', '| |/ /', '|   <', '|_|\\_\\', '      ']
+const panelParts = [
+  '                        _ ',
+  '_ __   __ _ _ __   ___| |',
+  " '_ \\ / _` | '_ \\ / _ \\ |",
+  '| |_) | (_| | | | |  __/ |',
+  ' .__/ \\__,_|_| |_|\\___|_|',
+  '|_|                       ',
+]
+
+// Latest release tag for the banner. The build still works offline.
+let version = ''
+try {
+  const res = await fetch('https://api.github.com/repos/madappa-sharath/kpanel/releases/latest', {
+    headers: { Accept: 'application/vnd.github+json' },
+    signal: AbortSignal.timeout(5000),
+  })
+  if (res.ok) version = String((await res.json()).tag_name ?? '').replace(/^v/, '')
+} catch {}
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'kpanel',
+  description,
+  url: SITE,
+  applicationCategory: 'DeveloperApplication',
+  applicationSubCategory: 'Kafka GUI',
+  operatingSystem: 'macOS, Linux, Windows',
+  ...(version ? { softwareVersion: version } : {}),
+  downloadUrl: `${REPO}/releases/latest`,
+  license: 'https://opensource.org/licenses/MIT',
+  isAccessibleForFree: true,
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  sameAs: [REPO],
+  featureList: [
+    'Connect to any Kafka cluster with SASL PLAIN, SCRAM, TLS or no auth',
+    'AWS MSK IAM authentication with your own AWS credentials',
+    'AWS MSK cluster discovery',
+    'CloudWatch metrics for AWS MSK',
+    'Browse, tail, search and produce Kafka messages',
+    'Consumer group lag history and offset reset',
+  ],
+}
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <link rel="alternate" type="text/plain" title="llms.txt" href="/llms.txt" />
+    <meta name="color-scheme" content="light dark" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="kpanel" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={`${SITE}/og.png`} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="kpanel — a local Kafka GUI" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={`${SITE}/og.png`} />
+    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+    <script is:inline>
+      // Same key as the Starlight docs, so the theme choice carries over.
+      try {
+        const t = localStorage.getItem('starlight-theme')
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="top">
+      <div class="wrap top-inner">
+        <a class="brand" href="/" aria-label="kpanel home">
+          <span class="brand-mark" aria-hidden="true">k</span>
+          <span>kpanel</span>
+        </a>
+        <nav aria-label="Main">
+          <a href="/docs/">Docs</a>
+          <a href="/docs/installation/">Install</a>
+          <a href={REPO}>GitHub</a>
+          <button class="theme" type="button" aria-label="Switch theme" hidden>
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 0 0 13z" fill="currentColor"/><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor"/></svg>
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero wrap">
+        <div class="hero-copy">
+          <h1>A Kafka GUI that runs on your machine</h1>
+          <p class="lede">
+            kpanel is one binary. Run it, and it opens a web UI in your browser. Point it at any Kafka cluster.
+            For AWS MSK, it signs in with IAM using your own AWS credentials, lists the clusters in your account,
+            and shows their CloudWatch metrics.
+          </p>
+          <div class="install">
+            <p class="install-label" id="install-unix">macOS and Linux</p>
+            <pre aria-labelledby="install-unix"><code>{installSh}</code></pre>
+            <p class="install-label" id="install-win">Windows (PowerShell)</p>
+            <pre aria-labelledby="install-win"><code>{installPs}</code></pre>
+            <p class="install-more">
+              Then run <code>kpanel</code>. See <a href="/docs/installation/">installation</a> for direct downloads and
+              release verification.
+            </p>
+          </div>
+        </div>
+
+        <figure class="term" aria-label="kpanel startup output">
+          <pre><span class="dim">$</span> kpanel
+{kParts.map((k, i) => <><span class="k">{k}</span>{panelParts[i]}{'\n'}</>)}
+  <span class="dim">local kafka GUI</span>{version && `  ·  v${version}`}
+──────────────────────────────────────────
+  URL     http://localhost:8080
+  Config  ~/.kpanel
+
+Opening in browser...
+Press Ctrl+C to stop</pre>
+        </figure>
+      </section>
+
+      <div class="wrap hero-shot">
+        <Shot name="dashboard" alt="kpanel cluster overview: brokers, topics, partition health and broker configuration" eager />
+      </div>
+
+      <section class="feature wrap" id="connect">
+        <div class="feature-copy">
+          <h2>Connect to any Kafka cluster</h2>
+          <p>
+            Self-hosted Kafka, Redpanda, Aiven, Confluent Cloud or AWS MSK. Enter the bootstrap brokers and pick the
+            auth: none, SASL PLAIN, SCRAM-SHA-256, SCRAM-SHA-512 or AWS IAM, with optional TLS and your own CA
+            certificate.
+          </p>
+          <p>Passwords go to the OS keychain, not to a config file.</p>
+          <a class="more" href="/docs/connecting/">Connecting to Kafka</a>
+        </div>
+        <Shot name="connection-setup" alt="The add-connection form with platform, brokers, TLS and auth settings" />
+      </section>
+
+      <section class="feature feature-msk wrap" id="msk">
+        <div class="feature-copy">
+          <h2>AWS MSK, signed in as you</h2>
+          <p>
+            kpanel reads credentials from the standard AWS SDK chain: SSO, profiles, environment variables or an
+            instance profile. It uses the <code>AWS_MSK_IAM</code> SASL mechanism, so each person connects with their
+            own IAM identity and their own permissions. There is no shared service account.
+          </p>
+          <p>
+            Pick a profile and region, click Discover, and import a cluster. Its brokers, auth and CloudWatch cluster
+            name are filled in for you.
+          </p>
+          <a class="more" href="/docs/aws-msk/">AWS MSK and IAM permissions</a>
+        </div>
+        <div class="msk-detail">
+          <pre class="snippet"><code><span class="dim">$</span> aws sso login --profile prod
+<span class="dim">$</span> kpanel</code></pre>
+          <dl class="metrics">
+            <div><dt>Cluster</dt><dd>CPU, disk used, bytes in and out across brokers</dd></div>
+            <div><dt>Broker</dt><dd>CPU, disk, memory, bytes in and out</dd></div>
+            <div><dt>Topic</dt><dd>Bytes in and out</dd></div>
+            <div><dt>Consumer group</dt><dd><code>SumOffsetLag</code> and <code>EstimatedMaxTimeLag</code> per topic</dd></div>
+          </dl>
+          <p class="note">CloudWatch metrics from the <code>AWS/Kafka</code> namespace, from 1 hour to 7 days.</p>
+        </div>
+      </section>
+
+      <section class="feature wrap" id="topics">
+        <div class="feature-copy">
+          <h2>Topics and partitions</h2>
+          <p>
+            Message counts, size, replication factor and ISR health for every topic. Per partition: leader,
+            replicas, ISR, offsets and skew. Read every topic config and see which ones differ from the default.
+          </p>
+          <a class="more" href="/docs/topics/">Topics</a>
+        </div>
+        <Shot name="topic-partitions" alt="A topic's partitions with leader, replicas, ISR, offsets and status" />
+      </section>
+
+      <section class="feature wrap" id="messages">
+        <div class="feature-copy">
+          <h2>Browse and tail messages</h2>
+          <p>
+            Fetch the last N messages, or start from an offset or a timestamp, on one partition or all of them. Turn
+            on live tail to fetch again every few seconds. JSON values are pretty-printed, binary values are shown as
+            base64.
+          </p>
+          <a class="more" href="/docs/messages/">Messages</a>
+        </div>
+        <Shot name="messages" alt="The message browser with partition, offset, timestamp, key and value" />
+      </section>
+
+      <section class="feature wrap" id="search">
+        <div class="feature-copy">
+          <h2>Search the whole topic</h2>
+          <p>
+            Search scans the topic on the broker, up to 50,000 messages per search. Type plain text to match keys and
+            values, or query JSON fields.
+          </p>
+          <pre class="snippet"><code>payment declined
+user.id == "abc"
+latency &gt; 100
+$.user.premium</code></pre>
+          <a class="more" href="/docs/search/">Search query language</a>
+        </div>
+        <Shot name="search" alt="Search results for a JSON field query with the scanned message count" />
+      </section>
+
+      <section class="feature wrap" id="groups">
+        <div class="feature-copy">
+          <h2>Consumer lag over time</h2>
+          <p>
+            Per-partition lag for every group. Open a group's Lag tab and kpanel samples it every 5 seconds: total lag,
+            messages coming in and messages processed. It tells you whether the group is caught up, draining or
+            falling behind.
+          </p>
+          <p>Reset offsets to earliest, latest, a timestamp or an offset, with a preview of each partition first.</p>
+          <a class="more" href="/docs/consumer-groups/">Consumer groups</a>
+        </div>
+        <Shot name="consumer-group-lag" alt="A consumer group's lag and throughput charts with its current status" />
+      </section>
+
+      <section class="feature wrap" id="brokers">
+        <div class="feature-copy">
+          <h2>Brokers and cluster health</h2>
+          <p>
+            The controller, Kafka version, under-replicated and offline partitions, and the broker configs that
+            affect durability and retention. Each broker's leader partitions, replicas, rack and disk use.
+          </p>
+          <a class="more" href="/docs/brokers/">Cluster overview and brokers</a>
+        </div>
+        <Shot name="brokers" alt="The broker list with role, leader partitions, replicas and disk used" />
+      </section>
+
+      <section class="feature wrap" id="write-mode">
+        <div class="feature-copy">
+          <h2>Read-only until you turn on write mode</h2>
+          <p>
+            kpanel opens read-only. Turn on write mode in a browser tab to create or delete topics, add partitions,
+            edit topic configs, produce messages or reset offsets. Write mode is a guard against mistakes. Your Kafka
+            and IAM permissions still decide what you can change.
+          </p>
+          <a class="more" href="/docs/write-mode/">Write mode</a>
+        </div>
+        <Shot name="produce-message" alt="The produce-message dialog with key, partition, value and headers" />
+      </section>
+
+      <section class="facts wrap" aria-labelledby="facts-title">
+        <h2 id="facts-title">How it runs</h2>
+        <dl>
+          <div>
+            <dt>One binary</dt>
+            <dd>
+              The Go server and the web UI are one file. macOS, Linux and Windows, on x86-64 and ARM64. No Docker, JVM or
+              database.
+            </dd>
+          </div>
+          <div>
+            <dt>Your credentials</dt>
+            <dd>
+              SASL passwords are kept in the OS keychain. AWS credentials are read from your SDK chain when needed and
+              never stored.
+            </dd>
+          </div>
+          <div>
+            <dt>Network</dt>
+            <dd>
+              kpanel talks to your brokers, to AWS for MSK features, and to GitHub to check for releases. No telemetry.
+            </dd>
+          </div>
+          <div>
+            <dt>Releases</dt>
+            <dd>
+              Archives carry GitHub build provenance attestations, checksums and an SBOM. The install scripts verify
+              them. New releases are offered only after 72 hours.
+            </dd>
+          </div>
+          <div>
+            <dt>License</dt>
+            <dd>MIT. No account, license key or limit on clusters or users.</dd>
+          </div>
+        </dl>
+        <p class="facts-more"><a href="/docs/security/">Security model</a></p>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap foot-inner">
+        <span class="brand"><span class="brand-mark" aria-hidden="true">k</span><span>kpanel</span></span>
+        <nav aria-label="Footer">
+          <a href="/docs/">Docs</a>
+          <a href="/docs/faq/">FAQ</a>
+          <a href={`${REPO}/releases`}>Releases</a>
+          <a href={REPO}>GitHub</a>
+          <a href={`${REPO}/blob/main/LICENSE`}>MIT license</a>
+        </nav>
+      </div>
+    </footer>
+
+    <script is:inline>
+      // Theme toggle: shown only with JS. Cycles through system, light and dark.
+      ;(() => {
+        const btn = document.querySelector('.theme')
+        if (!btn) return
+        btn.hidden = false
+        const root = document.documentElement
+        const label = () => {
+          const t = root.dataset.theme || 'system'
+          btn.setAttribute('aria-label', `Theme: ${t}. Switch theme`)
+          btn.title = `Theme: ${t}`
+        }
+        label()
+        btn.addEventListener('click', () => {
+          const order = ['system', 'light', 'dark']
+          const next = order[(order.indexOf(root.dataset.theme || 'system') + 1) % order.length]
+          if (next === 'system') delete root.dataset.theme
+          else root.dataset.theme = next
+          try { localStorage.setItem('starlight-theme', next === 'system' ? '' : next) } catch {}
+          label()
+        })
+      })()
+    </script>
+  </body>
+</html>

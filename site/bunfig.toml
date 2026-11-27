@@ -1,0 +1,6 @@
+# Same supply-chain hardening as web/bunfig.toml.
+[install]
+# Block versions published within the last 3 days.
+minimumReleaseAge = 259200
+# Lifecycle scripts stay off. trustedDependencies in package.json still works.
+ignoreScripts = true

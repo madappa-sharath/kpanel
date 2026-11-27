@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://kpanel.sharath.xyz/sitemap-index.xml

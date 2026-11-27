@@ -1,0 +1,38 @@
+---
+// A light/dark screenshot pair from public/screenshots/<name>-{light,dark}.png,
+// copied there from docs/assets/screenshots by scripts/copy-screenshots.ts.
+// When the files are missing, renders a labelled placeholder instead.
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+interface Props {
+  name: string
+  alt: string
+  eager?: boolean
+}
+const { name, alt, eager = false } = Astro.props
+const dir = resolve(process.cwd(), 'public/screenshots')
+
+function size(file: string): { width: number; height: number } | null {
+  const path = resolve(dir, file)
+  if (!existsSync(path)) return null
+  const b = readFileSync(path)
+  // PNG IHDR: width and height are big-endian u32 at bytes 16 and 20.
+  return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) }
+}
+
+const light = size(`${name}-light.png`)
+const dark = size(`${name}-dark.png`)
+const loading = eager ? 'eager' : 'lazy'
+---
+{light && dark ? (
+  <figure class="shot">
+    <img class="shot-light" src={`/screenshots/${name}-light.png`} alt={alt} width={light.width} height={light.height} loading={loading} decoding="async" />
+    <img class="shot-dark" src={`/screenshots/${name}-dark.png`} alt={alt} width={dark.width} height={dark.height} loading={loading} decoding="async" />
+  </figure>
+) : (
+  <figure class="shot shot-pending" role="img" aria-label={`Screenshot pending: ${alt}`}>
+    <span>Screenshot pending</span>
+    <code>{name}</code>
+  </figure>
+)}

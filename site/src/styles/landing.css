@@ -1,0 +1,522 @@
+/* Landing page. Zinc greys from the app, amber only for the brand mark. */
+
+:root {
+  --bg: #ffffff;
+  --bg-soft: #fafafa;
+  --ink: #09090b;
+  --ink-2: #3f3f46;
+  --muted: #71717a;
+  --rule: #e4e4e7;
+  --code-bg: #f4f4f5;
+  --term-bg: #18181b;
+  --term-ink: #e4e4e7;
+  --term-dim: #71717a;
+  --amber: #f59e0b;
+  --link: #b45309;
+  --focus: #f59e0b;
+
+  --sans: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #09090b;
+    --bg-soft: #0f0f11;
+    --ink: #fafafa;
+    --ink-2: #d4d4d8;
+    --muted: #a1a1aa;
+    --rule: #27272a;
+    --code-bg: #18181b;
+    --term-bg: #18181b;
+    --link: #fbbf24;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #09090b;
+  --bg-soft: #0f0f11;
+  --ink: #fafafa;
+  --ink-2: #d4d4d8;
+  --muted: #a1a1aa;
+  --rule: #27272a;
+  --code-bg: #18181b;
+  --term-bg: #18181b;
+  --link: #fbbf24;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 1rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--link);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+code,
+pre {
+  font-family: var(--mono);
+}
+
+p code,
+dd code {
+  font-size: 0.875em;
+  background: var(--code-bg);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+.wrap {
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+@media (min-width: 720px) {
+  .wrap {
+    padding: 0 32px;
+  }
+}
+
+.skip {
+  position: absolute;
+  left: -9999px;
+}
+.skip:focus {
+  left: 16px;
+  top: 8px;
+  background: var(--bg);
+  padding: 4px 8px;
+  z-index: 10;
+}
+
+/* Header */
+
+.top {
+  border-bottom: 1px solid var(--rule);
+}
+
+.top-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.brand-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  background: var(--amber);
+  color: #000;
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.top nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.top nav a {
+  color: var(--ink-2);
+  text-decoration: none;
+  font-size: 0.9375rem;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
+.top nav a:hover {
+  color: var(--ink);
+  background: var(--code-bg);
+}
+
+.theme {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-left: 4px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.theme[hidden] {
+  display: none;
+}
+
+/* Hero */
+
+.hero {
+  display: grid;
+  gap: 40px;
+  padding-top: 56px;
+  padding-bottom: 40px;
+}
+
+@media (min-width: 980px) {
+  .hero {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 56px;
+    padding-top: 88px;
+  }
+}
+
+h1 {
+  font-size: clamp(2.25rem, 1.6rem + 2.6vw, 3.25rem);
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+  margin: 0 0 20px;
+  max-width: 16ch;
+}
+
+.hero-copy,
+.feature-copy {
+  min-width: 0;
+}
+
+.lede {
+  font-size: 1.125rem;
+  line-height: 1.6;
+  color: var(--ink-2);
+  margin: 0 0 32px;
+  max-width: 34em;
+}
+
+.install pre {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  background: var(--code-bg);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.install-label {
+  margin: 0 0 6px;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.install-more {
+  margin: 4px 0 0;
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+}
+
+/* The terminal: kpanel's real startup output. */
+
+.term {
+  margin: 0;
+  min-width: 0;
+  background: var(--term-bg);
+  color: var(--term-ink);
+  border-radius: 10px;
+  border: 1px solid #27272a;
+  overflow: hidden;
+}
+
+.term pre {
+  margin: 0;
+  padding: 22px 24px 24px;
+  font-size: clamp(0.66rem, 0.5rem + 0.55vw, 0.84rem);
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.term .k {
+  color: var(--amber);
+}
+
+.term .dim,
+.snippet .dim {
+  color: var(--term-dim);
+}
+
+/* Screenshots */
+
+.hero-shot {
+  padding-bottom: 24px;
+}
+
+.shot {
+  margin: 0;
+  min-width: 0;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-soft);
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.shot-dark {
+  display: none !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .shot-light {
+    display: none !important;
+  }
+  :root:not([data-theme='light']) .shot-dark {
+    display: block !important;
+  }
+}
+
+:root[data-theme='dark'] .shot-light {
+  display: none !important;
+}
+:root[data-theme='dark'] .shot-dark {
+  display: block !important;
+}
+
+.shot-pending {
+  aspect-ratio: 16 / 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-style: dashed;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent 0 12px,
+    color-mix(in srgb, var(--rule) 45%, transparent) 12px 13px
+  );
+}
+
+.shot-pending code {
+  font-size: 0.8125rem;
+}
+
+/* Feature rows */
+
+.feature {
+  display: grid;
+  gap: 24px;
+  padding-top: 56px;
+  padding-bottom: 56px;
+  border-top: 1px solid var(--rule);
+}
+
+.hero-shot + .feature {
+  margin-top: 48px;
+}
+
+@media (min-width: 980px) {
+  .feature {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 12fr);
+    gap: 56px;
+    align-items: start;
+  }
+}
+
+.feature h2,
+.facts h2 {
+  font-size: 1.5rem;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  font-weight: 600;
+  margin: 0 0 14px;
+}
+
+.feature-copy p {
+  margin: 0 0 14px;
+  color: var(--ink-2);
+  max-width: 36em;
+}
+
+.more {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.snippet {
+  margin: 4px 0 18px;
+  padding: 12px 14px;
+  background: var(--term-bg);
+  color: var(--term-ink);
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+.msk-detail {
+  min-width: 0;
+}
+
+.msk-detail .snippet {
+  margin-top: 0;
+}
+
+.metrics {
+  margin: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.metrics div {
+  display: grid;
+  grid-template-columns: 9.5rem 1fr;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.metrics dt {
+  font-weight: 500;
+}
+
+.metrics dd {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.note {
+  margin: 12px 0 0;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+@media (max-width: 520px) {
+  .metrics div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
+/* How it runs */
+
+.facts {
+  padding-top: 56px;
+  padding-bottom: 72px;
+  border-top: 1px solid var(--rule);
+}
+
+.facts dl {
+  margin: 8px 0 0;
+  display: grid;
+  gap: 0 56px;
+}
+
+@media (min-width: 760px) {
+  .facts dl {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.facts dl div {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.facts dt {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.facts dd {
+  margin: 0;
+  color: var(--ink-2);
+  max-width: 34em;
+}
+
+.facts-more {
+  margin: 24px 0 0;
+}
+
+/* Footer */
+
+.foot {
+  border-top: 1px solid var(--rule);
+  padding: 28px 0 40px;
+  font-size: 0.9375rem;
+}
+
+.foot-inner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.foot nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+
+.foot nav a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.foot nav a:hover {
+  color: var(--ink);
+}
+
+@media (max-width: 520px) {
+  .top nav a[href='/docs/installation/'] {
+    display: none;
+  }
+}

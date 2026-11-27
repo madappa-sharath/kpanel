@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.astro/
+# Copied from docs/assets/screenshots by scripts/copy-screenshots.ts.
+public/screenshots/
