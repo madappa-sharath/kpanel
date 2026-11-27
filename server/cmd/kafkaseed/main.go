@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"os/signal"
 	"sync"
@@ -23,119 +24,62 @@ import (
 
 var (
 	broker        = flag.String("broker", "localhost:9092", "Kafka bootstrap broker")
-	count         = flag.Int("count", 50, "messages per topic")
-	reset         = flag.Bool("reset", false, "delete and recreate topics before seeding")
+	count         = flag.Int("count", 0, "messages per topic (default: each topic's own volume when seeding, 50 for --produce and --binary)")
+	seed          = flag.Int64("seed", 42, "random seed; the same seed produces the same keys and payloads")
+	reset         = flag.Bool("reset", false, "delete seed topics and groups (including ones from older seeds) before seeding")
 	ifEmpty       = flag.Bool("if-empty", false, "skip seeding when the dev topics already contain data")
 	consume       = flag.Bool("consume", false, "advance consumer group offsets (reduce lag)")
 	step          = flag.Int64("step", 5, "messages to advance per partition (consume mode)")
 	drain         = flag.Bool("drain", false, "advance all groups to end offset, zeroing lag; implies --consume")
 	produce       = flag.Bool("produce", false, "produce more messages to existing topics without re-seeding")
 	members       = flag.Bool("members", false, "start real consumers for each group (shows members in UI); runs until Ctrl+C")
+	traffic       = flag.Duration("traffic", 0, "produce live traffic and run consumer groups at their configured rates for this long (e.g. 10m)")
 	binary_       = flag.Bool("binary", false, "produce binary (non-UTF-8) messages to binary-test topic for UI testing")
 	saslMechanism = flag.String("sasl-mechanism", "", "SASL mechanism: plain, scram-sha-256, or scram-sha-512")
 	saslUser      = flag.String("sasl-user", "", "SASL username")
 	saslPassword  = flag.String("sasl-password", "", "SASL password")
 )
 
-type topicDef struct {
-	name       string
-	partitions int32
-	configs    map[string]*string
+// Names used by earlier versions of the seed. --reset deletes them too, so a
+// broker seeded by an older checkout ends up with only the current data set.
+var legacyTopics = []string{
+	"events", "dead-letter", "email-queue", "sms-queue", "push-notifications",
+	"analytics-raw", "analytics-aggregated", "data-pipeline-errors", "logs-aggregated",
+	"cdc-users", "cdc-products", "binary-test",
 }
 
-var topics = []topicDef{
-	{name: "orders", partitions: 3, configs: map[string]*string{"retention.ms": ptr("86400000")}},
-	{name: "events", partitions: 6},
-	{name: "inventory", partitions: 2},
-	{name: "notifications", partitions: 1},
-	{name: "dead-letter", partitions: 1},
-	{name: "payments", partitions: 3, configs: map[string]*string{"retention.ms": ptr("604800000")}},
-	{name: "shipments", partitions: 2},
-	{name: "returns", partitions: 2},
-	{name: "reviews", partitions: 4},
-	{name: "search-queries", partitions: 6},
-	{name: "user-sessions", partitions: 4},
-	{name: "auth-events", partitions: 3, configs: map[string]*string{"retention.ms": ptr("2592000000")}},
-	{name: "audit-log", partitions: 2, configs: map[string]*string{"retention.ms": ptr("2592000000")}},
-	{name: "product-catalog", partitions: 2},
-	{name: "price-updates", partitions: 3},
-	{name: "promotions", partitions: 1},
-	{name: "recommendations", partitions: 4},
-	{name: "email-queue", partitions: 2},
-	{name: "sms-queue", partitions: 1},
-	{name: "push-notifications", partitions: 2},
-	{name: "fraud-signals", partitions: 3, configs: map[string]*string{"retention.ms": ptr("604800000")}},
-	{name: "analytics-raw", partitions: 6},
-	{name: "analytics-aggregated", partitions: 3},
-	{name: "data-pipeline-errors", partitions: 1},
-	{name: "config-changes", partitions: 1},
-	{name: "feature-flags", partitions: 1},
-	{name: "metrics-ingest", partitions: 6},
-	{name: "logs-aggregated", partitions: 4},
-	{name: "cdc-users", partitions: 3},
-	{name: "cdc-products", partitions: 3},
-}
-
-type groupDef struct {
-	name    string
-	topics  []string
-	lag     int64
-	members int
-}
-
-var allTopicNames = []string{
-	"orders", "events", "inventory", "notifications", "dead-letter",
-	"payments", "shipments", "returns", "reviews", "search-queries",
-	"user-sessions", "auth-events", "audit-log", "product-catalog", "price-updates",
-	"promotions", "recommendations", "email-queue", "sms-queue", "push-notifications",
-	"fraud-signals", "analytics-raw", "analytics-aggregated", "data-pipeline-errors", "config-changes",
-	"feature-flags", "metrics-ingest", "logs-aggregated", "cdc-users", "cdc-products",
-}
-
-var groups = []groupDef{
-	{name: "orders-processor", topics: []string{"orders"}, lag: 1, members: 2},
-	{name: "analytics-pipeline", topics: []string{"orders", "events", "inventory", "analytics-raw"}, lag: 15, members: 3},
-	{name: "notification-service", topics: []string{"notifications", "orders", "email-queue", "sms-queue", "push-notifications"}, lag: 3, members: 1},
-	{name: "reporting-etl", topics: []string{"orders", "events", "inventory", "notifications", "dead-letter"}, lag: 30, members: 2},
-	{name: "payments-processor", topics: []string{"payments", "orders"}, lag: 2, members: 2},
-	{name: "fraud-detection", topics: []string{"fraud-signals", "payments", "orders", "auth-events"}, lag: 5, members: 3},
-	{name: "shipping-service", topics: []string{"shipments", "orders", "inventory"}, lag: 4, members: 2},
-	{name: "returns-processor", topics: []string{"returns", "orders", "payments"}, lag: 8, members: 1},
-	{name: "review-aggregator", topics: []string{"reviews", "product-catalog"}, lag: 12, members: 2},
-	{name: "search-indexer", topics: []string{"search-queries", "product-catalog", "price-updates"}, lag: 0, members: 3},
-	{name: "session-tracker", topics: []string{"user-sessions", "auth-events", "events"}, lag: 7, members: 2},
-	{name: "audit-service", topics: []string{"audit-log", "auth-events", "config-changes"}, lag: 0, members: 1},
-	{name: "catalog-sync", topics: []string{"product-catalog", "price-updates", "promotions", "cdc-products"}, lag: 3, members: 2},
-	{name: "promo-engine", topics: []string{"promotions", "recommendations", "events"}, lag: 20, members: 1},
-	{name: "recommendation-engine", topics: []string{"recommendations", "user-sessions", "search-queries", "reviews"}, lag: 10, members: 3},
-	{name: "email-sender", topics: []string{"email-queue", "notifications"}, lag: 1, members: 2},
-	{name: "sms-sender", topics: []string{"sms-queue", "notifications"}, lag: 2, members: 1},
-	{name: "push-sender", topics: []string{"push-notifications", "notifications"}, lag: 0, members: 2},
-	{name: "fraud-analyst", topics: []string{"fraud-signals", "payments", "orders", "returns"}, lag: 25, members: 1},
-	{name: "analytics-consumer", topics: []string{"analytics-raw", "analytics-aggregated", "events"}, lag: 18, members: 4},
-	{name: "data-pipeline", topics: []string{"data-pipeline-errors", "dead-letter"}, lag: 6, members: 1},
-	{name: "config-watcher", topics: []string{"config-changes", "feature-flags"}, lag: 0, members: 1},
-	{name: "metrics-collector", topics: []string{"metrics-ingest", "logs-aggregated"}, lag: 9, members: 3},
-	{name: "cdc-processor", topics: []string{"cdc-users", "cdc-products", "product-catalog", "inventory"}, lag: 4, members: 2},
-	{name: "inventory-sync", topics: []string{"inventory", "cdc-products", "price-updates"}, lag: 11, members: 2},
-	{name: "customer-360", topics: []string{"user-sessions", "orders", "reviews", "recommendations"}, lag: 14, members: 3},
-	{name: "compliance-monitor", topics: []string{"audit-log", "auth-events", "payments", "fraud-signals"}, lag: 0, members: 1},
-	{name: "ops-dashboard", topics: []string{"metrics-ingest", "logs-aggregated", "data-pipeline-errors"}, lag: 2, members: 2},
-	{name: "event-archiver", topics: []string{"events", "orders", "payments", "shipments", "returns"}, lag: 35, members: 2},
-	{name: "global-consumer", topics: allTopicNames, lag: 50, members: 5},
+var legacyGroups = []string{
+	"orders-processor", "analytics-pipeline", "notification-service", "reporting-etl",
+	"payments-processor", "fraud-detection", "shipping-service", "review-aggregator",
+	"session-tracker", "audit-service", "promo-engine", "email-sender", "sms-sender",
+	"push-sender", "fraud-analyst", "analytics-consumer", "data-pipeline", "config-watcher",
+	"metrics-collector", "cdc-processor", "compliance-monitor", "ops-dashboard",
+	"event-archiver", "global-consumer",
 }
 
 func main() {
 	flag.Parse()
 
-	if *members {
+	if *members || *traffic > 0 {
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
-		cleanup, wg := startGroupMembers(ctx)
-		defer cleanup()
+		if *traffic > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, *traffic)
+			defer cancel()
+		}
+		var wg sync.WaitGroup
+		rate := func(groupDef) float64 { return 1.0 / 15 } // one record per member every 15s
+		if *traffic > 0 {
+			rate = func(g groupDef) float64 { return g.msgsPerSec / float64(g.members) }
+			wg.Add(1)
+			go func() { defer wg.Done(); produceTraffic(ctx) }()
+		}
+		cleanup := startGroupMembers(ctx, &wg, rate)
 		<-ctx.Done()
 		log.Println("shutting down...")
 		wg.Wait()
+		cleanup()
 		return
 	}
 
@@ -171,12 +115,13 @@ func main() {
 	}
 
 	if *produce {
-		produceMessages(ctx, cl)
+		produceMessages(ctx, cl, func(topicDef) int { return countOr(50) }, false)
 		log.Println("done")
 		return
 	}
 
 	if *reset {
+		deleteGroups(ctx, adm)
 		deleteTopics(ctx, adm)
 	}
 
@@ -186,10 +131,17 @@ func main() {
 	}
 
 	createTopics(ctx, adm)
-	produceMessages(ctx, cl)
+	produceMessages(ctx, cl, func(td topicDef) int { return countOr(td.messages) }, true)
 	commitGroupOffsets(ctx, adm)
 
 	log.Println("done")
+}
+
+func countOr(def int) int {
+	if *count > 0 {
+		return *count
+	}
+	return def
 }
 
 func clientOpts(opts ...kgo.Opt) ([]kgo.Opt, error) {
@@ -224,22 +176,30 @@ func hasSeedData(ctx context.Context, adm *kadm.Client) bool {
 	return false
 }
 
-func startGroupMembers(ctx context.Context) (func(), *sync.WaitGroup) {
+func topicNames() []string {
+	names := make([]string, len(topics))
+	for i, t := range topics {
+		names[i] = t.name
+	}
+	return names
+}
+
+// startGroupMembers joins each group with its configured number of members.
+// Each member consumes at rate(g) records per second and commits through
+// kgo's autocommit, so lag moves the way it would with a real service.
+func startGroupMembers(ctx context.Context, wg *sync.WaitGroup, rate func(groupDef) float64) func() {
 	var clients []*kgo.Client
-	var wg sync.WaitGroup
 
 	for _, g := range groups {
-		n := g.members
-		if n == 0 {
-			n = 1
-		}
-		for i := 0; i < n; i++ {
-			clientID := fmt.Sprintf("%s-worker-%d", g.name, i)
+		perSec := rate(g)
+		for i := 0; i < g.members; i++ {
+			clientID := fmt.Sprintf("%s-%d", g.name, i)
 			opts, err := clientOpts(
 				kgo.SeedBrokers(*broker),
 				kgo.ClientID(clientID),
 				kgo.ConsumerGroup(g.name),
 				kgo.ConsumeTopics(g.topics...),
+				kgo.AutoCommitInterval(2*time.Second),
 			)
 			if err != nil {
 				log.Printf("failed to build consumer %s options: %v", clientID, err)
@@ -254,52 +214,140 @@ func startGroupMembers(ctx context.Context) (func(), *sync.WaitGroup) {
 			wg.Add(1)
 			go func(cl *kgo.Client, id string) {
 				defer wg.Done()
+				batch := int(math.Max(1, math.Ceil(perSec/2)))
 				for {
-					fetches := cl.PollRecords(ctx, 1)
+					fetches := cl.PollRecords(ctx, batch)
 					if fetches.IsClientClosed() || ctx.Err() != nil {
 						return
 					}
 					fetches.EachError(func(t string, p int32, err error) {
 						log.Printf("fetch error [%s] topic=%s partition=%d: %v", id, t, p, err)
 					})
+					wait := time.Duration(float64(fetches.NumRecords()) / perSec * float64(time.Second))
 					select {
 					case <-ctx.Done():
 						return
-					case <-time.After(15 * time.Second):
+					case <-time.After(wait):
 					}
 				}
 			}(cl, clientID)
 		}
-		log.Printf("started %d consumers for group %s", n, g.name)
+		if g.members > 0 {
+			log.Printf("started %d consumers for group %s", g.members, g.name)
+		}
 	}
 
-	cleanup := func() {
+	return func() {
 		for _, cl := range clients {
 			cl.Close()
 		}
 	}
-	return cleanup, &wg
+}
+
+// produceTraffic produces to each topic with a msgsPerSec until ctx ends.
+func produceTraffic(ctx context.Context) {
+	opts, err := clientOpts(kgo.SeedBrokers(*broker), kgo.ClientID("kafkaseed-traffic"))
+	if err != nil {
+		log.Printf("traffic: %v", err)
+		return
+	}
+	cl, err := kgo.NewClient(opts...)
+	if err != nil {
+		log.Printf("traffic: %v", err)
+		return
+	}
+	defer cl.Close()
+
+	r := rand.New(rand.NewSource(*seed + 1))
+	const tick = 250 * time.Millisecond
+	owed := map[string]float64{}
+	ticker := time.NewTicker(tick)
+	defer ticker.Stop()
+	log.Println("producing live traffic")
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		for _, td := range topics {
+			if td.msgsPerSec == 0 {
+				continue
+			}
+			// Vary the rate a little so the charts are not flat lines.
+			owed[td.name] += td.msgsPerSec * tick.Seconds() * (0.7 + 0.6*r.Float64())
+			for ; owed[td.name] >= 1; owed[td.name]-- {
+				m := td.gen(r)
+				cl.Produce(ctx, record(td.name, m, time.Time{}), func(_ *kgo.Record, err error) {
+					if err != nil && ctx.Err() == nil {
+						log.Printf("traffic produce: %v", err)
+					}
+				})
+			}
+		}
+	}
+}
+
+func record(topic string, m message, ts time.Time) *kgo.Record {
+	rec := &kgo.Record{Topic: topic, Key: []byte(m.key), Value: encode(m), Timestamp: ts}
+	for k, v := range m.headers {
+		rec.Headers = append(rec.Headers, kgo.RecordHeader{Key: k, Value: []byte(v)})
+	}
+	// Map iteration order is random; sort so reruns produce identical records.
+	sortHeaders(rec.Headers)
+	return rec
+}
+
+func sortHeaders(h []kgo.RecordHeader) {
+	for i := 1; i < len(h); i++ {
+		for j := i; j > 0 && h[j].Key < h[j-1].Key; j-- {
+			h[j], h[j-1] = h[j-1], h[j]
+		}
+	}
+}
+
+func deleteGroups(ctx context.Context, adm *kadm.Client) {
+	names := append([]string{}, legacyGroups...)
+	for _, g := range groups {
+		names = append(names, g.name)
+	}
+	resp, err := adm.DeleteGroups(ctx, names...)
+	if err != nil {
+		log.Printf("delete groups request error: %v", err)
+		return
+	}
+	for _, r := range resp {
+		if r.Err != nil && r.Err != kerr.GroupIDNotFound {
+			log.Printf("  delete group %s: %v", r.Group, r.Err)
+		}
+	}
 }
 
 func deleteTopics(ctx context.Context, adm *kadm.Client) {
-	names := make([]string, len(topics))
-	for i, t := range topics {
-		names[i] = t.name
-	}
+	names := append(topicNames(), legacyTopics...)
 	resp, err := adm.DeleteTopics(ctx, names...)
 	if err != nil {
 		log.Printf("delete topics request error: %v", err)
 		return
 	}
 	for _, r := range resp {
-		if r.Err != nil && r.Err != kerr.UnknownTopicOrPartition {
+		if r.Err == kerr.UnknownTopicOrPartition {
+			continue
+		}
+		if r.Err != nil {
 			log.Printf("  delete %s: %v", r.Topic, r.Err)
 		} else {
 			log.Printf("  deleted topic %s", r.Topic)
 		}
 	}
-	// Brief pause to let the broker process the deletions.
-	time.Sleep(500 * time.Millisecond)
+	// Wait until the deletions finish, or creating the same names fails.
+	for i := 0; i < 50; i++ {
+		md, err := adm.ListTopics(ctx, names...)
+		if err == nil && len(md.Names()) == 0 {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
 }
 
 func createTopics(ctx context.Context, adm *kadm.Client) {
@@ -320,43 +368,33 @@ func createTopics(ctx context.Context, adm *kadm.Client) {
 	}
 }
 
-func produceMessages(ctx context.Context, cl *kgo.Client) {
-	generators := map[string]func() []byte{
-		"orders":        orderMsg,
-		"events":        eventMsg,
-		"inventory":     inventoryMsg,
-		"notifications": notificationMsg,
-		"dead-letter":   deadLetterMsg,
-	}
-
+// produceMessages produces n(td) records to every topic. With backdate, the
+// records are spread over the last two hours instead of all stamped now.
+func produceMessages(ctx context.Context, cl *kgo.Client, n func(topicDef) int, backdate bool) {
+	r := rand.New(rand.NewSource(*seed))
+	now := time.Now()
 	for _, td := range topics {
-		gen := generators[td.name]
-		if gen == nil {
-			name := td.name
-			gen = func() []byte { return genericMsg(name) }
-		}
-		records := make([]*kgo.Record, *count)
+		total := n(td)
+		records := make([]*kgo.Record, total)
 		for i := range records {
-			records[i] = &kgo.Record{
-				Topic: td.name,
-				Key:   []byte(uuid.New().String()),
-				Value: gen(),
+			var ts time.Time
+			if backdate {
+				ts = timestampFor(now, i, total, 2*time.Hour, r)
 			}
+			records[i] = record(td.name, td.gen(r), ts)
 		}
 		if err := cl.ProduceSync(ctx, records...).FirstErr(); err != nil {
 			log.Fatalf("produce to %s: %v", td.name, err)
 		}
-		log.Printf("  produced %d messages to %s", *count, td.name)
+		log.Printf("  produced %d messages to %s", total, td.name)
 	}
 }
 
+// commitGroupOffsets commits each group's offsets behind the end of each
+// partition by its lag, jittered so partitions don't all show the same number.
 func commitGroupOffsets(ctx context.Context, adm *kadm.Client) {
-	topicNames := make([]string, len(topics))
-	for i, t := range topics {
-		topicNames[i] = t.name
-	}
-
-	endOffsets, err := adm.ListEndOffsets(ctx, topicNames...)
+	r := rand.New(rand.NewSource(*seed + 2))
+	endOffsets, err := adm.ListEndOffsets(ctx, topicNames()...)
 	if err != nil {
 		log.Fatalf("list end offsets: %v", err)
 	}
@@ -368,12 +406,11 @@ func commitGroupOffsets(ctx context.Context, adm *kadm.Client) {
 			if !ok {
 				continue
 			}
-			for _, lo := range partOffsets {
-				committed := lo.Offset - gd.lag
-				if committed < 0 {
-					committed = 0
-				}
-				offsets.AddOffset(topic, lo.Partition, committed, -1)
+			// In partition order, so the same seed gives the same lag.
+			for p := int32(0); p < int32(len(partOffsets)); p++ {
+				lo := partOffsets[p]
+				lag := int64(float64(gd.lag) * (0.4 + 1.2*r.Float64()))
+				offsets.AddOffset(topic, p, max(lo.Offset-lag, 0), -1)
 			}
 		}
 		if err := adm.CommitAllOffsets(ctx, gd.name, offsets); err != nil {
@@ -385,12 +422,7 @@ func commitGroupOffsets(ctx context.Context, adm *kadm.Client) {
 }
 
 func advanceGroupOffsets(ctx context.Context, adm *kadm.Client) {
-	topicNames := make([]string, len(topics))
-	for i, t := range topics {
-		topicNames[i] = t.name
-	}
-
-	endOffsets, err := adm.ListEndOffsets(ctx, topicNames...)
+	endOffsets, err := adm.ListEndOffsets(ctx, topicNames()...)
 	if err != nil {
 		log.Fatalf("list end offsets: %v", err)
 	}
@@ -417,10 +449,7 @@ func advanceGroupOffsets(ctx context.Context, adm *kadm.Client) {
 				if *drain {
 					next = end.Offset
 				} else {
-					next = current + *step
-					if next > end.Offset {
-						next = end.Offset
-					}
+					next = min(current+*step, end.Offset)
 				}
 				newOffsets.AddOffset(topic, end.Partition, next, -1)
 			}
@@ -436,87 +465,6 @@ func advanceGroupOffsets(ctx context.Context, adm *kadm.Client) {
 		}
 	}
 }
-
-// --- message generators ---
-
-var statuses = []string{"pending", "processing", "shipped", "delivered", "cancelled"}
-var skus = []string{"SKU-001", "SKU-042", "SKU-117", "SKU-203", "SKU-388"}
-var eventTypes = []string{"page_view", "click", "purchase", "search"}
-var channels = []string{"email", "sms", "push"}
-var warehouses = []string{"WH-EAST", "WH-WEST", "WH-CENTRAL"}
-var deadLetterTopics = []string{"orders", "events", "inventory"}
-var deadLetterReasons = []string{"schema_validation_failed", "deserialization_error", "downstream_timeout"}
-
-func orderMsg() []byte {
-	items := make([]map[string]any, rand.Intn(3)+1)
-	for i := range items {
-		items[i] = map[string]any{
-			"sku": skus[rand.Intn(len(skus))],
-			"qty": rand.Intn(5) + 1,
-		}
-	}
-	v, _ := json.Marshal(map[string]any{
-		"orderId":    uuid.New().String(),
-		"customerId": fmt.Sprintf("cust-%04d", rand.Intn(1000)),
-		"items":      items,
-		"status":     statuses[rand.Intn(len(statuses))],
-		"total":      float64(rand.Intn(49900)+100) / 100.0,
-	})
-	return v
-}
-
-func eventMsg() []byte {
-	v, _ := json.Marshal(map[string]any{
-		"eventId": uuid.New().String(),
-		"type":    eventTypes[rand.Intn(len(eventTypes))],
-		"userId":  fmt.Sprintf("user-%04d", rand.Intn(500)),
-		"ts":      time.Now().UnixMilli(),
-	})
-	return v
-}
-
-func inventoryMsg() []byte {
-	v, _ := json.Marshal(map[string]any{
-		"sku":         skus[rand.Intn(len(skus))],
-		"warehouseId": warehouses[rand.Intn(len(warehouses))],
-		"qty":         rand.Intn(500),
-		"reserved":    rand.Intn(50),
-	})
-	return v
-}
-
-func notificationMsg() []byte {
-	v, _ := json.Marshal(map[string]any{
-		"notificationId": uuid.New().String(),
-		"userId":         fmt.Sprintf("user-%04d", rand.Intn(500)),
-		"channel":        channels[rand.Intn(len(channels))],
-		"status":         "queued",
-	})
-	return v
-}
-
-func deadLetterMsg() []byte {
-	orig := deadLetterTopics[rand.Intn(len(deadLetterTopics))]
-	payload, _ := json.Marshal(map[string]any{"raw": uuid.New().String()})
-	v, _ := json.Marshal(map[string]any{
-		"originalTopic": orig,
-		"reason":        deadLetterReasons[rand.Intn(len(deadLetterReasons))],
-		"payload":       string(payload),
-	})
-	return v
-}
-
-func genericMsg(topic string) []byte {
-	v, _ := json.Marshal(map[string]any{
-		"id":    uuid.New().String(),
-		"topic": topic,
-		"ts":    time.Now().UnixMilli(),
-		"seq":   rand.Intn(100000),
-	})
-	return v
-}
-
-func ptr(s string) *string { return &s }
 
 // produceBinaryMessages creates the binary-test topic and produces a mix of
 // binary-encoded messages (Avro-style with magic byte + schema ID, raw bytes,
@@ -540,7 +488,7 @@ func produceBinaryMessages(ctx context.Context, cl *kgo.Client, adm *kadm.Client
 		}
 	}
 
-	n := *count
+	n := countOr(50)
 	records := make([]*kgo.Record, 0, n)
 	for i := 0; i < n; i++ {
 		var key, value []byte
