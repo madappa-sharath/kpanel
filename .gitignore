@@ -45,3 +45,4 @@ Thumbs.db
 # TypeScript
 *.tsbuildinfo
 server/cmd/kafkaseed/kafkaseed
+scripts/screenshots/node_modules/

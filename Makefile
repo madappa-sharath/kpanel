@@ -11,7 +11,7 @@ BUN_INSTALL_FROZEN_CMD = $(SFW) bun install --frozen-lockfile
 EMBED_DIR = server/cmd/kpanel/public
 CLEAR_EMBED = mkdir -p $(EMBED_DIR) && find $(EMBED_DIR) -mindepth 1 ! -name .gitkeep -delete
 
-.PHONY: dev dev-api dev-server dev-simulate-v01 dev-web setup build build-web build-server build-linux build-darwin clean kafka-dev kafka-up kafka-down kafka-logs kafka-seed kafka-seed-if-empty kafka-seed-reset kafka-produce kafka-consume kafka-consume-all kafka-members kafka-seed-binary kafka-seed-sasl kafka-sasl-users dev-full test test-integration create-dev-msk destroy-dev-msk kafka-sasl-up kafka-sasl-down kafka-sasl-logs
+.PHONY: dev dev-api dev-server dev-simulate-v01 dev-web setup build build-web build-server build-linux build-darwin clean kafka-dev kafka-up kafka-down kafka-logs kafka-seed kafka-seed-if-empty kafka-seed-reset kafka-produce kafka-consume kafka-consume-all kafka-members kafka-seed-binary kafka-seed-sasl kafka-sasl-users dev-full test test-integration create-dev-msk destroy-dev-msk kafka-sasl-up kafka-sasl-down kafka-sasl-logs screenshots
 
 test:
 	cd server && go test ./...
@@ -67,6 +67,11 @@ build-darwin:
 	cd web && $(BUN_INSTALL_FROZEN_CMD) && bun build.ts
 	$(CLEAR_EMBED) && cp -R web/dist/. $(EMBED_DIR)/
 	cd server && GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o ../dist/kpanel-darwin-arm64 ./cmd/kpanel
+
+# Regenerates docs/assets/screenshots/*.png and docs/assets/demo.{mp4,gif}
+# against a throwaway broker on :19092. See scripts/screenshots/run.sh.
+screenshots:
+	SFW="$(SFW)" bash scripts/screenshots/run.sh
 
 clean:
 	rm -rf dist web/dist web/node_modules

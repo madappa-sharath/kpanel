@@ -1,0 +1,4 @@
+# Same install hardening as web/bunfig.toml.
+[install]
+minimumReleaseAge = 259200
+ignoreScripts = true
