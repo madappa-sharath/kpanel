@@ -42,6 +42,15 @@ func main() {
 		preferredPort = "8080"
 	}
 
+	// Loopback by default: kpanel holds Kafka and AWS access for the user who
+	// runs it, so it must not be reachable from the network. The container
+	// image sets KPANEL_HOST=0.0.0.0 and relies on the -p mapping instead.
+	inDocker := os.Getenv("KPANEL_INSTALL_METHOD") == "docker"
+	host := os.Getenv("KPANEL_HOST")
+	if host == "" {
+		host = "127.0.0.1"
+	}
+
 	configDir := os.Getenv("KPANEL_CONFIG_DIR")
 	if configDir == "" {
 		home, err := os.UserHomeDir()
@@ -102,13 +111,13 @@ func main() {
 		static.ServeHTTP(w, fallback)
 	}))
 
-	port, portChanged, err := findPort(preferredPort)
+	port, portChanged, err := findPort(host, preferredPort)
 	if err != nil {
 		fatal("no available port found: "+err.Error(),
 			"set KPANEL_PORT to a specific port, or leave unset for auto-selection")
 	}
 
-	addr := ":" + port
+	addr := net.JoinHostPort(host, port)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		fatal("failed to bind port "+port+": "+err.Error(),
@@ -118,8 +127,12 @@ func main() {
 	prod := isProd(publicFS)
 	url := "http://localhost:" + port
 	printBanner(url, configDir, preferredPort, portChanged, prod, version)
+	if !inDocker && host != "127.0.0.1" && host != "localhost" && host != "::1" {
+		fmt.Fprintf(os.Stderr, "  Warning: listening on %s, not only on loopback (KPANEL_HOST)\n\n", addr)
+	}
 
-	if prod {
+	// In a container there is no browser to open.
+	if prod && !inDocker {
 		go func() {
 			time.Sleep(100 * time.Millisecond)
 			openBrowser(url)
@@ -131,16 +144,16 @@ func main() {
 	}
 }
 
-// findPort returns an available port, preferring the given one.
+// findPort returns an available port on host, preferring the given one.
 // If the preferred port is in use, the OS assigns a free one.
-func findPort(preferred string) (port string, changed bool, err error) {
-	ln, err := net.Listen("tcp", ":"+preferred)
+func findPort(host, preferred string) (port string, changed bool, err error) {
+	ln, err := net.Listen("tcp", net.JoinHostPort(host, preferred))
 	if err == nil {
 		ln.Close()
 		return preferred, false, nil
 	}
 	// preferred unavailable — ask OS for any free port
-	ln, err = net.Listen("tcp", ":0")
+	ln, err = net.Listen("tcp", net.JoinHostPort(host, "0"))
 	if err != nil {
 		return "", false, err
 	}
@@ -213,7 +226,9 @@ func printBanner(url, configDir, preferredPort string, portChanged, prod bool, v
 				preferredPort, strings.TrimPrefix(url, "http://localhost:"))
 		}
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Opening in browser...")
+		if os.Getenv("KPANEL_INSTALL_METHOD") != "docker" {
+			fmt.Fprintln(os.Stderr, "Opening in browser...")
+		}
 		fmt.Fprintln(os.Stderr, "Press Ctrl+C to stop")
 	} else {
 		fmt.Fprintf(os.Stderr, "  %sdev server%s  ·  v%s\n", dim, reset, ver)

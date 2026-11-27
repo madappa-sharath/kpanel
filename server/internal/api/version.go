@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -18,6 +19,7 @@ const (
 	releasesURL     = "https://github.com/" + githubRepo + "/releases"
 	releasesAPIURL  = "https://api.github.com/repos/" + githubRepo + "/releases?per_page=20"
 	releaseAssetURL = "https://github.com/" + githubRepo + "/releases/download/"
+	imageRef        = "ghcr.io/" + githubRepo
 
 	// releaseAgingPeriod is how long a release must be public before kpanel
 	// offers it. The delay gives time to catch and pull a compromised release
@@ -59,6 +61,9 @@ func (r *ghRelease) hasInstallers() bool {
 
 type updateChecker struct {
 	current string
+	// installMethod is KPANEL_INSTALL_METHOD: "docker" in the container
+	// image, empty for the install scripts and archives.
+	installMethod string
 
 	mu        sync.RWMutex
 	releases  []ghRelease
@@ -66,7 +71,7 @@ type updateChecker struct {
 }
 
 func newUpdateChecker(current string) *updateChecker {
-	uc := &updateChecker{current: current}
+	uc := &updateChecker{current: current, installMethod: os.Getenv("KPANEL_INSTALL_METHOD")}
 	go func() {
 		uc.check()
 		ticker := time.NewTicker(releasePollInterval)
@@ -173,7 +178,7 @@ func (uc *updateChecker) versionInfo(goos, goarch string) versionResponse {
 		resp.LatestReleaseURL = eligible.HTMLURL
 		if semverGT(eligible.TagName, uc.current) {
 			resp.UpdateAvailable = true
-			resp.InstallCmd = installCmd(goos, eligible.TagName)
+			resp.InstallCmd = installCmd(uc.installMethod, goos, eligible.TagName)
 		}
 	}
 	if pending != nil && semverGT(pending.TagName, uc.current) {
@@ -184,9 +189,13 @@ func (uc *updateChecker) versionInfo(goos, goarch string) versionResponse {
 	return resp
 }
 
-// installCmd returns a command that installs exactly tag, using the install
-// script attached to that release rather than one from a branch.
-func installCmd(goos, tag string) string {
+// installCmd returns a command that installs exactly tag: the image tag for
+// that release in a container, otherwise the install script attached to that
+// release rather than one from a branch.
+func installCmd(method, goos, tag string) string {
+	if method == "docker" {
+		return fmt.Sprintf("docker pull %s:%s", imageRef, tag)
+	}
 	base := releaseAssetURL + tag + "/"
 	switch goos {
 	case "windows":
