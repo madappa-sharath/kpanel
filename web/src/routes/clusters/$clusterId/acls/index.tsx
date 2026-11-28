@@ -168,9 +168,9 @@ export function AclsPage() {
   return (
     <div className="p-6">
       <PageHeader title="Access Control" description={description}>
-        {!iamManaged && (
+        {acls && (
           <WriteModeGate>
-            <Button onClick={() => setCreateOpen(true)} disabled={!acls}>
+            <Button onClick={() => setCreateOpen(true)}>
               <Plus />
               Create ACLs
             </Button>
@@ -179,10 +179,10 @@ export function AclsPage() {
       </PageHeader>
 
       {iamManaged ? (
-        <IamAclNotice clusterArn={cluster?.platformConfig?.aws?.clusterArn} />
+        <IamAclNotice cluster={cluster?.platformConfig?.aws} />
       ) : (
         <>
-          <WriteModeBanner description="Enable write mode to create and delete ACLs." />
+          {acls && <WriteModeBanner description="Enable write mode to create and delete ACLs." />}
 
           {resourceRef && (
             <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -89,6 +90,31 @@ func parseEnums(b aclBinding) (parsedBinding, error) {
 	return p, nil
 }
 
+// resourceOperations lists the operations Kafka checks for each resource
+// type that can be created. Other combinations are accepted by the broker but
+// never match a request.
+var resourceOperations = map[kmsg.ACLResourceType][]kmsg.ACLOperation{
+	kmsg.ACLResourceTypeTopic: {
+		kmsg.ACLOperationAll, kmsg.ACLOperationRead, kmsg.ACLOperationWrite, kmsg.ACLOperationCreate,
+		kmsg.ACLOperationDelete, kmsg.ACLOperationAlter, kmsg.ACLOperationDescribe,
+		kmsg.ACLOperationDescribeConfigs, kmsg.ACLOperationAlterConfigs,
+	},
+	kmsg.ACLResourceTypeGroup: {
+		kmsg.ACLOperationAll, kmsg.ACLOperationRead, kmsg.ACLOperationDelete, kmsg.ACLOperationDescribe,
+	},
+	kmsg.ACLResourceTypeCluster: {
+		kmsg.ACLOperationAll, kmsg.ACLOperationCreate, kmsg.ACLOperationAlter, kmsg.ACLOperationDescribe,
+		kmsg.ACLOperationClusterAction, kmsg.ACLOperationDescribeConfigs, kmsg.ACLOperationAlterConfigs,
+		kmsg.ACLOperationIdempotentWrite,
+	},
+	kmsg.ACLResourceTypeTransactionalId: {
+		kmsg.ACLOperationAll, kmsg.ACLOperationWrite, kmsg.ACLOperationDescribe,
+	},
+	kmsg.ACLResourceTypeDelegationToken: {
+		kmsg.ACLOperationAll, kmsg.ACLOperationDescribe,
+	},
+}
+
 // parseNewBinding validates a binding to create, filling defaults: a bare
 // principal gets the "User:" type, the host defaults to "*", the pattern to
 // literal, and the cluster resource gets its fixed name.
@@ -100,11 +126,12 @@ func parseNewBinding(b aclBinding) (parsedBinding, error) {
 	if err != nil {
 		return p, err
 	}
-	switch p.resType {
-	case kmsg.ACLResourceTypeTopic, kmsg.ACLResourceTypeGroup, kmsg.ACLResourceTypeCluster,
-		kmsg.ACLResourceTypeTransactionalId, kmsg.ACLResourceTypeDelegationToken:
-	default:
+	ops, ok := resourceOperations[p.resType]
+	if !ok {
 		return p, fmt.Errorf("creating %s ACLs is not supported", b.ResourceType)
+	}
+	if !slices.Contains(ops, p.op) {
+		return p, fmt.Errorf("operation %s does not apply to %s resources", b.Operation, b.ResourceType)
 	}
 
 	p.principal = strings.TrimSpace(b.Principal)

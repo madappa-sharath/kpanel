@@ -7,6 +7,7 @@ import {
   normalizePrincipal,
   parseResourceRef,
   producerBindings,
+  RESOURCE_OPERATIONS,
 } from './acls'
 import type { AclBinding } from '../types/acl'
 
@@ -34,6 +35,14 @@ describe('presets', () => {
     const bs = consumerBindings({ principal: 'bob', topic: 'payments', group: 'audit', pattern: 'literal', host: '10.0.0.1' })
     expect(ops(bs)).toEqual(['topic:payments:read', 'group:audit:read'])
     expect(bs.every((b) => b.host === '10.0.0.1')).toBe(true)
+  })
+})
+
+describe('RESOURCE_OPERATIONS', () => {
+  test('offers only operations that apply to the resource type', () => {
+    expect(RESOURCE_OPERATIONS.cluster).not.toContain('read')
+    expect(RESOURCE_OPERATIONS.group).not.toContain('write')
+    expect(RESOURCE_OPERATIONS.transactional_id).toEqual(['write', 'describe', 'all'])
   })
 })
 
@@ -85,7 +94,7 @@ describe('iamPresets', () => {
 
 describe('mskResourceArns', () => {
   test('derives resource ARNs from the cluster ARN', () => {
-    const arn = mskResourceArns('arn:aws:kafka:us-east-1:123456789012:cluster/prod/abcd-1234-5')
+    const arn = mskResourceArns({ clusterArn: 'arn:aws:kafka:us-east-1:123456789012:cluster/prod/abcd-1234-5', region: 'eu-west-1' })
     expect(arn.cluster).toBe('arn:aws:kafka:us-east-1:123456789012:cluster/prod/abcd-1234-5')
     expect(arn.topic('orders')).toBe('arn:aws:kafka:us-east-1:123456789012:topic/prod/abcd-1234-5/orders')
     expect(arn.group('g')).toBe('arn:aws:kafka:us-east-1:123456789012:group/prod/abcd-1234-5/g')
@@ -93,7 +102,13 @@ describe('mskResourceArns', () => {
   })
 
   test('falls back to placeholders without an ARN', () => {
-    const arn = mskResourceArns(undefined)
+    const arn = mskResourceArns()
     expect(arn.topic('x')).toBe('arn:aws:kafka:<region>:<account>:topic/<cluster-name>/<cluster-uuid>/x')
+  })
+
+  test('fills in the known region and cluster name without an ARN', () => {
+    const arn = mskResourceArns({ region: 'us-east-1', clusterName: 'prod' })
+    expect(arn.cluster).toBe('arn:aws:kafka:us-east-1:<account>:cluster/prod/<cluster-uuid>')
+    expect(arn.group('g')).toBe('arn:aws:kafka:us-east-1:<account>:group/prod/<cluster-uuid>/g')
   })
 })

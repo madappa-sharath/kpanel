@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useCreateAcls } from '../../hooks/useAcls'
 import {
-  OPERATIONS,
+  RESOURCE_OPERATIONS,
   RESOURCE_TYPES,
   bindingKey,
   consumerBindings,
@@ -52,6 +52,11 @@ export function CreateAclModal({ clusterId, initialTopic = '', initialGroup = ''
   const [permission, setPermission] = useState<AclPermission>('allow')
   const [failed, setFailed] = useState<{ binding: AclBinding; error: string }[]>([])
   const [error, setError] = useState<string | null>(null)
+
+  function changeResourceType(type: AclResourceType) {
+    setResourceType(type)
+    if (!RESOURCE_OPERATIONS[type].includes(operation)) setOperation(RESOURCE_OPERATIONS[type][0])
+  }
 
   const missing =
     !normalizePrincipal(principal) ? 'Principal is required'
@@ -161,7 +166,7 @@ export function CreateAclModal({ clusterId, initialTopic = '', initialGroup = ''
             <>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Resource type">
-                  <Select value={resourceType} onValueChange={(v) => setResourceType(v as AclResourceType)}>
+                  <Select value={resourceType} onValueChange={(v) => changeResourceType(v as AclResourceType)}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {RESOURCE_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
@@ -191,7 +196,7 @@ export function CreateAclModal({ clusterId, initialTopic = '', initialGroup = ''
                   <Select value={operation} onValueChange={(v) => setOperation(v as AclOperation)}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {OPERATIONS.map((op) => <SelectItem key={op} value={op}>{operationLabel(op)}</SelectItem>)}
+                      {RESOURCE_OPERATIONS[resourceType].map((op) => <SelectItem key={op} value={op}>{operationLabel(op)}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </Field>

@@ -81,6 +81,9 @@ func TestParseNewBinding_Rejects(t *testing.T) {
 		{"any operation", func(b *aclBinding) { b.Operation = "any" }},
 		{"unknown operation", func(b *aclBinding) { b.Operation = "publish" }},
 		{"any permission", func(b *aclBinding) { b.Permission = "any" }},
+		{"read on cluster", func(b *aclBinding) { b.ResourceType = "cluster" }},
+		{"write on group", func(b *aclBinding) { b.ResourceType = "group"; b.Operation = "write" }},
+		{"read on transactional id", func(b *aclBinding) { b.ResourceType = "transactional_id" }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

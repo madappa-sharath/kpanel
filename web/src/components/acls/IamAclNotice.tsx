@@ -1,14 +1,13 @@
-import { KeyRound } from 'lucide-react'
-import { MSK_IAM_DOCS_URL, iamPresets } from '../../lib/acls'
-import { Button } from '#/components/ui/button'
+import { ExternalLink, KeyRound } from 'lucide-react'
+import { MSK_IAM_DOCS_URL, iamPresets, type MskClusterRef } from '../../lib/acls'
 
 interface IamAclNoticeProps {
-  clusterArn?: string
+  cluster?: MskClusterRef
 }
 
 /** Shown instead of the ACL table for connections that use AWS IAM auth. */
-export function IamAclNotice({ clusterArn }: IamAclNoticeProps) {
-  const presets = iamPresets(clusterArn)
+export function IamAclNotice({ cluster }: IamAclNoticeProps) {
+  const presets = iamPresets(cluster)
 
   return (
     <div className="flex flex-col gap-4">
@@ -21,9 +20,15 @@ export function IamAclNotice({ clusterArn }: IamAclNoticeProps) {
             attached to their role or user, and does not evaluate Kafka ACLs for them. Grant access by
             adding the actions below to the client's IAM policy.
           </p>
-          <Button variant="link" size="sm" className="mt-1 h-auto p-0" asChild>
-            <a href={MSK_IAM_DOCS_URL} target="_blank" rel="noreferrer">AWS: IAM access control use cases</a>
-          </Button>
+          <a
+            href={MSK_IAM_DOCS_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 inline-flex items-center gap-1 text-primary underline underline-offset-4 hover:text-primary/80"
+          >
+            AWS: IAM access control use cases
+            <ExternalLink size={13} />
+          </a>
         </div>
       </div>
 

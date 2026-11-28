@@ -14,19 +14,14 @@ export const RESOURCE_TYPES: { value: AclResourceType; label: string }[] = [
   { value: 'delegation_token', label: 'Delegation token' },
 ]
 
-export const OPERATIONS: AclOperation[] = [
-  'read',
-  'write',
-  'describe',
-  'create',
-  'delete',
-  'alter',
-  'describe_configs',
-  'alter_configs',
-  'idempotent_write',
-  'cluster_action',
-  'all',
-]
+/** Operations Kafka checks for each resource type, in the order they are offered. */
+export const RESOURCE_OPERATIONS: Record<AclResourceType, AclOperation[]> = {
+  topic: ['read', 'write', 'describe', 'create', 'delete', 'alter', 'describe_configs', 'alter_configs', 'all'],
+  group: ['read', 'describe', 'delete', 'all'],
+  cluster: ['describe', 'alter', 'create', 'cluster_action', 'idempotent_write', 'describe_configs', 'alter_configs', 'all'],
+  transactional_id: ['write', 'describe', 'all'],
+  delegation_token: ['describe', 'all'],
+}
 
 export function resourceTypeLabel(type: string): string {
   return RESOURCE_TYPES.find((t) => t.value === type)?.label ?? type
@@ -143,17 +138,24 @@ export interface IamPreset {
   statements: IamStatement[]
 }
 
+export interface MskClusterRef {
+  clusterArn?: string
+  region?: string
+  clusterName?: string
+}
+
 /**
  * Builds IAM resource ARNs from an MSK cluster ARN
- * (arn:aws:kafka:<region>:<account>:cluster/<name>/<uuid>). Falls back to
- * placeholders when the ARN is unknown.
+ * (arn:aws:kafka:<region>:<account>:cluster/<name>/<uuid>). Without the ARN,
+ * the known region and cluster name are filled in and the rest stays a
+ * placeholder.
  */
-export function mskResourceArns(clusterArn?: string) {
-  const m = clusterArn?.match(/^(arn:[^:]+:kafka:[^:]+:[^:]+):cluster\/([^/]+)\/(.+)$/)
-  const prefix = m ? m[1] : 'arn:aws:kafka:<region>:<account>'
-  const scope = m ? `${m[2]}/${m[3]}` : '<cluster-name>/<cluster-uuid>'
+export function mskResourceArns(ref: MskClusterRef = {}) {
+  const m = ref.clusterArn?.match(/^(arn:[^:]+:kafka:[^:]+:[^:]+):cluster\/([^/]+)\/(.+)$/)
+  const prefix = m ? m[1] : `arn:aws:kafka:${ref.region || '<region>'}:<account>`
+  const scope = m ? `${m[2]}/${m[3]}` : `${ref.clusterName || '<cluster-name>'}/<cluster-uuid>`
   return {
-    cluster: clusterArn && m ? clusterArn : `${prefix}:cluster/${scope}`,
+    cluster: m ? ref.clusterArn! : `${prefix}:cluster/${scope}`,
     topic: (name: string) => `${prefix}:topic/${scope}/${name}`,
     group: (name: string) => `${prefix}:group/${scope}/${name}`,
     transactionalId: (name: string) => `${prefix}:transactional-id/${scope}/${name}`,
@@ -162,8 +164,8 @@ export function mskResourceArns(clusterArn?: string) {
 
 export const MSK_IAM_DOCS_URL = 'https://docs.aws.amazon.com/msk/latest/developerguide/iam-access-control-use-cases.html'
 
-export function iamPresets(clusterArn?: string): IamPreset[] {
-  const arn = mskResourceArns(clusterArn)
+export function iamPresets(ref?: MskClusterRef): IamPreset[] {
+  const arn = mskResourceArns(ref)
   const connect = { actions: ['kafka-cluster:Connect'], resource: arn.cluster }
   const writeTopic = { actions: ['kafka-cluster:DescribeTopic', 'kafka-cluster:WriteData'], resource: arn.topic('<topic>') }
   return [
