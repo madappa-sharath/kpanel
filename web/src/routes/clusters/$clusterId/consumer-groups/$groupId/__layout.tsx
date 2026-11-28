@@ -2,9 +2,10 @@
 
 import { Link, Outlet, useParams, useRouterState } from '@tanstack/react-router'
 import { useState } from 'react'
-import { ChevronRight, ShieldCheck } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { ResetOffsetsModal } from '../../../../../components/consumer-groups/ResetOffsetsModal'
 import { WriteModeBanner, WriteModeGate } from '../../../../../components/shared/WriteModeControl'
+import { AclsLink } from '../../../../../components/acls/AclsLink'
 import { useConsumerGroup, useLagHistory } from '../../../../../hooks/useConsumerGroups'
 import { StatusBadge, groupStateVariant } from '../../../../../components/shared/StatusBadge'
 import { formatNumber } from '../../../../../lib/utils'
@@ -54,16 +55,7 @@ export function GroupLayout() {
             <span className="min-w-0 truncate text-foreground font-mono text-sm">{groupId}</span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <Button variant="ghost" size="sm" asChild>
-              <Link
-                to="/clusters/$clusterId/acls"
-                params={{ clusterId }}
-                search={{ resource: `group:${groupId}` }}
-              >
-                <ShieldCheck size={14} />
-                ACLs
-              </Link>
-            </Button>
+            <AclsLink clusterId={clusterId} resource={`group:${groupId}`} />
             <WriteModeGate>
               <Button variant="ghost" size="sm" onClick={() => setShowReset(true)}>
                 Reset offsets ▾

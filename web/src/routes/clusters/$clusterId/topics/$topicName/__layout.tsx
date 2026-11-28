@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Link, Outlet, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router'
-import { ChevronRight, Plus, Send, ShieldCheck, Trash2 } from 'lucide-react'
+import { ChevronRight, Plus, Send, Trash2 } from 'lucide-react'
 import { useTopic } from '../../../../../hooks/useTopics'
 import { IncreasePartitionsModal } from '../../../../../components/topics/IncreasePartitionsModal'
 import { DeleteTopicModal } from '../../../../../components/topics/DeleteTopicModal'
@@ -10,6 +10,7 @@ import { MessageBrowser } from '../../../../../components/topics/MessageBrowser'
 import { MessageSearch } from '../../../../../components/topics/MessageSearch'
 import { ProduceMessageModal } from '../../../../../components/topics/ProduceMessageModal'
 import { WriteModeBanner, WriteModeGate } from '../../../../../components/shared/WriteModeControl'
+import { AclsLink } from '../../../../../components/acls/AclsLink'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Button } from '#/components/ui/button'
 import { cn } from '#/lib/utils'
@@ -99,16 +100,7 @@ export function TopicLayout() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" className="h-9" asChild>
-              <Link
-                to="/clusters/$clusterId/acls"
-                params={{ clusterId }}
-                search={{ resource: `topic:${topicName}` }}
-              >
-                <ShieldCheck className="h-4 w-4" />
-                ACLs
-              </Link>
-            </Button>
+            <AclsLink clusterId={clusterId} resource={`topic:${topicName}`} className="h-9" />
             <WriteModeGate>
               <div className="flex items-center gap-2">
                 <Button
